@@ -2,10 +2,11 @@
 
 ## Project Structure
 
- - system
+ - systems
     - System specific stuff (mostly env variables, convenient for accounts, reservations, special container configurations)
  - experiments
     - bash scripts (srun/sbatch, data download, ...)
+    - python scripts
  - src
     - Python files, model related
  - results
