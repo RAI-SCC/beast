@@ -8,14 +8,14 @@ import yaml
 
 # Jigsaw imports
 from Jigsaw import eval, utils
-
-# Import model
-import Model_GB as Model 
+from torch_blue import vi
 
 # torch blue imports
 from torch_blue.vi import convert_to_vimodule
-from torch_blue import vi
 from torch_blue.vi.distributions import Normal
+
+# Import model
+import Model_GB as Model
 
 
 def training_loop(
@@ -164,7 +164,7 @@ def train_one_epoch(
             f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {epoch_average_loss}"
         )
 
-    if config_dict['model_parallel']['parallelism'] == 2:
+    if config_dict["model_parallel"]["parallelism"] == 2:
         pred = pred.mean(dim=0).reshape(1, 720, 1440, 36)
         eval.gen_plots(config_dict, x, pred, y, rank, ".", epoch, True)
 

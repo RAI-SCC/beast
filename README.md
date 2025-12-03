@@ -20,8 +20,27 @@
  - data
     - data
 
-## Setting up environment
-Create a new python environment with v 3.11 or above. 
+## Setup
+
+### Dev tools
+
+**pre-commit**
+
+1) Install pre-commit
+
+   ```pip install pre-commit```
+
+2) Install hooks
+
+   ```pre-commit install```
+
+3) Test on all files
+
+   ```pre-commit run --all-files```
+
+### Python env
+
+Create a new python environment with v 3.11 or above.
 ```
 cd /path/to/Jigsaw
 git checkout vi

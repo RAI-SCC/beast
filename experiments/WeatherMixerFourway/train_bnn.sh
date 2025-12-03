@@ -4,7 +4,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
-#SBATCH --account='hk-project-pai00071' 
+#SBATCH --account='hk-project-pai00071'
 #SBATCH --output='bnn_weather.out'
 #SBATCH --job-name='bnn_weather'
 #SBATCH --constraint=LSDF

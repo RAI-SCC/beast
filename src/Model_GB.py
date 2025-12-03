@@ -1,9 +1,7 @@
-import numpy as np
-import torch
-
-from Jigsaw import Linear, PatchEmbedding, Dataset
-from Jigsaw.Mixer import MixerBlock, MixerBlockSequential, MixerBlockMegatron
 import Jigsaw.Normalization as Norm
+import torch
+from Jigsaw import Dataset, Linear, PatchEmbedding
+from Jigsaw.Mixer import MixerBlock, MixerBlockMegatron, MixerBlockSequential
 
 
 class Model_eightway(torch.nn.Module):
@@ -125,7 +123,7 @@ class Model_eightway(torch.nn.Module):
                 n_parallel,
                 model_group,
             )
-            
+
         self.linearlayer = Linear.DistributedXWT(
             self.num_variables * 2,
             self.num_variables // 2,
@@ -252,7 +250,7 @@ class Model(torch.nn.Module):
                 self.device,
                 n_parallel,
                 model_group,
-                bias=False
+                bias=False,
             )
         else:
             self.patch_size = (
@@ -273,7 +271,7 @@ class Model(torch.nn.Module):
                 self.device,
                 n_parallel,
                 model_group,
-                bias=False
+                bias=False,
             )
 
         self.n_blocks = config_dict["model"]["mixing_blocks"]
@@ -293,7 +291,7 @@ class Model(torch.nn.Module):
                 for i in range(self.n_blocks)
             ]
         )
-        
+
         self.layer_norm = Norm.DistributedLayerNorm(
             hidden_dimension // 2, self.rank, self.device, self.column_subgroup
         )
@@ -317,7 +315,7 @@ class Model(torch.nn.Module):
                     model_group,
                     concat=True,
                     stride=self.stride,
-                    bias=False
+                    bias=False,
                 )
             else:
                 self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
@@ -341,7 +339,7 @@ class Model(torch.nn.Module):
                 n_parallel,
                 model_group,
             )
-            
+
         if config_dict["model"]["linear_residual"]:
             self.linearlayer = Linear.DistributedXWT(
                 self.num_variables * 2,
@@ -350,8 +348,8 @@ class Model(torch.nn.Module):
                 self.device,
                 n_parallel,
                 model_group,
-                bias=False
-            )            
+                bias=False,
+            )
             self.layer_norm2 = Norm.DistributedLayerNorm(
                 self.num_variables, self.rank, self.device, self.column_subgroup
             )
@@ -399,7 +397,6 @@ class Model(torch.nn.Module):
         self.topography = torch.unsqueeze(self.topography[:, self.start : self.end], 0)
 
     def forward(self, x, rollout_=0):
-        
         x_res = x
         if len(x_res.shape) > 3:
             x_res = x_res.flatten(start_dim=1, end_dim=2)
@@ -427,7 +424,7 @@ class Model(torch.nn.Module):
             x = torch.concat((x, x_res2), dim=2)
         else:
             x = self.layer_norm(x + x_res2)
-                
+
         x = self.recovery(x, self.n_lat, self.n_lon // 2)
 
         x = x.reshape(x.shape[0], -1, x.shape[-1])
@@ -443,7 +440,7 @@ class Model(torch.nn.Module):
             x = self.layer_norm3(x)
             x = x.reshape(x.shape[0], -1, x.shape[-1])
             x = self.linearlayer(x)
-            
+
         return x
 
 
@@ -472,7 +469,7 @@ class Model_twoway(torch.nn.Module):
                 device,
                 n_parallel,
                 model_group,
-                bias=True
+                bias=True,
             )
         self.n_blocks = config_dict["model"]["mixing_blocks"]
 
@@ -514,7 +511,7 @@ class Model_twoway(torch.nn.Module):
                     model_group,
                     concat=True,
                     stride=self.stride,
-                    bias=False
+                    bias=False,
                 )
             else:
                 self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
@@ -527,9 +524,9 @@ class Model_twoway(torch.nn.Module):
                     model_group,
                     concat=False,
                     stride=self.stride,
-                    bias=False
+                    bias=False,
                 )
-                
+
         if config_dict["model"]["linear_residual"]:
             self.linearlayer = Linear.DistributedXWT(
                 self.num_variables,
@@ -538,11 +535,10 @@ class Model_twoway(torch.nn.Module):
                 device,
                 n_parallel=n_parallel,
                 model_group=model_group,
-                bias=True
+                bias=True,
             )
             self.layer_norm2 = torch.nn.LayerNorm(self.num_variables // 2)
             self.layer_norm3 = torch.nn.LayerNorm(self.num_variables)
-            
 
         self.activation = torch.nn.GELU()
 
@@ -883,7 +879,7 @@ class ModelMegatron(torch.nn.Module):
         ) // self.stride + 1
         #
         self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
-        
+
         self.dropout = config_dict["model"]["dropout"]
         self.embedding = PatchEmbedding.PatchEmbedding1D(
             config_dict,
@@ -894,7 +890,7 @@ class ModelMegatron(torch.nn.Module):
             padding=padding,
             stride=self.stride,
             xlat=self.xlat,
-            bias=False
+            bias=False,
         )
         self.n_blocks = config_dict["model"]["mixing_blocks"]
         self.blocks = torch.nn.ModuleList(
@@ -940,7 +936,7 @@ class ModelMegatron(torch.nn.Module):
                 concat=True,
                 xlat=self.xlat,
                 xlon=self.xlon,
-                bias=False
+                bias=False,
             )
         else:
             self.recovery = PatchEmbedding.PatchRecovery1D(
@@ -952,7 +948,7 @@ class ModelMegatron(torch.nn.Module):
                 concat=False,
                 xlat=self.xlat,
                 xlon=self.xlon,
-                bias=False
+                bias=False,
             )
 
         self.activation = torch.nn.GELU()
@@ -986,10 +982,10 @@ class ModelMegatron(torch.nn.Module):
         x_shape = x.shape
         x_res = x.clone()
         x_res = x_res.permute(0, 2, 3, 1)
-        
+
         # x shape: [1, 69, 720, 1440]
         x = self.embedding(x)  # x: latent_t
-                
+
         x_res2 = x.clone()
 
         # x shape: [1, 1152, 2000]
@@ -1011,11 +1007,12 @@ class ModelMegatron(torch.nn.Module):
 
         if self.linear_residual:
             x = self.layer_norm2(x)  # layer norm must go before concat
-            x = torch.concat((x[:, :, :, : self.num_variables], x_res[..., :self.num_variables]), dim=3)
+            x = torch.concat(
+                (x[:, :, :, : self.num_variables], x_res[..., : self.num_variables]),
+                dim=3,
+            )
             x = self.layer_norm3(x)
             x = x.reshape(x_shape[0], self.xlat * self.xlon, self.num_variables * 2)
             x = self.linearlayer(x)
             x = x.reshape(x_shape[0], self.xlat, self.xlon, self.num_variables)
         return x
-
-

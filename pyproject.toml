@@ -1,0 +1,12 @@
+# Ruff
+[tool.ruff]
+target-version = "py312"
+include = ["src/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E402", "E501", "D105"]
+
+
+[tool.ruff.format]
+docstring-code-format = true
