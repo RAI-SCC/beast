@@ -6,10 +6,11 @@ import torch.distributed as dist
 import torch.optim as optim
 import yaml
 
-import eval
-import utils
+# Jigsaw imports
+from Jigsaw import eval, utils
 
-import Model_GB as Model # Import model
+# Import model
+import Model_GB as Model 
 
 # torch blue imports
 from torch_blue.vi import convert_to_vimodule
