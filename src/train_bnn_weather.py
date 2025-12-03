@@ -163,7 +163,7 @@ def train_one_epoch(
             f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {epoch_average_loss}"
         )
 
-    if config_dict['model_parallelism']['parallelism'] == 2:
+    if config_dict['model_parallel']['parallelism'] == 2:
         pred = pred.mean(dim=0).reshape(1, 720, 1440, 36)
         eval.gen_plots(config_dict, x, pred, y, rank, ".", epoch, True)
 
