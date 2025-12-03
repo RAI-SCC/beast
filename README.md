@@ -19,3 +19,12 @@
     - model configurations
  - data
     - data
+
+## Setting up environment
+Create a new python environment with v 3.11 or above. 
+```
+cd /path/to/Jigsaw
+pip install -e .
+cd /path/to/torch-blue
+pip install -e .
+```
