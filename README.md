@@ -42,10 +42,6 @@
 
 Create a new python environment with v 3.11 or above.
 ```
-cd /path/to/Jigsaw
-git checkout vi
-pip install -e .
-cd /path/to/torch-blue
-git checkout vi_convert
-pip install -e .
+pip install -e src/lib/torch_blue
+pip install -e src/lib/Jigsaw
 ```
