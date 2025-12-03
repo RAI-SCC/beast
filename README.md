@@ -38,6 +38,12 @@
 
    ```pre-commit run --all-files```
 
+### Update torch_blue and Jigsaw submodules
+
+```
+git submodule update --remote
+```
+
 ### Python env
 
 Create a new python environment with v 3.11 or above.
