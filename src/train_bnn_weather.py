@@ -8,14 +8,15 @@ import yaml
 
 # Jigsaw imports
 from Jigsaw import eval, utils
-from torch_blue import vi
 
 # torch blue imports
+from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
 # Import model
 import Model_GB as Model
+import ViT
 
 
 def training_loop(
@@ -39,31 +40,67 @@ def training_loop(
             )
             n_vars_local = 36
         case 4:
-            model_group, ddp_group, _, col_subgroup = utils.setup_groups(
+            model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
                 rank, n_parallel, 2, 2
             )
             n_vars_local = 36
 
     # Define model and load model
-    if n_parallel == 2:
-        model = (
-            Model.Model_twoway(config_dict, rank, device, n_parallel, model_group)
-            .to(device)
-            .to(torch.float32)
-        )
-    elif n_parallel == 4:
-        model = (
-            Model.Model(
-                config_dict, rank, device, n_parallel, model_group, col_subgroup
-            )
-            .to(torch.float32)
-            .to(device)
-        )
+    if config_dict["model"]["type"] == "Mixer":
+        match n_parallel:
+            case 2:
+                model = (
+                    Model.Model_twoway(
+                        config_dict, rank, device, n_parallel, model_group
+                    )
+                    .to(device)
+                    .to(torch.float32)
+                )
+            case 4:
+                model = (
+                    Model.Model(
+                        config_dict, rank, device, n_parallel, model_group, col_subgroup
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+
+    elif config_dict["model"]["type"] == "ViT":
+        match n_parallel:
+            case 2:
+                model = (
+                    ViT.Transformer_Twoway(
+                        config_dict,
+                        rank,
+                        device,
+                        n_parallel,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+            case 4:
+                model = (
+                    ViT.Transformer_Fourway(
+                        config_dict,
+                        rank,
+                        device,
+                        n_parallel,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+
     if rank == 0:
         print(
             f"model has {utils.count_parameters(model) * n_parallel / 1e6} million parameters"
         )
-
+    utils.set_all_seeds_model_group(1, rank=rank, n_parallel=n_parallel)
     train_dataloader, valid_dataloader = utils.build_dataloaders(
         config_dict, n_parallel, rank
     )
@@ -89,7 +126,7 @@ def training_loop(
     # Train for 10 epochs
     torch.cuda.empty_cache()
     for epoch in range(epoch, 100):
-        train_one_epoch(
+        avg_loss = train_one_epoch(
             config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
@@ -103,6 +140,38 @@ def training_loop(
         )
 
         torch.cuda.synchronize()
+
+        model.eval()
+        val_loss = eval.validate(
+            config_dict,
+            model,
+            valid_dataloader,
+            rank,
+            device,
+            epoch,
+            config_dict["training"]["save_dir"],
+            mse_file_path="rmse.csv",
+            acc_file_path="acc.csv",
+            model_parallel=True,
+            world_size=world_size,
+            model_subgroup_col=col_subgroup,
+            ddp_group=ddp_group,
+            model_group=model_group,
+        )
+
+        if rank < n_parallel:
+            utils.save_model(
+                model,
+                optimizer,
+                None,
+                config_dict["training"]["save_dir"],
+                rank,
+                epoch,
+            )
+        if rank == 0:
+            print(
+                f"Epoch {epoch}. Average training loss {avg_loss}. Average validation loss: {val_loss}"
+            )
 
 
 def train_one_epoch(
@@ -132,12 +201,17 @@ def train_one_epoch(
 
     utils.set_all_seeds(1)
 
+    if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
+        dataloader.sampler.set_epoch(epoch)
+
     for i, (x, y) in enumerate(dataloader):
         x = x.to(device)
         y = y[0].to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x, samples=4)  # [B, 720, 720, 36]
+        pred = model(
+            x, samples=config_dict["training"]["n_samples"]
+        )  # [B, 720, 720, 36]
 
         loss = loss_fn(pred, y.flatten(start_dim=1, end_dim=2))
 
@@ -145,7 +219,7 @@ def train_one_epoch(
         loss.backward()
         # # Average loss over all four processes for exactness
         dist.all_reduce(loss)
-        loss = loss / 4
+        loss = loss / config_dict["model_parallel"]["parallelism"]
 
         optimizer.step()
 

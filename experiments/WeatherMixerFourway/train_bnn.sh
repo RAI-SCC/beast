@@ -9,7 +9,7 @@
 #SBATCH --job-name='bnn_weather'
 #SBATCH --constraint=LSDF
 
-home_directory='/hkfs/work/workspace/scratch/ke4365-jigsaw/Jigsaw'
+home_directory='../..'
 
 source $home_directory/.venv/bin/activate
 which python
@@ -18,4 +18,4 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
-srun python -u /hkfs/work/workspace/scratch/ke4365-jigsaw/GrandBellbeast/src/train_bnn_weather.py --config_file config.yaml
+srun python -u $home_directory/src/train_bnn_weather.py --config_file config.yaml
