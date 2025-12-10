@@ -65,11 +65,11 @@ Important to initialize the container, install the dependencies, etc. Needs to b
 ### Testing distributed process group
 
 ```console
-λ sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
+sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
 ```
 
 ### Running ```train_bnn_weather.py``` with ```configs/weatherMixerTwoway.yaml```
 
 ```console
-λ sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
+sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
 ```

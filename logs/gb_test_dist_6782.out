@@ -1,0 +1,92 @@
+Slurm variables:
+  SLURM_JOB_ID:         6782
+  SLURM_PARTITION:      amd-milan-mi250
+  SLURM_NTASKS:         4
+  SLURM_NNODES:         1
+  SLURM_TASKS_PER_NODE: 4
+  SLURM_NODELIST:       ftp-x86n8
+/var/spool/slurmd/job06782/slurm_script systems/ftp_enroot.sh
+System Env File: ftp_enroot.sh
+Sourcing system environment...
+Inside the container, nothing to do ...
+GpuFreq=control_disabled
+cpu-bind=MASK - ftp-x86n8, task  0  0 [3694892]: mask 0x1 set
+cpu-bind=MASK - ftp-x86n8, task  1  1 [3694893]: mask 0x10000000000000000 set
+cpu-bind=MASK - ftp-x86n8, task  2  2 [3694894]: mask 0x2 set
+cpu-bind=MASK - ftp-x86n8, task  3  3 [3694895]: mask 0x20000000000000000 set
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:54: UserWarning: Using the native apex kernel for RoPE.
+  warnings.warn("Using the native apex kernel for RoPE.", UserWarning)
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:54: UserWarning: Using the native apex kernel for RoPE.
+  warnings.warn("Using the native apex kernel for RoPE.", UserWarning)
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:54: UserWarning: Using the native apex kernel for RoPE.
+  warnings.warn("Using the native apex kernel for RoPE.", UserWarning)
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:54: UserWarning: Using the native apex kernel for RoPE.
+  warnings.warn("Using the native apex kernel for RoPE.", UserWarning)
+Rank 3: world_size 4, slurm_localid 3
+Rank 2: world_size 4, slurm_localid 2
+Rank 0: world_size 4, slurm_localid 0
+Rank 1: world_size 4, slurm_localid 1
+Rank 1/4: Process group initialized with torch rank 1 and torch world size 4.
+[Rank 1] Process group initialized successfully
+[Rank 1] World size: 4
+[Rank 1] Number of GPUs available: 4
+[Rank 1] Using GPU: 1
+[Rank 1] GPU name: AMD Instinct MI250X/MI250
+Rank 2/4: Process group initialized with torch rank 2 and torch world size 4.
+[Rank 2] Process group initialized successfully
+[Rank 2] World size: 4
+[Rank 2] Number of GPUs available: 4
+[Rank 2] Using GPU: 2
+[Rank 2] GPU name: AMD Instinct MI250X/MI250
+[Rank 1] Starting all-to-all operation...
+[Rank 1] Input tensor: tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       device='cuda:1')
+[Rank 2] Starting all-to-all operation...
+Rank 3/4: Process group initialized with torch rank 3 and torch world size 4.
+[Rank 3] Process group initialized successfully
+[Rank 3] World size: 4
+Rank 0/4: Process group initialized with torch rank 0 and torch world size 4.
+[Rank 0] Process group initialized successfully
+[Rank 0] World size: 4
+[Rank 3] Number of GPUs available: 4
+[Rank 3] Using GPU: 3
+[Rank 3] GPU name: AMD Instinct MI250X/MI250
+[Rank 2] Input tensor: tensor([2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.],
+       device='cuda:2')
+[Rank 0] Number of GPUs available: 4
+[Rank 0] Using GPU: 0
+[Rank 0] GPU name: AMD Instinct MI250X/MI250
+[Rank 3] Starting all-to-all operation...
+[Rank 0] Starting all-to-all operation...
+[Rank 0] Input tensor: tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+       device='cuda:0')
+[Rank 3] Input tensor: tensor([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 0] All-to-all completed successfully
+[Rank 2] All-to-all completed successfully
+[Rank 1] All-to-all completed successfully
+[Rank 3] All-to-all completed successfully
+[Rank 2] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:2')
+[Rank 3] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 1] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:1')
+[Rank 2] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 3] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 1] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 0] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:0')
+[Rank 0] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+
+==================================================
+All tests completed successfully!
+==================================================
