@@ -2,23 +2,23 @@
 
 ## Project Structure
 
- - systems
+- systems
     - System specific stuff (mostly env variables, convenient for accounts, reservations, special container configurations)
- - experiments
+- experiments
     - bash scripts (srun/sbatch, data download, ...)
     - python scripts
- - src
+- src
     - Python files, model related
- - results
+- results
     - pkl files, checkpoints
     - anything plotable
-    - mlflow?
- - logs
+    - mlflow
+- logs
     - where to dump SLURM output files, in case heavy debugging is needed
- - configs
+- configs
     - model configurations
- - data
-    - data
+- utils
+    - utility scripts, e.g., for logging, plotting, data loading
 
 ## Setup
 
@@ -40,14 +40,14 @@
 
 ### Update torch_blue and Jigsaw submodules
 
-```
-git submodule update --remote
+```console
+git submodule update --remote --recursive
 ```
 
 ### Python env
 
 Create a new python environment with v 3.11 or above.
-```
-pip install -e src/lib/torch_blue
-pip install -e src/lib/Jigsaw
+
+```console
+pip install -r requirements.txt
 ```
