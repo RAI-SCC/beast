@@ -29,7 +29,7 @@ def test_process_group():
     print(f"[Rank {rank}] Number of GPUs available: {gpu_count}")
     
     # Set device for this process
-    local_rank = int(os.environ.get("LOCAL_RANK", rank))
+    local_rank = int(os.environ.get("LOCAL_RANK", rank % gpu_count))
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
     

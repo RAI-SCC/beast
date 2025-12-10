@@ -31,4 +31,4 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
-srun python -u $WORKDIR/src/test_process_group.py
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_group.py

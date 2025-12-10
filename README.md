@@ -51,3 +51,25 @@ Create a new python environment with v 3.11 or above.
 ```console
 pip install -r requirements.txt
 ```
+
+### Starting an interactive enroot session on HK cluster
+
+Important to initialize the container, install the dependencies, etc. Needs to be run by anyone running things inside the container.
+
+```console
+./utils/start_interactive_enroot_hk.sh <system_env.sh> [additional salloc parameters]
+```
+
+## Example commands
+
+### Testing distributed process group
+
+```console
+λ sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
+```
+
+### Running ```train_bnn_weather.py``` with ```configs/weatherMixerTwoway.yaml```
+
+```console
+λ sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
+```

@@ -1,0 +1,100 @@
+Slurm variables:
+  SLURM_JOB_ID:         3708413
+  SLURM_PARTITION:      accelerated
+  SLURM_NTASKS:         4
+  SLURM_NNODES:         1
+  SLURM_TASKS_PER_NODE: 4
+  SLURM_NODELIST:       hkn0520
+/var/spool/slurmd/job3708413/slurm_script systems/hk_enroot.sh
+System Env File: hk_enroot.sh
+Sourcing system environment...
+Inside the container, nothing to do ...
+GpuFreq=control_disabled
+cpu-bind=MASK - hkn0520, task  0  0 [3719657]: mask 0xffffffffffffffffffffffffffffffffffffff set
+cpu-bind=MASK - hkn0520, task  1  1 [3719658]: mask 0xffffffffffffffffffffffffffffffffffffff set
+cpu-bind=MASK - hkn0520, task  2  2 [3719659]: mask 0xffffffffffffffffffffffffffffffffffffff set
+cpu-bind=MASK - hkn0520, task  3  3 [3719660]: mask 0xffffffffffffffffffffffffffffffffffffff set
+Rank 0: world_size 4, slurm_localid 0
+Rank 3: world_size 4, slurm_localid 3
+Rank 2: world_size 4, slurm_localid 2
+Rank 1: world_size 4, slurm_localid 1
+Rank 1/4: Process group initialized with torch rank 1 and torch world size 4.
+[Rank 1] Process group initialized successfully
+[Rank 1] World size: 4
+Rank 3/4: Process group initialized with torch rank 3 and torch world size 4.
+[Rank 3] Process group initialized successfully
+[Rank 3] World size: 4
+Rank 2/4: Process group initialized with torch rank 2 and torch world size 4.
+[Rank 2] Process group initialized successfully
+[Rank 2] World size: 4
+[Rank 1] Number of GPUs available: 4
+[Rank 1] Using GPU: 1
+[Rank 3] Number of GPUs available: 4
+[Rank 1] GPU name: NVIDIA A100-SXM4-40GB
+[Rank 3] Using GPU: 3
+[Rank 3] GPU name: NVIDIA A100-SXM4-40GB
+[Rank 2] Number of GPUs available: 4
+[Rank 2] Using GPU: 2
+[Rank 2] GPU name: NVIDIA A100-SXM4-40GB
+Rank 0/4: Process group initialized with torch rank 0 and torch world size 4.
+[Rank 0] Process group initialized successfully
+[Rank 0] World size: 4
+[Rank 0] Number of GPUs available: 4
+[Rank 0] Using GPU: 0
+[Rank 0] GPU name: NVIDIA A100-SXM4-40GB
+[Rank 0] Starting all-to-all operation...
+[Rank 1] Starting all-to-all operation...
+[Rank 2] Starting all-to-all operation...
+[Rank 3] Starting all-to-all operation...
+[Rank 0] Input tensor: tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+       device='cuda:0')
+[Rank 3] Input tensor: tensor([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 1] Input tensor: tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       device='cuda:1')
+[Rank 2] Input tensor: tensor([2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.],
+       device='cuda:2')
+[Rank 0] All-to-all completed successfully
+[Rank 1] All-to-all completed successfully
+[Rank 2] All-to-all completed successfully
+[Rank 3] All-to-all completed successfully
+[Rank 2] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:2')
+[Rank 1] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:1')
+[Rank 3] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 1] ✓ All-to-all verification PASSED
+[Rank 2] ✓ All-to-all verification PASSED
+[Rank 3] ✓ All-to-all verification PASSED
+[Rank 0] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:0')
+[Rank 0] ✓ All-to-all verification PASSED
+/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py:4870: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+
+==================================================
+All tests completed successfully!
+==================================================
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3708413
+Cluster: hk
+User/Group: io3047/hk-project-test-aihero2
+Account: hk-project-pai00058
+State: COMPLETED (exit code 0)
+Partition: accelerated
+Nodes: 1
+Cores per node: 152
+Nodelist: hkn0520
+CPU Utilized: 00:00:36
+CPU Efficiency: 0.28% of 03:37:52 core-walltime
+Job Wall-clock time: 00:01:26
+Starttime: Wed Dec 10 21:33:20 2025
+Endtime: Wed Dec 10 21:34:46 2025
+Memory Utilized: 3.61 GB
+Memory Efficiency: 0.74% of 485.84 GB (485.84 GB/node)
+The task which had the largest memory consumption differs by 102.76% from the average task max memory consumption
+Energy Consumed: 34632 Joule / 9.62 Watthours
+Average node power draw: 402.697674418605 Watt
