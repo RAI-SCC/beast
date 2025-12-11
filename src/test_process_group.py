@@ -7,14 +7,36 @@ Tests NCCL backend, GPU access, and all-to-all communication.
 import os
 import torch
 import torch.distributed as dist
-from Jigsaw import utils
+# from Jigsaw import utils
 
 
 def test_process_group():
     """Initialize process group and test distributed operations."""
     
     # Initialize the process group
-    device, localid, rank, world_size = utils.init_cuda()
+    # device, localid, rank, world_size = utils.init_cuda()
+
+    rank = int(os.getenv("SLURM_PROCID"))  # Get individual process ID.
+    # Get overall number of processes.
+    world_size = int(os.getenv("SLURM_NTASKS"))
+    slurm_localid = int(os.getenv("SLURM_LOCALID"))
+
+    print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
+    # Initialize GPUs and dataloaders
+    device = f"cuda:{slurm_localid}"
+    torch.cuda.set_device(slurm_localid)
+
+    # Initialize DistributedDataParallel.
+    dist.init_process_group(
+        backend="nccl", rank=rank, world_size=world_size, init_method="env://"
+    )
+
+    if dist.is_initialized():
+        print(
+            f"Rank {rank}/{world_size}: Process group initialized with torch rank {dist.get_rank()} and torch world size {dist.get_world_size()}."
+        )
+    else:
+        print(f"Rank {rank} not initialized")
     
     # Get rank and world size
     

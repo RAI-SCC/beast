@@ -40,6 +40,8 @@
 
 ### Update torch_blue and Jigsaw submodules
 
+```git submodule init```
+
 ```console
 git submodule update --remote --recursive
 ```
@@ -59,6 +61,30 @@ Important to initialize the container, install the dependencies, etc. Needs to b
 ```console
 ./utils/start_interactive_enroot_hk.sh <system_env.sh> [additional salloc parameters]
 ```
+
+### Setup PyTorch with Easybuild in LUMI
+
+1) Load Easybuild modules
+
+```console
+ml load LUMI partition/container EasyBuild-user/LUMI
+```
+
+2) Build module
+
+```console
+eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
+```
+
+3) Go inside container and install dependencies
+
+```console
+ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
+start-shell
+pip install -r requirements.txt
+```
+
+4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
 
 ## Example commands
 

@@ -1,0 +1,141 @@
+Slurm variables:
+  SLURM_JOB_ID:         15310514
+  SLURM_PARTITION:      standard-g
+  SLURM_NTASKS:         4
+  SLURM_NNODES:         1
+  SLURM_TASKS_PER_NODE: 4
+  SLURM_NODELIST:       nid005398
+/var/spool/slurmd/job15310514/slurm_script systems/lumi_pG_eb_pytorch.sh
+System Env File: lumi_pG_eb_pytorch.sh
+Sourcing system environment...
+Setting up modules...
+
+Lmod is automatically replacing "craype-x86-rome" with "craype-x86-trento".
+
+
+Lmod is automatically replacing "craype-accel-host" with
+"craype-accel-amd-gfx90a".
+
+
+EasyBuild configured to install software in the user tree at
+/users/juanpedr/EasyBuild for the LUMI/24.03 software stack for the LUMI/G
+partition.
+  * Software installation directory: /users/juanpedr/EasyBuild/SW/LUMI-24.03/G
+  * Modules installation directory:
+/users/juanpedr/EasyBuild/modules/LUMI/24.03/partition/G
+  * Repository: /users/juanpedr/EasyBuild/ebfiles_repo/LUMI-24.03/LUMI-G
+  * Work directory for builds and logs: /tmp/15310514/easybuild
+    Clear work directory with clear-eb
+
+
+EasyBuild configured to install software in the user tree at
+/users/juanpedr/EasyBuild for the LUMI/24.03 software stack for the LUMI/G
+partition.
+  * Software installation directory: /users/juanpedr/EasyBuild/SW/LUMI-24.03/G
+  * Modules installation directory:
+/users/juanpedr/EasyBuild/modules/LUMI/24.03/partition/G
+  * Repository: /users/juanpedr/EasyBuild/ebfiles_repo/LUMI-24.03/LUMI-G
+  * Work directory for builds and logs: /tmp/15310514/easybuild
+    Clear work directory with clear-eb
+
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+LUMI/24.03:
+The LUMI/24.03 stack remains on the system also after the January 2026 system
+update, but will be unsupported afterwards as it is based on a version of
+ROCm that will be unsupported by the ROCm drivers. Due to the OS and network
+stack update, we can also not guarantee that CPU-only software will still
+work as intended.
+
+
+PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827:
+   Though this container is based on a version of ROCm that is officially
+   supported by the ROCm driver on the system, we cannot exclude that there
+   will be problems when, e.g., the container integrates with the Cray PE as
+   it may be trying to link to libraries that were meant to be used with a
+   different version of ROCm. In particular, we expect that mpi4py may
+   produce warnings.
+
+-------------------------------------------------------------------------------
+
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) EasyBuild-user/LUMI
+
+The following have been reloaded with a version change:
+  1) partition/L => partition/G
+
+cpu-bind=MASK - nid005398, task  0  0 [111039]: mask 0x2 set
+cpu-bind=MASK - nid005398, task  1  1 [111040]: mask 0x4 set
+cpu-bind=MASK - nid005398, task  2  2 [111041]: mask 0x8 set
+cpu-bind=MASK - nid005398, task  3  3 [111042]: mask 0x10 set
+Rank 0: world_size 4, slurm_localid 0
+Rank 1: world_size 4, slurm_localid 1
+Rank 3: world_size 4, slurm_localid 3
+Rank 2: world_size 4, slurm_localid 2
+Rank 3/4: Process group initialized with torch rank 3 and torch world size 4.
+[Rank 3] Process group initialized successfully
+[Rank 3] World size: 4
+Rank 2/4: Process group initialized with torch rank 2 and torch world size 4.
+[Rank 2] Process group initialized successfully
+[Rank 2] World size: 4
+[Rank 3] Number of GPUs available: 4
+[Rank 3] Using GPU: 3
+[Rank 3] GPU name: AMD Instinct MI250X
+[Rank 2] Number of GPUs available: 4
+[Rank 2] Using GPU: 2
+[Rank 2] GPU name: AMD Instinct MI250X
+Rank 1/4: Process group initialized with torch rank 1 and torch world size 4.
+[Rank 1] Process group initialized successfully
+[Rank 1] World size: 4
+Rank 0/4: Process group initialized with torch rank 0 and torch world size 4.
+[Rank 0] Process group initialized successfully
+[Rank 0] World size: 4
+[Rank 1] Number of GPUs available: 4
+[Rank 1] Using GPU: 1
+[Rank 1] GPU name: AMD Instinct MI250X
+[Rank 0] Number of GPUs available: 4
+[Rank 0] Using GPU: 0
+[Rank 0] GPU name: AMD Instinct MI250X
+[Rank 3] Starting all-to-all operation...
+[Rank 1] Starting all-to-all operation...
+[Rank 0] Starting all-to-all operation...
+[Rank 2] Starting all-to-all operation...
+[Rank 0] Input tensor: tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+       device='cuda:0')
+[Rank 1] Input tensor: tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       device='cuda:1')
+[Rank 3] Input tensor: tensor([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 2] Input tensor: tensor([2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.],
+       device='cuda:2')
+[Rank 2] All-to-all completed successfully
+[Rank 1] All-to-all completed successfully
+[Rank 0] All-to-all completed successfully
+[Rank 2] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:2')
+[Rank 1] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:1')
+[Rank 3] All-to-all completed successfully
+[Rank 3] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 1] ✓ All-to-all verification PASSED
+[Rank 2] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 3] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 0] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3.],
+       device='cuda:0')
+[Rank 0] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+
+==================================================
+All tests completed successfully!
+==================================================
