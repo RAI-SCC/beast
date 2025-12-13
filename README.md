@@ -54,15 +54,30 @@ Create a new python environment with v 3.11 or above.
 pip install -r requirements.txt
 ```
 
-### Starting an interactive enroot session on HK cluster
+### Horeka & FTP
 
-Important to initialize the container, install the dependencies, etc. Needs to be run by anyone running things inside the container.
+**Get images**
 
 ```console
-./utils/start_interactive_enroot_hk.sh <system_env.sh> [additional salloc parameters]
+apptainer build $CONTAINER_HOME/pytorch25.10.sif docker://nvcr.io/nvidia/pytorch:25.10-py3
+apptainer build $CONTAINER_HOME/pytorch-rocm6.4.4.sif docker://rocm/pytorch:rocm6.4.4_ubuntu24.04_py3.12_pytorch_release_2.7.1
 ```
 
-### Setup PyTorch with Easybuild in LUMI
+**Create a writable (sandbox) container**
+
+```console
+apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.10/  $CONTAINER_HOME/pytorch25.10.sif
+```
+
+**Enter the container (to install dependencies)**
+
+```console
+apptainer shell --writable $CONTAINER_HOME/gb_pytorch25.10/
+```
+
+### LUMI
+
+**Setup PyTorch with Easybuild in LUMI**
 
 1) Load Easybuild modules
 

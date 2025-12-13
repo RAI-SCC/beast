@@ -7,6 +7,8 @@
 #SBATCH --job-name='gb_test_dist'
 #SBATCH --output='logs/%x_%j.out'
 
+cd /workspace
+
 source utils/utils.sh
 print_slurm_env
 
@@ -30,5 +32,9 @@ setup_system
 export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
+
+echo "Running cmd:"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_group.py"
+echo ""
 
 srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_group.py
