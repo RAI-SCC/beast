@@ -96,6 +96,8 @@ eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
 ```console
 ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
 start-shell
+pip update --upgrade pip
+pip install --force-reinstall aiter
 pip install -r requirements.txt
 ```
 

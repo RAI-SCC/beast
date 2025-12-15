@@ -1,0 +1,1171 @@
+Slurm variables:
+  SLURM_JOB_ID:         15359643
+  SLURM_PARTITION:      standard-g
+  SLURM_NTASKS:         32
+  SLURM_NNODES:         8
+  SLURM_TASKS_PER_NODE: 4(x8)
+  SLURM_NODELIST:       nid[006477-006484]
+/var/spool/slurmd/job15359643/slurm_script systems/lumi_pG_eb_pytorch.sh
+System Env File: lumi_pG_eb_pytorch.sh
+Sourcing system environment...
+Setting up modules...
+
+Lmod is automatically replacing "craype-x86-rome" with "craype-x86-trento".
+
+
+Lmod is automatically replacing "craype-accel-host" with
+"craype-accel-amd-gfx90a".
+
+
+EasyBuild configured to install software in the user tree at
+/users/juanpedr/EasyBuild for the LUMI/24.03 software stack for the LUMI/G
+partition.
+  * Software installation directory: /users/juanpedr/EasyBuild/SW/LUMI-24.03/G
+  * Modules installation directory:
+/users/juanpedr/EasyBuild/modules/LUMI/24.03/partition/G
+  * Repository: /users/juanpedr/EasyBuild/ebfiles_repo/LUMI-24.03/LUMI-G
+  * Work directory for builds and logs: /tmp/15359643/easybuild
+    Clear work directory with clear-eb
+
+
+EasyBuild configured to install software in the user tree at
+/users/juanpedr/EasyBuild for the LUMI/24.03 software stack for the LUMI/G
+partition.
+  * Software installation directory: /users/juanpedr/EasyBuild/SW/LUMI-24.03/G
+  * Modules installation directory:
+/users/juanpedr/EasyBuild/modules/LUMI/24.03/partition/G
+  * Repository: /users/juanpedr/EasyBuild/ebfiles_repo/LUMI-24.03/LUMI-G
+  * Work directory for builds and logs: /tmp/15359643/easybuild
+    Clear work directory with clear-eb
+
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+LUMI/24.03:
+The LUMI/24.03 stack remains on the system also after the January 2026 system
+update, but will be unsupported afterwards as it is based on a version of
+ROCm that will be unsupported by the ROCm drivers. Due to the OS and network
+stack update, we can also not guarantee that CPU-only software will still
+work as intended.
+
+
+PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827:
+   Though this container is based on a version of ROCm that is officially
+   supported by the ROCm driver on the system, we cannot exclude that there
+   will be problems when, e.g., the container integrates with the Cray PE as
+   it may be trying to link to libraries that were meant to be used with a
+   different version of ROCm. In particular, we expect that mpi4py may
+   produce warnings.
+
+-------------------------------------------------------------------------------
+
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) EasyBuild-user/LUMI
+
+The following have been reloaded with a version change:
+  1) partition/L => partition/G
+
+cpu-bind=MASK - nid006477, task  0  0 [16223]: mask 0x2 set
+cpu-bind=MASK - nid006477, task  1  1 [16224]: mask 0x4 set
+cpu-bind=MASK - nid006477, task  2  2 [16225]: mask 0x8 set
+cpu-bind=MASK - nid006477, task  3  3 [16226]: mask 0x10 set
+cpu-bind=MASK - nid006479, task  8  0 [94214]: mask 0x2 set
+cpu-bind=MASK - nid006478, task  4  0 [80965]: mask 0x2 set
+cpu-bind=MASK - nid006482, task 20  0 [91225]: mask 0x2 set
+cpu-bind=MASK - nid006484, task 28  0 [32711]: mask 0x2 set
+cpu-bind=MASK - nid006483, task 24  0 [76124]: mask 0x2 set
+cpu-bind=MASK - nid006479, task  9  1 [94215]: mask 0x4 set
+cpu-bind=MASK - nid006478, task  5  1 [80966]: mask 0x4 set
+cpu-bind=MASK - nid006482, task 21  1 [91226]: mask 0x4 set
+cpu-bind=MASK - nid006484, task 29  1 [32712]: mask 0x4 set
+cpu-bind=MASK - nid006483, task 25  1 [76125]: mask 0x4 set
+cpu-bind=MASK - nid006479, task 10  2 [94216]: mask 0x8 set
+cpu-bind=MASK - nid006478, task  6  2 [80967]: mask 0x8 set
+cpu-bind=MASK - nid006482, task 22  2 [91227]: mask 0x8 set
+cpu-bind=MASK - nid006484, task 30  2 [32713]: mask 0x8 set
+cpu-bind=MASK - nid006483, task 26  2 [76126]: mask 0x8 set
+cpu-bind=MASK - nid006479, task 11  3 [94217]: mask 0x10 set
+cpu-bind=MASK - nid006478, task  7  3 [80968]: mask 0x10 set
+cpu-bind=MASK - nid006482, task 23  3 [91228]: mask 0x10 set
+cpu-bind=MASK - nid006484, task 31  3 [32714]: mask 0x10 set
+cpu-bind=MASK - nid006483, task 27  3 [76127]: mask 0x10 set
+cpu-bind=MASK - nid006480, task 12  0 [74254]: mask 0x2 set
+cpu-bind=MASK - nid006480, task 13  1 [74255]: mask 0x4 set
+cpu-bind=MASK - nid006480, task 14  2 [74256]: mask 0x8 set
+cpu-bind=MASK - nid006480, task 15  3 [74257]: mask 0x10 set
+cpu-bind=MASK - nid006481, task 16  0 [88577]: mask 0x2 set
+cpu-bind=MASK - nid006481, task 17  1 [88578]: mask 0x4 set
+cpu-bind=MASK - nid006481, task 18  2 [88579]: mask 0x8 set
+cpu-bind=MASK - nid006481, task 19  3 [88580]: mask 0x10 set
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/apex/transformer/functional/fused_rope.py:49: UserWarning: Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0
+  warnings.warn("Aiter backend is selected for fused RoPE. This has lower precision. To disable aiter, export USE_ROCM_AITER_ROPE_BACKEND=0", UserWarning)
+Rank 11: world_size 32, slurm_localid 3
+Rank 27: world_size 32, slurm_localid 3
+Rank 10: world_size 32, slurm_localid 2
+Rank 9: world_size 32, slurm_localid 1
+Rank 26: world_size 32, slurm_localid 2
+Rank 19: world_size 32, slurm_localid 3
+Rank 16: world_size 32, slurm_localid 0
+Rank 30: world_size 32, slurm_localid 2
+Rank 15: world_size 32, slurm_localid 3
+Rank 8: world_size 32, slurm_localid 0
+Rank 13: world_size 32, slurm_localid 1
+Rank 17: world_size 32, slurm_localid 1
+Rank 14: world_size 32, slurm_localid 2
+Rank 18: world_size 32, slurm_localid 2
+Rank 25: world_size 32, slurm_localid 1
+Rank 12: world_size 32, slurm_localid 0
+Rank 28: world_size 32, slurm_localid 0
+Rank 31: world_size 32, slurm_localid 3
+Rank 1: world_size 32, slurm_localid 1
+Rank 23: world_size 32, slurm_localid 3
+Rank 21: world_size 32, slurm_localid 1
+Rank 20: world_size 32, slurm_localid 0
+Rank 29: world_size 32, slurm_localid 1
+Rank 3: world_size 32, slurm_localid 3
+Rank 24: world_size 32, slurm_localid 0
+Rank 22: world_size 32, slurm_localid 2
+Rank 5: world_size 32, slurm_localid 1
+Rank 0: world_size 32, slurm_localid 0
+Rank 22/32: Process group initialized with torch rank 22 and torch world size 32.
+[Rank 22] Process group initialized successfully
+[Rank 22] World size: 32
+[Rank 22] Number of GPUs available: 4
+[Rank 22] Using GPU: 2
+[Rank 22] GPU name: AMD Instinct MI250X
+Rank 5/32: Process group initialized with torch rank 5 and torch world size 32.
+[Rank 5] Process group initialized successfully
+[Rank 5] World size: 32
+[Rank 5] Number of GPUs available: 4
+[Rank 5] Using GPU: 1
+[Rank 5] GPU name: AMD Instinct MI250X
+Rank 9/32: Process group initialized with torch rank 9 and torch world size 32.
+[Rank 9] Process group initialized successfully
+[Rank 9] World size: 32
+[Rank 9] Number of GPUs available: 4
+[Rank 9] Using GPU: 1
+[Rank 9] GPU name: AMD Instinct MI250X
+Rank 20/32: Process group initialized with torch rank 20 and torch world size 32.
+[Rank 20] Process group initialized successfully
+[Rank 20] World size: 32
+[Rank 20] Number of GPUs available: 4
+[Rank 20] Using GPU: 0
+[Rank 20] GPU name: AMD Instinct MI250X
+Rank 1/32: Process group initialized with torch rank 1 and torch world size 32.
+[Rank 1] Process group initialized successfully
+[Rank 1] World size: 32
+[Rank 1] Number of GPUs available: 4
+[Rank 1] Using GPU: 1
+[Rank 1] GPU name: AMD Instinct MI250X
+Rank 6: world_size 32, slurm_localid 2
+Rank 15/32: Process group initialized with torch rank 15 and torch world size 32.
+[Rank 15] Process group initialized successfully
+[Rank 15] World size: 32
+Rank 6/32: Process group initialized with torch rank 6 and torch world size 32.
+[Rank 6] Process group initialized successfully
+[Rank 6] World size: 32
+Rank 24/32: Process group initialized with torch rank 24 and torch world size 32.
+[Rank 24] Process group initialized successfully
+[Rank 24] World size: 32
+[Rank 15] Number of GPUs available: 4
+[Rank 15] Using GPU: 3
+[Rank 15] GPU name: AMD Instinct MI250X
+[Rank 24] Number of GPUs available: 4
+[Rank 24] Using GPU: 0
+[Rank 24] GPU name: AMD Instinct MI250X
+[Rank 6] Number of GPUs available: 4
+[Rank 6] Using GPU: 2
+[Rank 6] GPU name: AMD Instinct MI250X
+Rank 25/32: Process group initialized with torch rank 25 and torch world size 32.
+[Rank 25] Process group initialized successfully
+[Rank 25] World size: 32
+Rank 4: world_size 32, slurm_localid 0
+[Rank 25] Number of GPUs available: 4
+[Rank 25] Using GPU: 1
+[Rank 25] GPU name: AMD Instinct MI250X
+Rank 4/32: Process group initialized with torch rank 4 and torch world size 32.
+[Rank 4] Process group initialized successfully
+[Rank 4] World size: 32
+Rank 27/32: Process group initialized with torch rank 27 and torch world size 32.
+[Rank 27] Process group initialized successfully
+[Rank 27] World size: 32
+[Rank 4] Number of GPUs available: 4
+[Rank 4] Using GPU: 0
+[Rank 4] GPU name: AMD Instinct MI250X
+[Rank 27] Number of GPUs available: 4
+[Rank 27] Using GPU: 3
+[Rank 27] GPU name: AMD Instinct MI250X
+Rank 14/32: Process group initialized with torch rank 14 and torch world size 32.
+[Rank 14] Process group initialized successfully
+[Rank 14] World size: 32
+[Rank 14] Number of GPUs available: 4
+[Rank 14] Using GPU: 2
+[Rank 14] GPU name: AMD Instinct MI250X
+Rank 2: world_size 32, slurm_localid 2
+Rank 2/32: Process group initialized with torch rank 2 and torch world size 32.
+[Rank 2] Process group initialized successfully
+[Rank 2] World size: 32
+[Rank 2] Number of GPUs available: 4
+[Rank 2] Using GPU: 2
+[Rank 2] GPU name: AMD Instinct MI250X
+Rank 23/32: Process group initialized with torch rank 23 and torch world size 32.
+[Rank 23] Process group initialized successfully
+[Rank 23] World size: 32
+Rank 13/32: Process group initialized with torch rank 13 and torch world size 32.
+[Rank 13] Process group initialized successfully
+[Rank 13] World size: 32
+Rank 8/32: Process group initialized with torch rank 8 and torch world size 32.
+[Rank 8] Process group initialized successfully
+[Rank 8] World size: 32
+[Rank 23] Number of GPUs available: 4
+[Rank 23] Using GPU: 3
+[Rank 23] GPU name: AMD Instinct MI250X
+[Rank 13] Number of GPUs available: 4
+[Rank 13] Using GPU: 1
+[Rank 13] GPU name: AMD Instinct MI250X
+[Rank 8] Number of GPUs available: 4
+[Rank 8] Using GPU: 0
+[Rank 8] GPU name: AMD Instinct MI250X
+Rank 26/32: Process group initialized with torch rank 26 and torch world size 32.
+[Rank 26] Process group initialized successfully
+[Rank 26] World size: 32
+Rank 30/32: Process group initialized with torch rank 30 and torch world size 32.
+[Rank 30] Process group initialized successfully
+[Rank 30] World size: 32
+Rank 29/32: Process group initialized with torch rank 29 and torch world size 32.
+[Rank 29] Process group initialized successfully
+[Rank 29] World size: 32
+[Rank 26] Number of GPUs available: 4
+[Rank 26] Using GPU: 2
+[Rank 26] GPU name: AMD Instinct MI250X
+[Rank 29] Number of GPUs available: 4
+[Rank 29] Using GPU: 1
+[Rank 29] GPU name: AMD Instinct MI250X
+[Rank 30] Number of GPUs available: 4
+[Rank 30] Using GPU: 2
+[Rank 30] GPU name: AMD Instinct MI250X
+Rank 7: world_size 32, slurm_localid 3
+Rank 19/32: Process group initialized with torch rank 19 and torch world size 32.
+[Rank 19] Process group initialized successfully
+[Rank 19] World size: 32
+Rank 7/32: Process group initialized with torch rank 7 and torch world size 32.
+[Rank 7] Process group initialized successfully
+[Rank 7] World size: 32
+Rank 10/32: Process group initialized with torch rank 10 and torch world size 32.
+[Rank 10] Process group initialized successfully
+[Rank 10] World size: 32
+[Rank 19] Number of GPUs available: 4
+[Rank 19] Using GPU: 3
+[Rank 19] GPU name: AMD Instinct MI250X
+[Rank 7] Number of GPUs available: 4
+[Rank 7] Using GPU: 3
+[Rank 7] GPU name: AMD Instinct MI250X
+[Rank 10] Number of GPUs available: 4
+[Rank 10] Using GPU: 2
+[Rank 10] GPU name: AMD Instinct MI250X
+Rank 11/32: Process group initialized with torch rank 11 and torch world size 32.
+[Rank 11] Process group initialized successfully
+[Rank 11] World size: 32
+[Rank 11] Number of GPUs available: 4
+[Rank 11] Using GPU: 3
+[Rank 11] GPU name: AMD Instinct MI250X
+Rank 16/32: Process group initialized with torch rank 16 and torch world size 32.
+[Rank 16] Process group initialized successfully
+[Rank 16] World size: 32
+[Rank 16] Number of GPUs available: 4
+[Rank 16] Using GPU: 0
+[Rank 16] GPU name: AMD Instinct MI250X
+Rank 28/32: Process group initialized with torch rank 28 and torch world size 32.
+[Rank 28] Process group initialized successfully
+[Rank 28] World size: 32
+[Rank 28] Number of GPUs available: 4
+[Rank 28] Using GPU: 0
+[Rank 28] GPU name: AMD Instinct MI250X
+Rank 31/32: Process group initialized with torch rank 31 and torch world size 32.
+[Rank 31] Process group initialized successfully
+[Rank 31] World size: 32
+[Rank 31] Number of GPUs available: 4
+[Rank 31] Using GPU: 3
+[Rank 31] GPU name: AMD Instinct MI250X
+Rank 21/32: Process group initialized with torch rank 21 and torch world size 32.
+[Rank 21] Process group initialized successfully
+[Rank 21] World size: 32
+Rank 17/32: Process group initialized with torch rank 17 and torch world size 32.
+[Rank 17] Process group initialized successfully
+[Rank 17] World size: 32
+[Rank 21] Number of GPUs available: 4
+[Rank 21] Using GPU: 1
+[Rank 21] GPU name: AMD Instinct MI250X
+[Rank 17] Number of GPUs available: 4
+[Rank 17] Using GPU: 1
+[Rank 17] GPU name: AMD Instinct MI250X
+Rank 18/32: Process group initialized with torch rank 18 and torch world size 32.
+[Rank 18] Process group initialized successfully
+[Rank 18] World size: 32
+[Rank 18] Number of GPUs available: 4
+[Rank 18] Using GPU: 2
+[Rank 18] GPU name: AMD Instinct MI250X
+[Rank 5] Starting all-to-all operation...
+[Rank 7] Starting all-to-all operation...
+[Rank 6] Starting all-to-all operation...
+[Rank 4] Starting all-to-all operation...
+[Rank 22] Starting all-to-all operation...
+[Rank 23] Starting all-to-all operation...
+[Rank 20] Starting all-to-all operation...
+[Rank 24] Starting all-to-all operation...
+[Rank 26] Starting all-to-all operation...
+[Rank 27] Starting all-to-all operation...
+[Rank 25] Starting all-to-all operation...
+[Rank 14] Starting all-to-all operation...
+[Rank 15] Starting all-to-all operation...
+[Rank 13] Starting all-to-all operation...
+[Rank 5] Input tensor: tensor([5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5.], device='cuda:1')
+[Rank 7] Input tensor: tensor([7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7.], device='cuda:3')
+[Rank 6] Input tensor: tensor([6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6.], device='cuda:2')
+[Rank 4] Input tensor: tensor([4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4.], device='cuda:0')
+[Rank 23] Input tensor: tensor([23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23., 23.,
+        23., 23.], device='cuda:3')
+[Rank 20] Input tensor: tensor([20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20., 20.,
+        20., 20.], device='cuda:0')
+Rank 12/32: Process group initialized with torch rank 12 and torch world size 32.
+[Rank 12] Process group initialized successfully
+[Rank 12] World size: 32
+[Rank 22] Input tensor: tensor([22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22., 22.,
+        22., 22.], device='cuda:2')
+[Rank 27] Input tensor: tensor([27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27., 27.,
+        27., 27.], device='cuda:3')
+[Rank 24] Input tensor: tensor([24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24., 24.,
+        24., 24.], device='cuda:0')
+[Rank 25] Input tensor: tensor([25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25., 25.,
+        25., 25.], device='cuda:1')
+[Rank 26] Input tensor: tensor([26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26., 26.,
+        26., 26.], device='cuda:2')
+[Rank 11] Starting all-to-all operation...
+[Rank 12] Number of GPUs available: 4
+[Rank 12] Using GPU: 0
+[Rank 12] GPU name: AMD Instinct MI250X
+[Rank 8] Starting all-to-all operation...
+[Rank 10] Starting all-to-all operation...
+[Rank 9] Starting all-to-all operation...
+Rank 3/32: Process group initialized with torch rank 3 and torch world size 32.
+[Rank 3] Process group initialized successfully
+[Rank 3] World size: 32
+Rank 0/32: Process group initialized with torch rank 0 and torch world size 32.
+[Rank 0] Process group initialized successfully
+[Rank 0] World size: 32
+[Rank 3] Number of GPUs available: 4
+[Rank 3] Using GPU: 3
+[Rank 3] GPU name: AMD Instinct MI250X
+[Rank 14] Input tensor: tensor([14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14., 14.,
+        14., 14.], device='cuda:2')
+[Rank 13] Input tensor: tensor([13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13., 13.,
+        13., 13.], device='cuda:1')
+[Rank 15] Input tensor: tensor([15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15., 15.,
+        15., 15.], device='cuda:3')
+[Rank 0] Number of GPUs available: 4
+[Rank 0] Using GPU: 0
+[Rank 0] GPU name: AMD Instinct MI250X
+[Rank 21] Starting all-to-all operation...
+[Rank 8] Input tensor: tensor([8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8., 8.,
+        8., 8.], device='cuda:0')
+[Rank 11] Input tensor: tensor([11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11., 11.,
+        11., 11.], device='cuda:3')
+[Rank 9] Input tensor: tensor([9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9., 9.,
+        9., 9.], device='cuda:1')
+[Rank 10] Input tensor: tensor([10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10., 10.,
+        10., 10.], device='cuda:2')
+[Rank 1] Starting all-to-all operation...
+[Rank 2] Starting all-to-all operation...
+[Rank 21] Input tensor: tensor([21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21., 21.,
+        21., 21.], device='cuda:1')
+[Rank 2] Input tensor: tensor([2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2.], device='cuda:2')
+[Rank 1] Input tensor: tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1.], device='cuda:1')
+[Rank 30] Starting all-to-all operation...
+[Rank 28] Starting all-to-all operation...
+[Rank 31] Starting all-to-all operation...
+[Rank 29] Starting all-to-all operation...
+[Rank 28] Input tensor: tensor([28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28., 28.,
+        28., 28.], device='cuda:0')
+[Rank 30] Input tensor: tensor([30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30., 30.,
+        30., 30.], device='cuda:2')
+[Rank 29] Input tensor: tensor([29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29., 29.,
+        29., 29.], device='cuda:1')
+[Rank 31] Input tensor: tensor([31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 18] Starting all-to-all operation...
+[Rank 16] Starting all-to-all operation...
+[Rank 19] Starting all-to-all operation...
+[Rank 17] Starting all-to-all operation...
+[Rank 17] Input tensor: tensor([17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17., 17.,
+        17., 17.], device='cuda:1')
+[Rank 19] Input tensor: tensor([19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19., 19.,
+        19., 19.], device='cuda:3')
+[Rank 16] Input tensor: tensor([16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16., 16.,
+        16., 16.], device='cuda:0')
+[Rank 18] Input tensor: tensor([18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18., 18.,
+        18., 18.], device='cuda:2')
+[Rank 12] Starting all-to-all operation...
+[Rank 3] Starting all-to-all operation...
+[Rank 12] Input tensor: tensor([12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12., 12.,
+        12., 12.], device='cuda:0')
+[Rank 0] Starting all-to-all operation...
+[Rank 0] Input tensor: tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0.], device='cuda:0')
+[Rank 3] Input tensor: tensor([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3.], device='cuda:3')
+[Rank 3] All-to-all completed successfully
+[Rank 8] All-to-all completed successfully
+[Rank 4] All-to-all completed successfully
+[Rank 10] All-to-all completed successfully
+[Rank 5] All-to-all completed successfully
+[Rank 7] All-to-all completed successfully
+[Rank 9] All-to-all completed successfully
+[Rank 11] All-to-all completed successfully
+[Rank 30] All-to-all completed successfully
+[Rank 19] All-to-all completed successfully
+[Rank 17] All-to-all completed successfully
+[Rank 16] All-to-all completed successfully
+[Rank 23] All-to-all completed successfully
+[Rank 0] All-to-all completed successfully
+[Rank 26] All-to-all completed successfully
+[Rank 22] All-to-all completed successfully
+[Rank 12] All-to-all completed successfully
+[Rank 2] All-to-all completed successfully
+[Rank 27] All-to-all completed successfully
+[Rank 1] All-to-all completed successfully
+[Rank 13] All-to-all completed successfully
+[Rank 15] All-to-all completed successfully
+[Rank 14] All-to-all completed successfully
+[Rank 29] All-to-all completed successfully
+[Rank 28] All-to-all completed successfully
+[Rank 21] All-to-all completed successfully
+[Rank 31] All-to-all completed successfully
+[Rank 25] All-to-all completed successfully
+[Rank 20] All-to-all completed successfully
+[Rank 24] All-to-all completed successfully
+[Rank 6] All-to-all completed successfully
+[Rank 18] All-to-all completed successfully
+[Rank 21] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 25] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 29] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 9] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 27] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 15] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 14] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+[Rank 8] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 31] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+        31., 31.], device='cuda:2')
+[Rank 18] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+[Rank 11] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+[Rank 20] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 26] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+[Rank 13] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+[Rank 17] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 22] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+        31., 31.], device='cuda:1')
+        31., 31.], device='cuda:1')
+[Rank 1] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 10] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+[Rank 30] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+[Rank 12] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 28] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+[Rank 24] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 2] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+        31., 31.], device='cuda:0')
+[Rank 16] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 4] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 5] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:1')
+[Rank 6] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:2')
+[Rank 19] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 23] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 3] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 7] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:3')
+[Rank 16] ✓ All-to-all verification PASSED
+[Rank 4] ✓ All-to-all verification PASSED
+[Rank 6] ✓ All-to-all verification PASSED
+[Rank 17] ✓ All-to-all verification PASSED
+[Rank 13] ✓ All-to-all verification PASSED
+[Rank 27] ✓ All-to-all verification PASSED
+[Rank 24] ✓ All-to-all verification PASSED
+[Rank 20] ✓ All-to-all verification PASSED
+[Rank 25] ✓ All-to-all verification PASSED
+[Rank 26] ✓ All-to-all verification PASSED
+[Rank 18] ✓ All-to-all verification PASSED
+[Rank 22] ✓ All-to-all verification PASSED
+[Rank 21] ✓ All-to-all verification PASSED
+[Rank 5] ✓ All-to-all verification PASSED
+[Rank 11] ✓ All-to-all verification PASSED
+[Rank 28] ✓ All-to-all verification PASSED
+[Rank 12] ✓ All-to-all verification PASSED
+[Rank 2] ✓ All-to-all verification PASSED
+[Rank 8] ✓ All-to-all verification PASSED
+[Rank 14] ✓ All-to-all verification PASSED
+[Rank 30] ✓ All-to-all verification PASSED
+[Rank 10] ✓ All-to-all verification PASSED
+[Rank 9] ✓ All-to-all verification PASSED
+[Rank 15] ✓ All-to-all verification PASSED
+[Rank 29] ✓ All-to-all verification PASSED
+[Rank 19] ✓ All-to-all verification PASSED
+[Rank 1] ✓ All-to-all verification PASSED
+[Rank 31] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 23] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 3] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 7] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 0] Output tensor: tensor([ 0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  2.,  2.,  2.,  2.,  3.,  3.,
+         3.,  3.,  4.,  4.,  4.,  4.,  5.,  5.,  5.,  5.,  6.,  6.,  6.,  6.,
+         7.,  7.,  7.,  7.,  8.,  8.,  8.,  8.,  9.,  9.,  9.,  9., 10., 10.,
+        10., 10., 11., 11., 11., 11., 12., 12., 12., 12., 13., 13., 13., 13.,
+        14., 14., 14., 14., 15., 15., 15., 15., 16., 16., 16., 16., 17., 17.,
+        17., 17., 18., 18., 18., 18., 19., 19., 19., 19., 20., 20., 20., 20.,
+        21., 21., 21., 21., 22., 22., 22., 22., 23., 23., 23., 23., 24., 24.,
+        24., 24., 25., 25., 25., 25., 26., 26., 26., 26., 27., 27., 27., 27.,
+        28., 28., 28., 28., 29., 29., 29., 29., 30., 30., 30., 30., 31., 31.,
+        31., 31.], device='cuda:0')
+[Rank 0] ✓ All-to-all verification PASSED
+/opt/miniconda3/envs/pytorch/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+
+==================================================
+All tests completed successfully!
+==================================================
