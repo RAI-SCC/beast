@@ -99,6 +99,9 @@ start-shell
 pip update --upgrade pip
 pip install --force-reinstall aiter
 pip install -r requirements.txt
+exit
+make-squashfs
+rm -rf $CONTAINERROO/user-software
 ```
 
 4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
