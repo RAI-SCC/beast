@@ -59,20 +59,20 @@ pip install -r requirements.txt
 **Get images**
 
 ```console
-apptainer build $CONTAINER_HOME/pytorch25.10.sif docker://nvcr.io/nvidia/pytorch:25.10-py3
+apptainer build $CONTAINER_HOME/pytorch25.10.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 apptainer build $CONTAINER_HOME/pytorch-rocm6.4.4.sif docker://rocm/pytorch:rocm6.4.4_ubuntu24.04_py3.12_pytorch_release_2.7.1
 ```
 
 **Create a writable (sandbox) container**
 
 ```console
-apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.10/  $CONTAINER_HOME/pytorch25.10.sif
+apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
 ```
 
 **Enter the container (to install dependencies)**
 
 ```console
-apptainer shell --writable $CONTAINER_HOME/gb_pytorch25.10/
+apptainer shell --writable $CONTAINER_HOME/gb_pytorch25.06/
 ```
 
 ### LUMI
