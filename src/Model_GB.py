@@ -293,101 +293,37 @@ class ModelSequential(torch.nn.Module):
         padding = (0, 0)
 
         self.patch_embed = config_dict["model"]["patch_embed"]
-        if self.patch_embed == 1:
-            self.patch_size = config_dict["model"]["patch_size"]
-            self.stride = config_dict["model"]["stride"]
-            self.n_patches = (
-                self.xlat * self.xlon - 1 * (self.patch_size - 1) - 1
-            ) // self.stride + 1
 
-            self.dropout = config_dict["model"]["dropout"]
-            self.embedding = PatchEmbedding.PatchEmbedding1D(
-                config_dict,
-                self.patch_size,
-                hidden_dimension,
-                device=device,
-                in_channels=72,
-                padding=padding,
-                stride=self.stride,
-                xlat=self.xlat,
-            )
-            self.n_blocks = config_dict["model"]["mixing_blocks"]
-            self.blocks = torch.nn.ModuleList(
-                [
-                    MixerBlockSequential(
-                        self.n_patches,
-                        hidden_dimension,
-                        config_dict["model"]["spatial_hidden_dim_fraction"],
-                        config_dict["model"]["features_hidden_dim_fraction"],
-                        self.dropout,
-                    )
-                    for i in range(self.n_blocks)
-                ]
-            )
-        elif self.patch_embed == 2:
-            self.patch_size = (
-                config_dict["model"]["patch_size"],
-                config_dict["model"]["patch_size"],
-            )
-            self.embedding = PatchEmbedding.PatchEmbedding2D(
-                self.patch_size,
-                hidden_dimension,
-                device=device,
-                in_channels=72,
-                padding=padding,
-                stride=self.stride,
-                xlat=self.xlat,
-            )
-            self.n_blocks = config_dict["model"]["mixing_blocks"]
-            self.n_lat = (
-                self.xlat + 2 * padding[0] - 1 * (self.patch_size[0] - 1) - 1
-            ) // self.stride + 1
-            self.n_lon = (
-                self.xlon + 2 * padding[1] - 1 * (self.patch_size[1] - 1) - 1
-            ) // self.stride + 1
-            self.blocks = torch.nn.ModuleList(
-                [
-                    MixerBlockSequential(
-                        self.n_lat * self.n_lon,
-                        hidden_dimension,
-                        hidden_dimension,
-                        self.dropout,
-                    )
-                    for i in range(self.n_blocks)
-                ]
-            )
-        else:
-            self.patch_size = config_dict["model"]["patch_size"]
-            # (self.xlat+2*padding[0]-1*(self.patch_size[0]-1)-1)//self.stride+1
-            self.n_lat = 720 // 1
-            # (self.xlon+2*padding[1]-1*(self.patch_size[1]-1)-1)//self.stride+1
-            self.n_lon = 1440 // self.patch_size
-            self.dropout = config_dict["model"]["dropout"]
-            self.embedding = PatchEmbedding.PatchEmbeddingTest(
-                self.patch_size,
-                hidden_dimension,
-                device=device,
-                in_channels=72,
-                padding=padding,
-                stride=self.stride,
-                xlat=self.xlat,
-            )
-            self.n_blocks = config_dict["model"]["mixing_blocks"]
-            self.blocks = torch.nn.ModuleList(
-                [
-                    MixerBlockSequential(
-                        720 * 1440 // self.patch_size,
-                        hidden_dimension,
-                        hidden_dimension,
-                        self.dropout,
-                    )
-                    for i in range(self.n_blocks)
-                ]
-            )
-        # self.pos_encoding = config_dict['model']['positional_encoding']
-        #
-        # if self.pos_encoding:
-        #    self.positional_encoding = utils.getPositionEncoding(self.n_lat*self.n_lon, hidden_dimension, n=10000).to(device)
+        self.patch_size = config_dict["model"]["patch_size"]
+        self.stride = config_dict["model"]["stride"]
+        self.n_patches = (
+            self.xlat * self.xlon - 1 * (self.patch_size - 1) - 1
+        ) // self.stride + 1
+
+        self.dropout = config_dict["model"]["dropout"]
+        self.embedding = PatchEmbedding.PatchEmbedding1D(
+            config_dict,
+            self.patch_size,
+            hidden_dimension,
+            device=device,
+            in_channels=72,
+            padding=padding,
+            stride=self.stride,
+            xlat=self.xlat,
+        )
+        self.n_blocks = config_dict["model"]["mixing_blocks"]
+        self.blocks = torch.nn.ModuleList(
+            [
+                MixerBlockSequential(
+                    self.n_patches,
+                    hidden_dimension,
+                    config_dict["model"]["spatial_hidden_dim_fraction"],
+                    config_dict["model"]["features_hidden_dim_fraction"],
+                    self.dropout,
+                )
+                for i in range(self.n_blocks)
+            ]
+        )
 
         self.latent_rollout = config_dict["model"]["latent_rollout"]
 
@@ -407,48 +343,16 @@ class ModelSequential(torch.nn.Module):
                 self.num_variables * 2, self.num_variables
             )
 
-        if self.patch_embed == 1:
-            if self.concat:
-                self.recovery = PatchEmbedding.PatchRecovery1D(
-                    self.patch_size,
-                    hidden_dimension,
-                    padding=padding,
-                    stride=self.stride,
-                    out_channels=69,
-                    concat=True,
-                    xlat=self.xlat,
-                    xlon=self.xlon,
-                )
-            else:
-                self.recovery = PatchEmbedding.PatchRecovery1D(
-                    self.patch_size,
-                    hidden_dimension,
-                    padding=padding,
-                    stride=self.stride,
-                    out_channels=69,
-                    concat=False,
-                    xlat=self.xlat,
-                    xlon=self.xlon,
-                )
-        elif self.patch_embed == 2:
-            if self.concat:
-                self.recovery = PatchEmbedding.PatchRecovery2D(
-                    self.patch_size,
-                    hidden_dimension,
-                    padding=padding,
-                    stride=self.stride,
-                    out_channels=69,
-                    concat=True,
-                )
-            else:
-                self.recovery = PatchEmbedding.PatchRecovery2D(
-                    self.patch_size,
-                    hidden_dimension,
-                    padding=padding,
-                    stride=self.stride,
-                    out_channels=69,
-                    concat=False,
-                )
+        self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.patch_size,
+            hidden_dimension,
+            padding=padding,
+            stride=self.stride,
+            out_channels=69,
+            concat=self.concat,
+            xlat=self.xlat,
+            xlon=self.xlon,
+        )
 
         self.activation = torch.nn.GELU()
 
@@ -598,30 +502,17 @@ class ModelMegatron(torch.nn.Module):
                 self.num_variables * 2, self.num_variables, bias=False
             )
 
-        if self.concat:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
-                self.patch_size,
-                hidden_dimension,
-                padding=padding,
-                stride=self.stride,
-                out_channels=69,
-                concat=True,
-                xlat=self.xlat,
-                xlon=self.xlon,
-                bias=False,
-            )
-        else:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
-                self.patch_size,
-                hidden_dimension,
-                padding=padding,
-                stride=self.stride,
-                out_channels=69,
-                concat=False,
-                xlat=self.xlat,
-                xlon=self.xlon,
-                bias=False,
-            )
+        self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.patch_size,
+            hidden_dimension,
+            padding=padding,
+            stride=self.stride,
+            out_channels=69,
+            concat=self.concat,
+            xlat=self.xlat,
+            xlon=self.xlon,
+            bias=False,
+        )
 
         self.activation = torch.nn.GELU()
 
