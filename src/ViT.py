@@ -9,7 +9,7 @@ class Transformer_Sequential(torch.nn.Module):
         config_dict,
         rank,
         device,
-        n_parallel,
+        parallelism,
         model_group,
         row_subgroup,
         col_subgroup,
@@ -17,7 +17,7 @@ class Transformer_Sequential(torch.nn.Module):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
         self.softmax_subgroup = row_subgroup
@@ -54,7 +54,7 @@ class Transformer_Sequential(torch.nn.Module):
                     heads,
                     rank,
                     self.device,
-                    self.n_parallel,
+                    self.parallelism,
                     self.model_group,
                     self.softmax_subgroup,
                 )
@@ -165,7 +165,7 @@ class Transformer_Twoway(torch.nn.Module):
         config_dict,
         rank,
         device,
-        n_parallel,
+        parallelism,
         model_group,
         row_subgroup,
         col_subgroup,
@@ -173,7 +173,7 @@ class Transformer_Twoway(torch.nn.Module):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
         self.softmax_subgroup = row_subgroup
@@ -193,7 +193,7 @@ class Transformer_Twoway(torch.nn.Module):
             hidden_dimension,
             rank,
             device,
-            n_parallel,
+            parallelism,
             model_group,
             bias=False,
         )
@@ -207,7 +207,7 @@ class Transformer_Twoway(torch.nn.Module):
                     heads,
                     rank,
                     self.device,
-                    self.n_parallel,
+                    self.parallelism,
                     self.model_group,
                     self.softmax_subgroup,
                 )
@@ -228,7 +228,7 @@ class Transformer_Twoway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 device,
-                n_parallel=n_parallel,
+                parallelism=parallelism,
                 model_group=model_group,
                 bias=False,
             )
@@ -240,7 +240,7 @@ class Transformer_Twoway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 device,
-                n_parallel,
+                parallelism,
                 model_group,
                 concat=True,
                 stride=self.stride,
@@ -253,7 +253,7 @@ class Transformer_Twoway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 device,
-                n_parallel,
+                parallelism,
                 model_group,
                 concat=False,
                 stride=self.stride,
@@ -331,7 +331,7 @@ class Transformer_Fourway(torch.nn.Module):
         config_dict,
         rank,
         device,
-        n_parallel,
+        parallelism,
         model_group,
         row_subgroup,
         col_subgroup,
@@ -339,7 +339,7 @@ class Transformer_Fourway(torch.nn.Module):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
         self.softmax_subgroup = row_subgroup
@@ -359,7 +359,7 @@ class Transformer_Fourway(torch.nn.Module):
             hidden_dimension,
             rank,
             device,
-            n_parallel,
+            parallelism,
             model_group,
         )
         self.n_blocks = config_dict["model"]["n_blocks"]
@@ -372,7 +372,7 @@ class Transformer_Fourway(torch.nn.Module):
                     heads,
                     rank,
                     self.device,
-                    self.n_parallel,
+                    self.parallelism,
                     self.model_group,
                     self.softmax_subgroup,
                     self.column_subgroup,
@@ -400,7 +400,7 @@ class Transformer_Fourway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
             )
 
@@ -411,7 +411,7 @@ class Transformer_Fourway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
                 concat=True,
                 stride=self.stride,
@@ -423,7 +423,7 @@ class Transformer_Fourway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
                 concat=False,
                 stride=self.stride,
@@ -523,7 +523,7 @@ class Megatron_Transformer(torch.nn.Module):
         config_dict,
         rank,
         device,
-        n_parallel,
+        parallelism,
         model_group,
         row_subgroup,
         col_subgroup,
@@ -531,7 +531,7 @@ class Megatron_Transformer(torch.nn.Module):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
         self.softmax_subgroup = row_subgroup
