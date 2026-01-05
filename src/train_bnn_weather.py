@@ -48,29 +48,13 @@ def training_loop(
 
     # Define model and load model
     if config_dict["model"]["type"] == "Mixer":
-        match parallelism:
-            case 2:
-                model = (
-                    Model.Model_twoway(
-                        config_dict, rank, device, parallelism, model_group
-                    )
-                    .to(device)
-                    .to(torch.float32)
-                )
-            case 4:
-                model = (
-                    Model.Model(
-                        config_dict,
-                        rank,
-                        device,
-                        parallelism,
-                        model_group,
-                        col_subgroup,
-                    )
-                    .to(torch.float32)
-                    .to(device)
-                )
-
+        model = (
+            Model.WeatherMixer(
+                config_dict, rank, device, parallelism, model_group, col_subgroup
+            )
+            .to(torch.float32)
+            .to(device)
+        )
     elif config_dict["model"]["type"] == "ViT":
         match parallelism:
             case 2:
