@@ -159,6 +159,164 @@ class Transformer_Sequential(torch.nn.Module):
         return x
 
 
+class ViT(torch.nn.Module):
+    def __init__(
+        self,
+        config_dict,
+        rank,
+        device,
+        parallelism,
+        model_group,
+        row_subgroup,
+        col_subgroup,
+    ):
+        super().__init__()
+        self.rank = rank
+        self.device = device
+        self.parallelism = parallelism
+        self.model_group = model_group
+        self.column_subgroup = col_subgroup
+        self.softmax_subgroup = row_subgroup
+
+        hidden_dimension = config_dict["model"]["hidden_dim"]
+        transformer_dimension = config_dict["model"]["transformer_dim"]
+        heads = config_dict["model"]["heads"]
+        self.xlat, self.xlon = config_dict["data"]["xlat"], config_dict["data"]["xlon"]
+        self.patch_size = config_dict["model"]["patch_size"]
+        self.stride = config_dict["model"]["stride"]
+        self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
+
+        self.embedding = PatchEmbedding.Distributed1DPatchEmbedding(
+            self.xlat,
+            self.xlon,
+            self.patch_size,
+            72,
+            hidden_dimension,
+            rank,
+            device,
+            parallelism,
+            model_group,
+            bias=False,
+        )
+
+        self.n_blocks = config_dict["model"]["n_blocks"]
+        self.blocks = torch.nn.ModuleList(
+            [
+                Attention.TransformerLayer(
+                    hidden_dimension,
+                    transformer_dimension,
+                    hidden_dimension,
+                    heads,
+                    rank,
+                    self.device,
+                    self.parallelism,
+                    self.model_group,
+                    self.softmax_subgroup,
+                    self.column_subgroup,
+                )
+                for i in range(self.n_blocks)
+            ]
+        )
+        self.layer_norm = torch.nn.LayerNorm(hidden_dimension // 2)
+        self.num_variables = 72 // (parallelism // 2)  # TODO: Not applicable for 8-way
+
+        self.add = config_dict["model"]["add"]
+        self.concat = config_dict["model"]["concat"]
+        self.linear_residual = config_dict["model"]["linear_residual"]
+
+        if self.linear_residual:
+            self.layer_norm2 = torch.nn.LayerNorm(
+                self.num_variables if parallelism == 4 else self.num_variables // 2
+            )  # 36 for two, 72 for four
+            self.layer_norm3 = torch.nn.LayerNorm(
+                self.num_variables * 2 if parallelism == 4 else self.num_variables
+            )  # 72 for two, 72 for four
+            self.linearlayer = Linear.DistributedXWT(
+                self.num_variables * 2 if parallelism == 4 else self.num_variables,
+                self.num_variables,
+                rank,
+                device,
+                parallelism=parallelism,
+                model_group=model_group,
+                bias=False,
+            )
+
+        self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
+            self.patch_size,
+            hidden_dimension,
+            self.num_variables,
+            self.rank,
+            self.device,
+            parallelism,
+            model_group,
+            concat=self.concat,
+            stride=self.stride,
+            bias=False,
+        )
+
+        self.activation = torch.nn.GELU()
+
+        if self.linear_residual:
+            self.params = torch.nn.ModuleDict(
+                {
+                    "embedding": torch.nn.ModuleList([self.embedding]),
+                    "recovery": torch.nn.ModuleList([self.recovery]),
+                    "common": torch.nn.ModuleList(
+                        [
+                            self.blocks,
+                            self.layer_norm,
+                            self.layer_norm2,
+                            self.layer_norm3,
+                            self.linearlayer,
+                        ]
+                    ),
+                }
+            )
+        else:
+            self.params = torch.nn.ModuleDict(
+                {
+                    "embedding": torch.nn.ModuleList([self.embedding]),
+                    "recovery": torch.nn.ModuleList([self.recovery]),
+                    "common": torch.nn.ModuleList([self.blocks, self.layer_norm]),
+                }
+            )
+
+    def forward(self, x, rollout_=1):
+        x_res = x
+        x_res = x_res.flatten(start_dim=1, end_dim=2)
+        # x shape: [1, 69, 720, 1440]
+        x = self.embedding(x)  # x: latent_t
+
+        x_res2 = x.clone()
+
+        # x shape: [1, 1152, 2000]
+        for i in range(self.n_blocks):
+            x = self.blocks[i](x)  # x: latent_tplus1
+
+        if self.concat:
+            x = self.layer_norm(x)
+            x = torch.concat((x, x_res2), dim=-2)
+        else:
+            x = self.layer_norm(x + x_res2)
+
+        x = self.recovery(x, self.n_lat, self.n_lon // (self.parallelism // 2))
+        x = x.reshape(x.shape[0], -1, x.shape[-1])
+
+        if self.add:
+            return x + x_res
+
+        if self.linear_residual:
+            x = self.layer_norm2(x)
+
+            x = torch.concat((x, x_res), dim=-1)
+
+            # After recovery: [n_batch, n_lat, n_lon, n_var]
+            x = self.layer_norm3(x)
+            x = x.reshape(x.shape[0], -1, x.shape[-1])
+            x = self.linearlayer(x)
+        return x
+
+
 class Transformer_Twoway(torch.nn.Module):
     def __init__(
         self,
@@ -185,6 +343,7 @@ class Transformer_Twoway(torch.nn.Module):
         self.patch_size = config_dict["model"]["patch_size"]
         self.stride = config_dict["model"]["stride"]
         self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
+
         self.embedding = PatchEmbedding.Distributed1DPatchEmbedding(
             self.xlat,
             self.xlon,
@@ -197,6 +356,7 @@ class Transformer_Twoway(torch.nn.Module):
             model_group,
             bias=False,
         )
+
         self.n_blocks = config_dict["model"]["n_blocks"]
         self.blocks = torch.nn.ModuleList(
             [
@@ -220,6 +380,7 @@ class Transformer_Twoway(torch.nn.Module):
         self.add = config_dict["model"]["add"]
         self.concat = config_dict["model"]["concat"]
         self.linear_residual = config_dict["model"]["linear_residual"]
+
         if self.linear_residual:
             self.layer_norm2 = torch.nn.LayerNorm(self.num_variables // 2)
             self.layer_norm3 = torch.nn.LayerNorm(self.num_variables)
@@ -233,32 +394,19 @@ class Transformer_Twoway(torch.nn.Module):
                 bias=False,
             )
 
-        if self.concat:
-            self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
-                self.patch_size,
-                hidden_dimension,
-                self.num_variables,
-                rank,
-                device,
-                parallelism,
-                model_group,
-                concat=True,
-                stride=self.stride,
-                bias=False,
-            )
-        else:
-            self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
-                self.patch_size,
-                hidden_dimension,
-                self.num_variables,
-                rank,
-                device,
-                parallelism,
-                model_group,
-                concat=False,
-                stride=self.stride,
-                bias=False,
-            )
+        self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
+            self.patch_size,
+            hidden_dimension,
+            self.num_variables,
+            rank,
+            device,
+            parallelism,
+            model_group,
+            concat=self.concat,
+            stride=self.stride,
+            bias=False,
+        )
+
         self.activation = torch.nn.GELU()
 
         if self.linear_residual:
@@ -486,7 +634,8 @@ class Transformer_Fourway(torch.nn.Module):
         x_res2 = x.clone()
         # x shape: [1, 1152, 2000]
         for i in range(self.n_blocks):
-            x = self.blocks[i](x)  # x: latent_tplus1
+            x = self.blocks[i](x)  # x: latent_tplus
+
         if self.concat:
             x = self.layer_norm(x)
             x = torch.concat((x, x_res2), dim=-2)

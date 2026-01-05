@@ -29,22 +29,10 @@ def training_loop(
     utils.set_all_seeds(1 + rank % parallelism)
 
     # Set up model  groups
-    match parallelism:
-        case 1:
-            model_group, ddp_group, _, model_subgroup_col = utils.setup_groups(
-                rank, parallelism, 1, 1
-            )
-            n_vars_local = 69
-        case 2:
-            model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
-                rank, parallelism, 1, 2
-            )
-            n_vars_local = 36
-        case 4:
-            model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
-                rank, parallelism, 2, 2
-            )
-            n_vars_local = 36
+    model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_comm_groups(
+        rank, parallelism
+    )
+    n_vars_local = 69 if parallelism == 1 else 36
 
     # Define model and load model
     if config_dict["model"]["type"] == "Mixer":
@@ -56,35 +44,19 @@ def training_loop(
             .to(device)
         )
     elif config_dict["model"]["type"] == "ViT":
-        match parallelism:
-            case 2:
-                model = (
-                    ViT.Transformer_Twoway(
-                        config_dict,
-                        rank,
-                        device,
-                        parallelism,
-                        model_group,
-                        row_subgroup,
-                        col_subgroup,
-                    )
-                    .to(torch.float32)
-                    .to(device)
-                )
-            case 4:
-                model = (
-                    ViT.Transformer_Fourway(
-                        config_dict,
-                        rank,
-                        device,
-                        parallelism,
-                        model_group,
-                        row_subgroup,
-                        col_subgroup,
-                    )
-                    .to(torch.float32)
-                    .to(device)
-                )
+        model = (
+            ViT.ViT(
+                config_dict,
+                rank,
+                device,
+                parallelism,
+                model_group,
+                row_subgroup,
+                col_subgroup,
+            )
+            .to(torch.float32)
+            .to(device)
+        )
 
     if rank == 0:
         print(
@@ -208,7 +180,7 @@ def train_one_epoch(
         # Backpropagation
         loss.backward()
         # # Average loss over all four processes for exactness
-        dist.all_reduce(loss)
+        # dist.all_reduce(loss)
         loss = loss / config_dict["model_parallel"]["parallelism"]
 
         optimizer.step()
