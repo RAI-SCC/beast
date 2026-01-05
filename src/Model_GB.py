@@ -6,12 +6,12 @@ from Jigsaw.Mixer import MixerBlock, MixerBlockMegatron, MixerBlockSequential
 
 class Model_eightway(torch.nn.Module):
     def __init__(
-        self, config_dict, rank, device, n_parallel, model_group, col_subgroup
+        self, config_dict, rank, device, parallelism, model_group, col_subgroup
     ):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
 
@@ -30,7 +30,7 @@ class Model_eightway(torch.nn.Module):
                 hidden_dimension,
                 self.rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
             )
         else:
@@ -50,7 +50,7 @@ class Model_eightway(torch.nn.Module):
                 hidden_dimension,
                 self.rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
             )
 
@@ -65,7 +65,7 @@ class Model_eightway(torch.nn.Module):
                     config_dict["model"]["features_hidden_dim_fraction"],
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                 )
                 for i in range(self.n_blocks)
@@ -96,7 +96,7 @@ class Model_eightway(torch.nn.Module):
                     self.num_variables,
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=True,
                     stride=self.stride,
@@ -108,7 +108,7 @@ class Model_eightway(torch.nn.Module):
                     self.num_variables,
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=False,
                     stride=self.stride,
@@ -120,7 +120,7 @@ class Model_eightway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
             )
 
@@ -129,7 +129,7 @@ class Model_eightway(torch.nn.Module):
             self.num_variables // 2,
             rank,
             self.device,
-            n_parallel,
+            parallelism,
             model_group,
         )
 
@@ -224,12 +224,12 @@ class Model_eightway(torch.nn.Module):
 
 class Model(torch.nn.Module):
     def __init__(
-        self, config_dict, rank, device, n_parallel, model_group, col_subgroup
+        self, config_dict, rank, device, parallelism, model_group, col_subgroup
     ):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group
         self.column_subgroup = col_subgroup
 
@@ -248,7 +248,7 @@ class Model(torch.nn.Module):
                 hidden_dimension,
                 self.rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
                 bias=False,
             )
@@ -269,7 +269,7 @@ class Model(torch.nn.Module):
                 hidden_dimension,
                 self.rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
                 bias=False,
             )
@@ -285,7 +285,7 @@ class Model(torch.nn.Module):
                     config_dict["model"]["features_hidden_dim_fraction"],
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                 )
                 for i in range(self.n_blocks)
@@ -311,7 +311,7 @@ class Model(torch.nn.Module):
                     self.num_variables,
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=True,
                     stride=self.stride,
@@ -324,7 +324,7 @@ class Model(torch.nn.Module):
                     self.num_variables,
                     rank,
                     self.device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=False,
                     stride=self.stride,
@@ -336,7 +336,7 @@ class Model(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
             )
 
@@ -346,7 +346,7 @@ class Model(torch.nn.Module):
                 self.num_variables,
                 rank,
                 self.device,
-                n_parallel,
+                parallelism,
                 model_group,
                 bias=False,
             )
@@ -445,11 +445,11 @@ class Model(torch.nn.Module):
 
 
 class Model_twoway(torch.nn.Module):
-    def __init__(self, config_dict, rank, device, n_parallel, model_group):
+    def __init__(self, config_dict, rank, device, parallelism, model_group):
         super().__init__()
         self.rank = rank
         self.device = device
-        self.n_parallel = n_parallel
+        self.parallelism = parallelism
         self.model_group = model_group  # Local groups [0,1], [2,3]...
         hidden_dimension = config_dict["model"]["hidden_dim"]
         self.xlat, self.xlon = config_dict["data"]["xlat"], config_dict["data"]["xlon"]
@@ -467,7 +467,7 @@ class Model_twoway(torch.nn.Module):
                 hidden_dimension,
                 rank,
                 device,
-                n_parallel,
+                parallelism,
                 model_group,
                 bias=True,
             )
@@ -482,7 +482,7 @@ class Model_twoway(torch.nn.Module):
                     config_dict["model"]["features_hidden_dim_fraction"],
                     rank,
                     device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                 )
                 for i in range(self.n_blocks)
@@ -507,7 +507,7 @@ class Model_twoway(torch.nn.Module):
                     self.num_variables,
                     rank,
                     device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=True,
                     stride=self.stride,
@@ -520,7 +520,7 @@ class Model_twoway(torch.nn.Module):
                     self.num_variables,
                     rank,
                     device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     concat=False,
                     stride=self.stride,
@@ -533,7 +533,7 @@ class Model_twoway(torch.nn.Module):
                 self.num_variables,
                 rank,
                 device,
-                n_parallel=n_parallel,
+                parallelism=parallelism,
                 model_group=model_group,
                 bias=True,
             )
@@ -860,7 +860,7 @@ class ModelSequential(torch.nn.Module):
 
 
 class ModelMegatron(torch.nn.Module):
-    def __init__(self, config_dict, rank, device, n_parallel, model_group):
+    def __init__(self, config_dict, rank, device, parallelism, model_group):
         super().__init__()
         self.rank = rank
         hidden_dimension = config_dict["model"]["hidden_dim"]
@@ -902,7 +902,7 @@ class ModelMegatron(torch.nn.Module):
                     config_dict["model"]["features_hidden_dim_fraction"],
                     rank,
                     device,
-                    n_parallel,
+                    parallelism,
                     model_group,
                     self.dropout,
                     bias=False,

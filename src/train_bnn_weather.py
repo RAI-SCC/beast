@@ -23,35 +23,35 @@ def training_loop(
     config_dict: dict, device: torch.device, localid: int, rank: int
 ) -> None:
     """Training loop for MLP Mixer model."""
-    n_parallel = config_dict["model_parallel"]["parallelism"]
+    parallelism = config_dict["model_parallel"]["parallelism"]
     # Set all seeds in the same model group to be different
-    utils.set_all_seeds(1 + rank % n_parallel)
+    utils.set_all_seeds(1 + rank % parallelism)
 
     # Set up model  groups
-    match n_parallel:
+    match parallelism:
         case 1:
             model_group, ddp_group, _, model_subgroup_col = utils.setup_groups(
-                rank, n_parallel, 1, 1
+                rank, parallelism, 1, 1
             )
             n_vars_local = 69
         case 2:
             model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
-                rank, n_parallel, 1, 2
+                rank, parallelism, 1, 2
             )
             n_vars_local = 36
         case 4:
             model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
-                rank, n_parallel, 2, 2
+                rank, parallelism, 2, 2
             )
             n_vars_local = 36
 
     # Define model and load model
     if config_dict["model"]["type"] == "Mixer":
-        match n_parallel:
+        match parallelism:
             case 2:
                 model = (
                     Model.Model_twoway(
-                        config_dict, rank, device, n_parallel, model_group
+                        config_dict, rank, device, parallelism, model_group
                     )
                     .to(device)
                     .to(torch.float32)
@@ -59,21 +59,26 @@ def training_loop(
             case 4:
                 model = (
                     Model.Model(
-                        config_dict, rank, device, n_parallel, model_group, col_subgroup
+                        config_dict,
+                        rank,
+                        device,
+                        parallelism,
+                        model_group,
+                        col_subgroup,
                     )
                     .to(torch.float32)
                     .to(device)
                 )
 
     elif config_dict["model"]["type"] == "ViT":
-        match n_parallel:
+        match parallelism:
             case 2:
                 model = (
                     ViT.Transformer_Twoway(
                         config_dict,
                         rank,
                         device,
-                        n_parallel,
+                        parallelism,
                         model_group,
                         row_subgroup,
                         col_subgroup,
@@ -87,7 +92,7 @@ def training_loop(
                         config_dict,
                         rank,
                         device,
-                        n_parallel,
+                        parallelism,
                         model_group,
                         row_subgroup,
                         col_subgroup,
@@ -98,11 +103,11 @@ def training_loop(
 
     if rank == 0:
         print(
-            f"model has {utils.count_parameters(model) * n_parallel / 1e6} million parameters"
+            f"model has {utils.count_parameters(model) * parallelism / 1e6} million parameters"
         )
-    utils.set_all_seeds_model_group(1, rank=rank, n_parallel=n_parallel)
+    utils.set_all_seeds_model_group(1, rank=rank, parallelism=parallelism)
     train_dataloader, valid_dataloader = utils.build_dataloaders(
-        config_dict, n_parallel, rank
+        config_dict, parallelism, rank
     )
 
     # Synchronize parameters
@@ -159,7 +164,7 @@ def training_loop(
             model_group=model_group,
         )
 
-        if rank < n_parallel:
+        if rank < parallelism:
             utils.save_model(
                 model,
                 optimizer,
