@@ -25,7 +25,7 @@ class WeatherMixer(torch.nn.Module):
             self.xlat,
             self.xlon,
             self.patch_size,
-            72,
+            config_dict["data"]["n_global_variables"],
             hidden_dimension,
             self.rank,
             self.device,
@@ -55,12 +55,12 @@ class WeatherMixer(torch.nn.Module):
         match parallelism:
             case 2:
                 self.layer_norm = Linear.torch.nn.LayerNorm(hidden_dimension // 2)
-                self.num_variables = 72
+                self.num_variables = config_dict["data"]["n_global_variables"]
             case 4 | 8:
                 self.layer_norm = Norm.DistributedLayerNorm(
                     hidden_dimension // 2, self.rank, self.device, self.column_subgroup
                 )
-                self.num_variables = 36  # TODO: generalize via config file
+                self.num_variables = config_dict["data"]["n_global_variables"] // 2
 
         self.concat = config_dict["model"]["concat"]
         self.linear_residual = config_dict["model"]["linear_residual"]
