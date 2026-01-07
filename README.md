@@ -55,13 +55,16 @@ pip install -r requirements.txt
 ```
 
 ### Horeka & FTP
-**Create $CONTAINER_HOME** variable
+**Create $CONTAINER_HOME variable** 
 ```console
 export CONTAINER_HOME=$HOME/containers
 mkdir $CONTAINER_HOME
-```*Get images**
+```
 
-``````consoapptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
+**Get images**
+
+```console
+apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 ```
 
 **Create a writable (sandbox) container**
