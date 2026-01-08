@@ -7,12 +7,14 @@ import torch.optim as optim
 import yaml
 
 # Jigsaw imports
-from Jigsaw import eval, utils
+from Jigsaw import utils
 
 # torch blue imports
 from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
+
+import evaluation
 
 # Import model
 import Model_GB as Model
@@ -43,26 +45,42 @@ def training_loop(
             .to(device)
         )
     elif config_dict["model"]["type"] == "ViT":
-        model = (
-            ViT.ViT(
-                config_dict,
-                rank,
-                device,
-                parallelism,
-                model_group,
-                row_subgroup,
-                col_subgroup,
-            )
-            .to(torch.float32)
-            .to(device)
-        )
+        match parallelism:
+            case 1:
+                model = (
+                    ViT.Transformer_Sequential(
+                        config_dict,
+                        rank,
+                        device,
+                        parallelism,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+            case _:
+                model = (
+                    ViT.ViT(
+                        config_dict,
+                        rank,
+                        device,
+                        parallelism,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
 
     if rank == 0:
         print(
             f"model has {utils.count_parameters(model) * parallelism / 1e6} million parameters"
         )
     utils.set_all_seeds_model_group(1, rank=rank, parallelism=parallelism)
-    train_dataloader, valid_dataloader = utils.build_dataloaders(
+    train_dataloader, _, valid_dataloader, valid_dataset_info = utils.build_dataloaders(
         config_dict, parallelism, rank
     )
 
@@ -103,17 +121,18 @@ def training_loop(
         torch.cuda.synchronize()
 
         model.eval()
-        val_loss = eval.validate(
+
+        val_loss = evaluation.validate(
             config_dict,
             model,
             valid_dataloader,
+            valid_dataset_info,
             rank,
             device,
             epoch,
             config_dict["training"]["save_dir"],
-            mse_file_path="rmse.csv",
-            acc_file_path="acc.csv",
-            model_parallel=True,
+            mse_file_path="rmse",
+            acc_file_path="acc",
             world_size=world_size,
             model_subgroup_col=col_subgroup,
             ddp_group=ddp_group,
@@ -199,9 +218,8 @@ def train_one_epoch(
             f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {epoch_average_loss}"
         )
 
-    if config_dict["model_parallel"]["parallelism"] == 2:
-        pred = pred.mean(dim=0).reshape(1, 720, 1440, 36)
-        eval.gen_plots(config_dict, x, pred, y, rank, ".", epoch, True)
+    # if config_dict["model_parallel"]["parallelism"] == 2:
+    #     pred = pred.mean(dim=0).reshape(1, config_dict["data"]["xlat"], config_dict["data"]["xlon"], config_dict["data"]["n_global_variables"]//2)
 
     return epoch_average_loss
 
