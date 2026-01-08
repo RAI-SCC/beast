@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 
 import torch
@@ -8,14 +9,14 @@ import yaml
 
 # Jigsaw imports
 from Jigsaw import eval, utils
-from torch_blue import vi
 
 # torch blue imports
+from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
 # Import model
-import Model_GB as Model
+from gb.model import Model_GB as Model
 
 
 def training_loop(
@@ -175,11 +176,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
     args = parser.parse_args()
+    
+    WORKDIR = os.getenv("WORKDIR")
 
-    with open(args.config_file, "r") as f:
+    with open(f"{WORKDIR}/{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     device, localid, rank, world_size = utils.init_cuda()
+
+    # Override configuration with environment variables
+    if os.getenv("DATA_DIR") is not None:
+        config_dict["data"]["train_data_path"] = (
+            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
+        )
+        config_dict["data"]["valid_data_path"] = (
+            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
+        )
+
+    if os.getenv("MASKS_DIR") is not None:
+        config_dict["data"]["constant_masks_path"] = (
+            os.getenv("MASKS_DIR") + config_dict["data"]["constant_masks_path"]
+        )
 
     training_loop(config_dict, device, localid, rank)
     dist.destroy_process_group()

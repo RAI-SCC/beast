@@ -1,0 +1,172 @@
+/var/spool/slurmd/job06803/slurm_script: line 10: cd: /workspace: No such file or directory
+Slurm variables:
+  SLURM_JOB_ID:         6803
+  SLURM_PARTITION:      amd-milan-mi250
+  SLURM_NTASKS:         8
+  SLURM_NNODES:         2
+  SLURM_TASKS_PER_NODE: 4(x2)
+  SLURM_NODELIST:       ftp-x86n[8-9]
+/var/spool/slurmd/job06803/slurm_script systems/ftp_container.sh
+System Env File: ftp_container.sh
+Sourcing system environment...
+Purging modules
+Running cmd:
+  srun --cpu-bind=v apptainer exec --nv --no-home --bind /scratch --bind /scratch/slurm_tmpdir/job_6803 --bind /home/hk-project-test-aihero2/io3047/code/GrandBellbeast:/workspace /home/hk-project-test-aihero2/io3047/containers/gb-pytorch-rocm6.4.4 python -u /workspace/src/test_process_group.py
+
+GpuFreq=control_disabled
+GpuFreq=control_disabled
+cpu-bind=MASK - ftp-x86n8, task  0  0 [4041950]: mask 0x1 set
+cpu-bind=MASK - ftp-x86n8, task  1  1 [4041951]: mask 0x10000000000000000 set
+cpu-bind=MASK - ftp-x86n8, task  2  2 [4041952]: mask 0x2 set
+cpu-bind=MASK - ftp-x86n9, task  4  0 [3814125]: mask 0x1 set
+cpu-bind=MASK - ftp-x86n9, task  5  1 [3814126]: mask 0x10000000000000000 set
+cpu-bind=MASK - ftp-x86n9, task  6  2 [3814127]: mask 0x2 set
+cpu-bind=MASK - ftp-x86n8, task  3  3 [4041953]: mask 0x20000000000000000 set
+cpu-bind=MASK - ftp-x86n9, task  7  3 [3814128]: mask 0x20000000000000000 set
+Rank 3: world_size 8, slurm_localid 3
+Rank 1: world_size 8, slurm_localid 1
+Rank 2: world_size 8, slurm_localid 2
+Rank 0: world_size 8, slurm_localid 0
+Rank 2/8: Process group initialized with torch rank 2 and torch world size 8.
+[Rank 2] Process group initialized successfully
+[Rank 2] World size: 8
+[Rank 2] Number of GPUs available: 4
+[Rank 2] Using GPU: 2
+[Rank 2] GPU name: AMD Instinct MI250X/MI250
+Rank 3/8: Process group initialized with torch rank 3 and torch world size 8.
+[Rank 3] Process group initialized successfully
+[Rank 3] World size: 8
+[Rank 3] Number of GPUs available: 4
+[Rank 3] Using GPU: 3
+[Rank 3] GPU name: AMD Instinct MI250X/MI250
+Rank 1/8: Process group initialized with torch rank 1 and torch world size 8.
+[Rank 1] Process group initialized successfully
+[Rank 1] World size: 8
+[Rank 1] Number of GPUs available: 4
+[Rank 1] Using GPU: 1
+[Rank 1] GPU name: AMD Instinct MI250X/MI250
+[Rank 3] Starting all-to-all operation...
+[Rank 2] Starting all-to-all operation...
+[Rank 1] Starting all-to-all operation...
+[Rank 2] Input tensor: tensor([2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.,
+        2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2., 2.],
+       device='cuda:2')
+[Rank 3] Input tensor: tensor([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.,
+        3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.],
+       device='cuda:3')
+[Rank 1] Input tensor: tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       device='cuda:1')
+Rank 7: world_size 8, slurm_localid 3
+Rank 4: world_size 8, slurm_localid 0
+Rank 5: world_size 8, slurm_localid 1
+Rank 6: world_size 8, slurm_localid 2
+Rank 5/8: Process group initialized with torch rank 5 and torch world size 8.
+[Rank 5] Process group initialized successfully
+[Rank 5] World size: 8
+Rank 7/8: Process group initialized with torch rank 7 and torch world size 8.
+[Rank 7] Process group initialized successfully
+[Rank 7] World size: 8
+Rank 4/8: Process group initialized with torch rank 4 and torch world size 8.
+[Rank 4] Process group initialized successfully
+[Rank 4] World size: 8
+Rank 6/8: Process group initialized with torch rank 6 and torch world size 8.
+[Rank 6] Process group initialized successfully
+[Rank 6] World size: 8
+Rank 0/8: Process group initialized with torch rank 0 and torch world size 8.
+[Rank 0] Process group initialized successfully
+[Rank 0] World size: 8
+[Rank 0] Number of GPUs available: 4
+[Rank 0] Using GPU: 0
+[Rank 0] GPU name: AMD Instinct MI250X/MI250
+[Rank 5] Number of GPUs available: 4
+[Rank 7] Number of GPUs available: 4
+[Rank 7] Using GPU: 3
+[Rank 5] Using GPU: 1
+[Rank 7] GPU name: AMD Instinct MI250X/MI250
+[Rank 5] GPU name: AMD Instinct MI250X/MI250
+[Rank 4] Number of GPUs available: 4
+[Rank 4] Using GPU: 0
+[Rank 4] GPU name: AMD Instinct MI250X/MI250
+[Rank 6] Number of GPUs available: 4
+[Rank 6] Using GPU: 2
+[Rank 6] GPU name: AMD Instinct MI250X/MI250
+[Rank 0] Starting all-to-all operation...
+[Rank 0] Input tensor: tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0.], device='cuda:0')
+[Rank 4] Starting all-to-all operation...
+[Rank 5] Starting all-to-all operation...
+[Rank 7] Starting all-to-all operation...
+[Rank 6] Starting all-to-all operation...
+[Rank 4] Input tensor: tensor([4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.,
+        4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4., 4.],
+       device='cuda:0')
+[Rank 6] Input tensor: tensor([6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.,
+        6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6., 6.],
+       device='cuda:2')
+[Rank 5] Input tensor: tensor([5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.,
+        5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.],
+       device='cuda:1')
+[Rank 7] Input tensor: tensor([7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.,
+        7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7., 7.],
+       device='cuda:3')
+[Rank 6] All-to-all completed successfully
+[Rank 7] All-to-all completed successfully
+[Rank 4] All-to-all completed successfully
+[Rank 6] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:2')
+[Rank 7] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:3')
+[Rank 4] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:0')
+[Rank 5] All-to-all completed successfully
+[Rank 1] All-to-all completed successfully
+[Rank 3] All-to-all completed successfully
+[Rank 1] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:1')
+[Rank 5] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:1')
+[Rank 2] All-to-all completed successfully
+[Rank 3] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:3')
+[Rank 0] All-to-all completed successfully
+[Rank 2] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:2')
+[Rank 4] ✓ All-to-all verification PASSED
+[Rank 6] ✓ All-to-all verification PASSED
+[Rank 3] ✓ All-to-all verification PASSED
+[Rank 1] ✓ All-to-all verification PASSED
+[Rank 7] ✓ All-to-all verification PASSED
+[Rank 2] ✓ All-to-all verification PASSED
+[Rank 5] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 0] Output tensor: tensor([0., 0., 0., 0., 1., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 3., 4., 4.,
+        4., 4., 5., 5., 5., 5., 6., 6., 6., 6., 7., 7., 7., 7.],
+       device='cuda:0')
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+[Rank 0] ✓ All-to-all verification PASSED
+/opt/conda/envs/py_3.12/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4631: UserWarning: No device id is provided via `init_process_group` or `barrier `. Using the current device set by the user. 
+  warnings.warn(  # warn only once
+
+==================================================
+All tests completed successfully!
+==================================================
