@@ -2,27 +2,37 @@
 
 ## Project Structure
 
-- systems
-    - System specific stuff (mostly env variables, convenient for accounts, reservations, special container configurations)
+- configs
+    - model configurations
+- data
+    - Small example, prototype datasets
 - experiments
     - bash scripts (srun/sbatch, data download, ...)
-    - python scripts
-- src
-    - Python files, model related
+- logs
+    - Slurm output logs, debugging logs, training logs
+    - Good for debugging, sanity check, etc.
+    - Can be large, consider cleaning up periodically
 - results
     - pkl files, checkpoints
     - anything plotable
     - mlflow
-- logs
-    - where to dump SLURM output files, in case heavy debugging is needed
-- configs
-    - model configurations
+- src
+    - libs
+        - Jigsaw
+        - torch_blue
+    - models
+        - model architectures
+    - dataloaders
+        - data loading scripts
+    - python scripts, training scripts, utils
+- systems
+    - System specific stuff (mostly env variables, convenient for accounts, reservations, special container configurations)
 - utils
-    - utility scripts, e.g., for logging, plotting, data loading
+    - bash utility scripts (Download data, setup environment, print info, etc.)
 
 ## Setup
 
-### Dev tools
+### Dev tools (for your working environment, and code quality)
 
 **pre-commit**
 
@@ -46,37 +56,50 @@
 git submodule update --remote --recursive
 ```
 
-### Python env
+> [!WARNING]
+> If you authenticate to github using HTTPs with username and password/token, you might get an authentification error. If that is the case, try this command:
+>
+> ```console
+> git config --local url."https://github.com/".insteadOf "git@github.com:"
+> ```
+>
+> Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
 
-Create a new python environment with v 3.11 or above.
-
-```console
-pip install -r requirements.txt
-```
 
 ### Horeka & FTP
-**Create $CONTAINER_HOME variable** 
+
+1) **Get images**
+
 ```console
+ml purge
 export CONTAINER_HOME=$HOME/containers
 mkdir $CONTAINER_HOME
-```
-
-**Get images**
-
-```console
 apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 ```
 
-**Create a writable (sandbox) container**
+2) **Create a writable (sandbox) container**
 
 ```console
 apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
 ```
 
-**Enter the container (to install dependencies)**
+3) **Install dependencies in the container**
 
 ```console
-apptainer shell --writable $CONTAINER_HOME/gb_pytorch25.06/
+apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+```
+
+**All-in-one**
+
+```console
+ml purge
+export CONTAINER_HOME=$HOME/containers
+mkdir $CONTAINER_HOME
+apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
+apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
+apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
 ```
 
 ### LUMI
@@ -95,7 +118,7 @@ ml load LUMI partition/container EasyBuild-user/LUMI
 eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
 ```
 
-3) Go inside container and install dependencies
+3) Go inside container and install dependencies (only squash once we have the final setup)
 
 ```console
 ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
@@ -123,3 +146,20 @@ sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres
 ```console
 sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
 ```
+
+## Wiki
+
+### Distributed Process Groups in GrandBellbeast
+
+Parallel Process Groups keys:
+ - JCol: Jigsaw Column Tensor Parallel group (part of DTP)
+ - JRow: Jigsaw Row Tensor Parallel group (part of DTP)
+ - DTP: Domain Tensor Parallel group, equal to Column x Row
+ - SP: Sample Parallel Group
+ - DP: Data Parallel Group
+ - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
+ - Expert: Top group for Mixture of Experts
+
+Mesh Dimensions: [Expert, DP, SP, JCol, JRow]
+
+See `src/util.py` for implementation details.

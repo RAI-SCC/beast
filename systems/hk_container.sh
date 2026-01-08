@@ -4,7 +4,7 @@ export WORKDIR="/mnt"
 export DATA_DIR="/lsdf/kit/imk-tro/projects/Gruppe_Quinting/"
 export MASKS_DIR="/lsdf/kit/scc/projects/"
 export CONTAINER_HOME="$HOME/containers"
-export CONTAINER_IMAGE="gb-pytorch25.06"
+export CONTAINER_IMAGE="gb-pytorch25.10"
 export SYSTEM_SLURM_PARAMS=(
     apptainer
     exec
