@@ -7,7 +7,7 @@ data:
   preprocessed: False
   normalization_dir: "../../data/normalization"
   constant_mask_dir: "../../data/constant_masks"
-  train_subset: 100
+  train_subset: 10
   valid_subset: 4
   train_time_range: ["1990-01-01", "2017-12-31"]
   valid_time_range: ["2018-01-01", "2018-12-31"]
@@ -68,6 +68,7 @@ training:
   area_weighted: True
   print: False
   tf32: True
+  eval_pressure_levels: [1000, 850]
 model_parallel:
   parallelism: 2
   type: jigsaw
