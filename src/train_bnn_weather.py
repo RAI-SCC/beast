@@ -20,6 +20,7 @@ import evaluation
 # Import model
 from gb.model import Model_GB as Model
 from gb.model import ViT
+from gb.utils import _create_process_mesh_dict
 
 
 def training_loop(
@@ -31,8 +32,15 @@ def training_loop(
     utils.set_all_seeds(1 + rank % parallelism)
 
     # Set up model  groups
-    model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_comm_groups(
-        rank, parallelism
+    pg_dict = _create_process_mesh_dict(
+        config_dict["mesh_dims"],
+        device="cuda",
+    )
+    model_group, row_subgroup, col_subgroup, ddp_group = (
+        pg_dict["DTP"],
+        pg_dict["JRow"],
+        pg_dict["JCol"],
+        pg_dict["DDP"],
     )
     n_vars_local = 69 if parallelism == 1 else 36
 
