@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
     args = parser.parse_args()
-    
+
     WORKDIR = os.getenv("WORKDIR")
 
     with open(f"{WORKDIR}/{args.config_file}", "r") as f:

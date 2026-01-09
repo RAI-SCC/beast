@@ -21,5 +21,5 @@ export SYSTEM_SLURM_PARAMS=(
 setup_system() {
     echo "Purging modules"
     ml purge
-    
+
 }
