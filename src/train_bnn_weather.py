@@ -19,7 +19,7 @@ import evaluation
 
 # Import model
 from gb.model import Model_GB as Model
-import ViT
+from gb.model import ViT
 
 
 def training_loop(
