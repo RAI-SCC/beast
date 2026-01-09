@@ -62,7 +62,7 @@ git submodule update --remote --recursive
 > ```console
 > git config --local url."https://github.com/".insteadOf "git@github.com:"
 > ```
-> 
+>
 > Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
 
 
@@ -159,8 +159,7 @@ Parallel Process Groups keys:
  - DP: Data Parallel Group
  - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
  - Expert: Top group for Mixture of Experts
- 
+
 Mesh Dimensions: [Expert, DP, SP, JCol, JRow]
 
 See `src/util.py` for implementation details.
-

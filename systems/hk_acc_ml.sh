@@ -14,5 +14,5 @@ setup_system() {
     load_env $WORKDIR/.venv $WORKDIR/requirements.txt
     source $WORKDIR/.venv/bin/activate
     which python
-    
+
 }

@@ -37,4 +37,4 @@ echo "Running cmd:"
 echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_mesh.py" "$WORKDIR/configs/mesh_dims.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_mesh.py 
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_process_mesh.py
