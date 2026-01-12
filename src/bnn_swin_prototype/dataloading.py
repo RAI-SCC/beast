@@ -155,7 +155,7 @@ class WeatherTestDataset(Dataset):
         if self.uses_constant_masks:
             self._load_constant_masks()
 
-        self.forecast_length = self.config["rollout"]
+        self.forecast_length = self.config.get("rollout", 1)
 
     def _translate_variable_names(self, varname_list):
         if self.translation_dict is None:
