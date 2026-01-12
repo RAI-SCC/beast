@@ -13,8 +13,8 @@ export SYSTEM_SLURM_PARAMS=(
     --bind "/scratch"
     --bind "$TMP"
     --bind "$LOCAL_WORKDIR":"$WORKDIR"
-    # --bind "$DATA_DIR":"$DATA_DIR"
-    # --bind "$MASKS_DIR":"$MASKS_DIR"
+    --bind "$DATA_DIR":"$DATA_DIR"
+    --bind "$MASKS_DIR":"$MASKS_DIR"
     $CONTAINER_HOME/$CONTAINER_IMAGE
 )
 

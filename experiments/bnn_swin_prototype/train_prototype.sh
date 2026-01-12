@@ -6,8 +6,7 @@
 #SBATCH --time=00:10:00
 #SBATCH --job-name='gb_test_prototype'
 #SBATCH --output='logs/proto_%x_%j.out'
-
-cd /workspace
+#SBATCH --account='hk-project-p0026382'
 
 source utils/utils.sh
 print_slurm_env
