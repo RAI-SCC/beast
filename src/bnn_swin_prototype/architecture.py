@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch import permute, reshape
 from torch.utils.checkpoint import checkpoint
-from torch_blue.vi import VIModule, convert_to_vi
+from torch_blue.vi import VIModule, convert_to_vimodule
 
 ############################ Upsampling and Downsampling
 
@@ -1348,5 +1348,5 @@ class NoEmbeddingModel(nn.Module):
 
 def BNNNoEmbeddingModel(config: dict, device: torch.device = "cpu") -> VIModule:
     model = NoEmbeddingModel(config, device)
-    convert_to_vi(model)
+    convert_to_vimodule(model)
     return model
