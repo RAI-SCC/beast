@@ -7,8 +7,6 @@
 #SBATCH --job-name='gb_test_dist'
 #SBATCH --output='logs/%x_%j.out'
 
-cd /workspace
-
 source utils/utils.sh
 print_slurm_env
 
