@@ -72,7 +72,9 @@ class WeatherTestDataset(Dataset):
         self.config = config["data"]
 
         self.data_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "../../data"
+            # os.path.dirname(os.path.abspath(__file__)), "../../data"
+            os.environ["WORKDIR"],
+            "data",
         )
         self.file_path = os.path.join(self.data_path, "weather_test_data.zarr")
 
