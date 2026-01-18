@@ -6,8 +6,6 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import yaml
-from architecture import BNNNoEmbeddingModel
-from dataloading import get_test_dataloader
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
@@ -16,7 +14,9 @@ from torch_blue.vi.distributions import (
     MeanFieldNormal as MeanFieldNormalPredictiveDistribution,
 )
 
-from ..gb.utils import get_process_group, init_gb_process_group
+from bnn_swin_prototype.architecture import BNNNoEmbeddingModel
+from bnn_swin_prototype.dataloading import get_test_dataloader
+from gb.utils import get_process_group, init_gb_process_group
 
 
 def main():
@@ -137,7 +137,7 @@ def training_loop(
 
     # loss_type = config["training"].get("loss_type", "mse")
 
-    train_data_loader, train_info = get_test_dataloader(config)
+    train_data_loader, train_info = get_test_dataloader(config, get_process_group("DP"))
 
     """
     train_data_loader, train_info = DataLoader.get_dataloader(

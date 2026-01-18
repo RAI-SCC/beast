@@ -11,10 +11,10 @@ import yaml
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 
-from ..gb.utils import get_process_group
+# from ..gb.utils import get_process_group
 
 
-def get_test_dataloader(config):
+def get_test_dataloader(config, pg):
     dataset = WeatherTestDataset(config)
 
     dataset_info = {
@@ -29,7 +29,7 @@ def get_test_dataloader(config):
     }
 
     if dist.is_initialized():
-        pg = get_process_group("DP")
+        # pg = get_process_group("DP")
 
         sampler = DistributedSampler(
             dataset,
@@ -76,8 +76,8 @@ class WeatherTestDataset(Dataset):
         )
         self.file_path = os.path.join(self.data_path, "weather_test_data.zarr")
 
-        self.dt = 1  # self.config['forecast_step']
-        self.deltaTDivisor = 1  # self.config['dataset_subsampling']
+        self.dt = 6  # self.config['forecast_step']
+        self.deltaTDivisor = 6  # self.config['dataset_subsampling']
 
         self.patch_size = (config["model"]["patch_size"], config["model"]["patch_size"])
         self.resolution = (self.config["x_lat"], self.config["x_lon"])
@@ -230,11 +230,17 @@ class WeatherTestDataset(Dataset):
         """
 
         dataset_in_range = times[
-            (times.year == 2020) & (times.month == 1) & (times.day == 1)
+            (times.year == 2020)
+            & (times.month == 1)
+            & (times.day >= 1)
+            & (times.day <= 6)
         ]
 
         dataset_out_range = times[
-            (times.year == 2020) & (times.month == 1) & (times.day == 1)
+            (times.year == 2020)
+            & (times.month == 1)
+            & (times.day >= 1)
+            & (times.day <= 6)
         ]
 
         self.zarr_in = self.zarr_in.sel(time=dataset_in_range)

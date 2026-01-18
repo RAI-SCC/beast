@@ -35,7 +35,7 @@ def main():
 
     times = pd.to_datetime(ds["time"].values)
     dataset_in_range = times[
-        (times.year == 2020) & (times.month == 1) & (times.day == 1)
+        (times.year == 2020) & (times.month == 1) & (times.day >= 1) & (times.day <= 6)
     ]
     ds = ds.sel(time=dataset_in_range)
 
