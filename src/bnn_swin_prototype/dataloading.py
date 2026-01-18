@@ -275,7 +275,7 @@ class WeatherTestDataset(Dataset):
 
     def _get_normalization_constants(self):
         surface_normalizations = []
-        with open(f"{self.data_path}/surface_norms.csv", "r") as csvfile:
+        with open(f"{self.data_path}/normalizations/surface_norms.csv", "r") as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
                 surface_normalizations.append([row[0], float(row[1]), float(row[2])])
@@ -307,7 +307,9 @@ class WeatherTestDataset(Dataset):
                 )
 
         pressure_normalizations = []
-        with open(f"{self.data_path}/pressure_norms.csv", "r") as csvfile:
+        with open(
+            f"{self.data_path}/normalizations/pressure_norms.csv", "r"
+        ) as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
                 pressure_normalizations.append([row[0], float(row[1]), float(row[2])])
