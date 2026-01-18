@@ -49,9 +49,11 @@ def main():
     device = f"cuda:{rank}"
     world_size = get_process_group("DDP").size()
 
+    """
     if rank == 0:
         if not os.path.exists(config["training"]["save_dir"]):
             os.mkdir(f"{config['training']['save_dir']}")
+    """
 
     if wall_time > 0:
         wall_time = wall_time * 3600.0 - (time.perf_counter() - start_time)
