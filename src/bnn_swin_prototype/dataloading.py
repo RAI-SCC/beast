@@ -81,6 +81,9 @@ class WeatherTestDataset(Dataset):
         self.dt = 6  # self.config['forecast_step']
         self.deltaTDivisor = 6  # self.config['dataset_subsampling']
 
+        if "target_subsampling" not in config.keys():
+            config["target_subsampling"] = self.deltaTDivisor
+
         self.patch_size = (config["model"]["patch_size"], config["model"]["patch_size"])
         self.resolution = (self.config["x_lat"], self.config["x_lon"])
         self.padded_resolution = (
