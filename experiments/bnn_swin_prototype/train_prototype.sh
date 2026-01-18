@@ -32,6 +32,7 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
+
 echo "Running cmd:"
 echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_prototype.py" " --config_file $WORKDIR/experiments/bnn_swin_prototype/prototype_config.yaml"
 echo ""
