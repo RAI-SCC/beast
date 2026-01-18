@@ -318,6 +318,9 @@ def training_loop(
                 for g in optimizer.param_groups:
                     g["lr"] = i * (lr - start_lr) / len(train_data_loader) + start_lr
 
+            if "latent_rollout" not in config["training"].keys():
+                config["training"]["latent_rollout"] = 1
+
             # Generate forecast leadtime for latent rollout based on mod
             forecast_leadtime = i % config["training"]["latent_rollout"]
 
