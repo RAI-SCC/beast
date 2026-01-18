@@ -1262,7 +1262,7 @@ class NoEmbeddingModel(nn.Module):
             lon_crop=(0, self.patch_resolution[1] % 2),
         )
 
-        self.downsample = DownSample2D(dim=self.dim, downsampling=(2, 2))
+        self.downsample = DownSample2D(dim=self.dim)
 
         # Patch Recovery
         self._output_layer = GroupedPatchRecovery2D(
