@@ -9,7 +9,7 @@ _mesh: dist.device_mesh.DeviceMesh
 
 
 def init_gb_process_group(
-    mesh_dims: Sequence[int], backend: str = "nccl", init_method: str = "env://"
+    mesh_dims: Sequence[int], backend: str = "nccl"
 ) -> dict[str, dist.ProcessGroup]:
     """Initialize the global process group for GrandBellbeast."""
     rank = int(os.getenv("SLURM_PROCID"))  # Get individual process ID.
@@ -19,11 +19,13 @@ def init_gb_process_group(
     print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
 
     # # Initialize GPUs and dataloaders
-    device = f"cuda:{slurm_localid}"
-    torch.cuda.set_device(device)
+    device = "cuda" if backend == "nccl" else "cpu"
+    if backend == "nccl":
+        device = f"cuda:{slurm_localid}"
+        torch.cuda.set_device(device)
 
     dist.init_process_group(
-        backend="nccl", rank=rank, world_size=world_size, init_method="env://"
+        backend=backend, rank=rank, world_size=world_size, init_method="env://"
     )
     if dist.is_initialized():
         print(
@@ -32,7 +34,6 @@ def init_gb_process_group(
     else:
         raise RuntimeError("Process group initialization failed.")
 
-    device = "cuda" if backend == "nccl" else "cpu"
     return _create_process_mesh_dict(mesh_dims, device=device)
 
 
