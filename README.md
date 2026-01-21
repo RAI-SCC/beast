@@ -86,8 +86,8 @@ apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pyto
 3) **Install dependencies in the container**
 
 ```console
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
 ```
 
 **All-in-one**
@@ -98,8 +98,8 @@ export CONTAINER_HOME=$HOME/containers
 mkdir $CONTAINER_HOME
 apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
 ```
 
 ### LUMI
@@ -141,10 +141,11 @@ rm -rf $CONTAINERROO/user-software
 sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
 ```
 
-### Running ```train_bnn_weather.py``` with ```configs/weatherMixerTwoway.yaml```
+### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
+For now, without data parallelism (DDP), so only 4 GPUs in a node:
 
 ```console
-sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
+sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_ViT.sh systems/hk_container.sh
 ```
 
 ## Wiki

@@ -3,6 +3,8 @@
 Test script for PyTorch distributed process group initialization.
 Tests NCCL backend, GPU access, and all-to-all communication.
 """
+import Jigsaw
+import torch_blue
 
 import torch.distributed as dist
 

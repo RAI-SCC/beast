@@ -36,4 +36,8 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
+echo "Running cmd:"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_bnn_weather.py --config_file $2 ${@:3}"
+echo ""
+
 srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_bnn_weather.py --config_file $2 "${@:3}"
