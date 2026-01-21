@@ -1,0 +1,46 @@
+data:
+  #forecast_step: 6
+  #train_data_path: '../datasets/1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr'
+  #valid_data_path: '../datasets/1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr'
+  #normalization_dir: '../BNN_Weather/normalization'
+  #constant_mask_dir: '../BNN_Weather/constant_masks'
+  #train_subset: -1 # take full dataset if -1. Else, will read a random subset
+  #valid_subset: -1 # take full dataset if -1. Else, will read a random subset
+  #train_time_range: [ '1980-01-01', '2019-12-31' ]
+  #valid_time_range: [ '2020-01-01', '2020-12-31' ]
+  #test_time_range: [ '2021-01-01', '2021-12-31' ]
+  #dataset_subsampling: 1
+  #target_subsampling: 3 # Only consider every (target_subsampling // dataset_subsampling)th datapoint in the dataset
+  prefetch_factor: 2
+  num_workers: 10
+  x_lat: 121
+  x_lon: 240
+  in_surface_variables: ['msl', 't2m', 'u10m', 'v10m']
+  in_pressure_variables: ['z', 'u', 'v', 't', 'q']
+  in_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+  constant_masks: ['soil_type', 'land_mask', 'topography']
+  out_surface_variables: [ 'msl', 't2m', 'u10m', 'v10m' ]
+  out_pressure_variables: ['z', 'u', 'v', 't', 'q']
+  out_pressure_levels: [ 1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50 ]
+model:
+  hidden_dim: 540
+  patch_size: 2 # (2x2 patches)
+  noise_dim: 32
+  #embedding_kernel_size: 2
+  #TODO: make more model hyperparameters accessible: SWIN block depth, window size, FF size, number of heads, ...
+training:
+  checkpointing: False
+  epochs: 100
+  batch_size: 1
+  lr: 0.0001
+  optimizer: 'Adam'
+  weight_decay: 0.0
+  scheduler:
+      name: cosine
+      t_initial: 100
+      lr_min: 0.000001
+  sample_num: 10
+  #use_grad_scaler: True
+  #use_gradient_clipping: False
+  #gradient_clipping_limit: 0.01
+  use_float32: True
