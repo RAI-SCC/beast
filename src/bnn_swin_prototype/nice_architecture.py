@@ -903,10 +903,10 @@ class NiceBNNNoEmbeddingModel(VIModule):
         self.padding = model.padding
         self.padded_resolution = model.padded_resolution
 
-    def forward(self, x):
+    def forward(self, x, rollout=1):
         batch_size = x.shape[0]
         noise = torch.randn(batch_size, self.noise_dim).to(x.device, x.dtype)
 
-        x = self.model(x, noise)
+        x = self.model(x, noise, rollout=rollout)
 
         return x
