@@ -583,7 +583,7 @@ class NiceEarthSpecificLayer2DNoBias(nn.Module):
         )
         self.checkpointing = checkpointing
 
-    def forward(self, x, n_patch_lat, n_patch_lon):
+    def forward(self, x, n_patch_lat, n_patch_lon, noise):
         """
         Forward pass of Earth-Specific layers for 2D attention mechanism with absolute positional bias term.
 
@@ -625,9 +625,9 @@ class NiceEarthSpecificLayer2DNoBias(nn.Module):
             for i in range(self.depth):
                 # Roll the input every two blocks
                 if i % 2 == 0:
-                    x = self.blocks[i](x, n_patch_lat, n_patch_lon, False)
+                    x = self.blocks[i](x, n_patch_lat, n_patch_lon, False, noise)
                 else:
-                    x = self.blocks[i](x, n_patch_lat, n_patch_lon, True)
+                    x = self.blocks[i](x, n_patch_lat, n_patch_lon, True, noise)
         return x
 
 
