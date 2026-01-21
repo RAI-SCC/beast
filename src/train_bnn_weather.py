@@ -192,18 +192,18 @@ if __name__ == "__main__":
         config_dict["data"]["valid_data_path"] = (
             os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
         )
-
-    if os.getenv("MASKS_DIR") is not None:
         config_dict["data"]["constant_masks_path"] = (
-            os.getenv("MASKS_DIR") + config_dict["data"]["constant_masks_path"]
+            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
         
-    config_dict["data"]["normalization_dir"] = (
-        WORKDIR + config_dict["data"]["normalization_dir"]
-    )
     print(f"Train data path: {config_dict['data']['train_data_path']}")
     print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-    print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+    
+    if "normalization_dir" in config_dict["data"]:
+        config_dict["data"]["normalization_dir"] = (
+            WORKDIR + config_dict["data"]["normalization_dir"]
+        )
+        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict, device, localid, rank)
     dist.destroy_process_group()
