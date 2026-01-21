@@ -1,14 +1,15 @@
 import torch
 import torch.nn as nn
-from architecture import (
+from torch import permute, reshape
+from torch.utils.checkpoint import checkpoint
+from torch_blue.vi import VIModule, convert_to_vimodule
+
+from .architecture import (
     MLP,
     EarthAttention2DNoBias,
     GroupedPatchEmbedding2D,
     GroupedPatchRecovery2D,
 )
-from torch import permute, reshape
-from torch.utils.checkpoint import checkpoint
-from torch_blue.vi import VIModule, convert_to_vimodule
 
 
 class NiceNorm(nn.Module):
