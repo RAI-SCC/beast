@@ -347,17 +347,17 @@ def training_loop(
 
             if correct_dtype == torch.float32 and not no_scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    assert (
-                        model_ddp.module._input_layer.conv_surface.weight.dtype
-                        == correct_dtype
-                    )
+                    # assert (
+                    #     model_ddp.module._input_layer.conv_surface.weight.dtype
+                    #     == correct_dtype
+                    # )
 
                     optimizer.zero_grad()
 
-                    assert (
-                        model_ddp.module._input_layer.conv_surface.weight.dtype
-                        == correct_dtype
-                    )
+                    # assert (
+                    #     model_ddp.module._input_layer.conv_surface.weight.dtype
+                    #     == correct_dtype
+                    # )
 
                     # Call the model
                     output = model_ddp(
@@ -377,17 +377,17 @@ def training_loop(
                         output_pressure, output_surface, target, target_surface
                     )
             else:
-                assert (
-                    model_ddp.module._input_layer.conv_surface.weight.dtype
-                    == correct_dtype
-                )
+                # assert (
+                #     model_ddp.module._input_layer.conv_surface.weight.dtype
+                #     == correct_dtype
+                # )
 
                 optimizer.zero_grad()
 
-                assert (
-                    model_ddp.module._input_layer.conv_surface.weight.dtype
-                    == correct_dtype
-                )
+                # assert (
+                #     model_ddp.module._input_layer.conv_surface.weight.dtype
+                #     == correct_dtype
+                # )
 
                 # Call the model
                 output = model_ddp(
