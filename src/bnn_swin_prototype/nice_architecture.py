@@ -286,7 +286,7 @@ class NiceEarthSpecificBlock2DNoBias(nn.Module):
         # self.drop_path = DropPath(drop_prob=drop_path_ratio)
         self.norm1 = NiceNorm(dim, noise_dim)
         self.norm2 = NiceNorm(dim, noise_dim)
-        self.linear = MLP(dim, 0)
+        self.linear = MLP(dim, 4 * dim)
         self.input_resolution = input_resolution
 
         # Define the window size of the neural network
