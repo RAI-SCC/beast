@@ -4,6 +4,7 @@ import time
 
 import torch
 import torch.distributed as dist
+import torch_blue
 import torch_blue.vi as vi
 import yaml
 from timm.scheduler.cosine_lr import CosineLRScheduler
@@ -15,12 +16,14 @@ from torch_blue.vi.distributions import (
 )
 
 from bnn_swin_prototype.dataloading import get_test_dataloader
-from bnn_swin_prototype.nice_architecture import NiceBNNNoEmbeddingModel
+from bnn_swin_prototype.nice_architecture import NiceBNNNoEmbeddingModel, NiceNorm
 from gb.utils import get_process_group, init_gb_process_group
 
 
 def main():
     start_time = time.perf_counter()
+
+    torch_blue.vi.utils.convert.ban_convert(NiceNorm)
 
     # train_subset = None
     parser = argparse.ArgumentParser()

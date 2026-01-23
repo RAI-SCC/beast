@@ -38,7 +38,7 @@ training:
       name: cosine
       t_initial: 100
       lr_min: 0.000001
-  sample_num: 10
+  sample_num: 6
   #use_grad_scaler: True
   #use_gradient_clipping: False
   #gradient_clipping_limit: 0.01

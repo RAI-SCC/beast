@@ -1,5 +1,8 @@
+import math
+
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 from torch import permute, reshape
 from torch.utils.checkpoint import checkpoint
 from torch_blue.vi import VIModule, convert_to_vimodule
@@ -11,7 +14,7 @@ from .architecture import (
     GroupedPatchRecovery2D,
 )
 
-
+"""
 class NiceNorm(nn.Module):
     def __init__(self, normalized_shape, noise_dim, eps=1e-5, device=None, dtype=None):
         super().__init__()
@@ -47,6 +50,95 @@ class NiceNorm(nn.Module):
         bias = bias.reshape(x.shape[0], *[1 for _ in x.shape[1:-1]], self.shape)
 
         x = scale * x + bias
+
+        return x
+"""
+
+
+class NiceNorm(nn.Module):
+    def __init__(self, normalized_shape, noise_dim, eps=1e-5, device=None, dtype=None):
+        super().__init__()
+
+        self.norm = nn.LayerNorm(
+            normalized_shape,
+            eps=eps,
+            device=device,
+            dtype=dtype,
+            elementwise_affine=False,
+        )
+
+        self.noise_dim = noise_dim
+        self.shape = normalized_shape
+
+        self.activation = nn.GELU()
+
+        self.scale_weight1 = nn.Parameter(
+            torch.empty((normalized_shape, noise_dim), dtype=dtype, device=device)
+        )
+        self.scale_bias1 = nn.Parameter(
+            torch.empty(normalized_shape, dtype=dtype, device=device)
+        )
+        self.scale_weight2 = nn.Parameter(
+            torch.empty(
+                (normalized_shape, normalized_shape), dtype=dtype, device=device
+            )
+        )
+        self.scale_bias2 = nn.Parameter(
+            torch.empty(normalized_shape, dtype=dtype, device=device)
+        )
+
+        self.shift_weight1 = nn.Parameter(
+            torch.empty((normalized_shape, noise_dim), dtype=dtype, device=device)
+        )
+        self.shift_bias1 = nn.Parameter(
+            torch.empty(normalized_shape, dtype=dtype, device=device)
+        )
+        self.shift_weight2 = nn.Parameter(
+            torch.empty(
+                (normalized_shape, normalized_shape), dtype=dtype, device=device
+            )
+        )
+        self.shift_bias2 = nn.Parameter(
+            torch.empty(normalized_shape, dtype=dtype, device=device)
+        )
+
+        self.reset_parameters()
+
+        # self.linear_scale1 = nn.Linear(noise_dim, normalized_shape)
+        # self.linear_scale2 = nn.Linear(normalized_shape, normalized_shape)
+        # self.linear_bias1 = nn.Linear(noise_dim, normalized_shape)
+        # self.linear_bias2 = nn.Linear(normalized_shape, normalized_shape)
+
+    def reset_parameters(self):
+        init.kaiming_uniform_(self.scale_weight1, a=math.sqrt(5))
+        init.kaiming_uniform_(self.scale_weight2, a=math.sqrt(5))
+        init.kaiming_uniform_(self.shift_weight1, a=math.sqrt(5))
+        init.kaiming_uniform_(self.shift_weight2, a=math.sqrt(5))
+
+        fan_in, _ = init._calculate_fan_in_and_fan_out(self.scale_weight1)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        init.uniform_(self.scale_bias1, -bound, bound)
+        init.uniform_(self.shift_bias1, -bound, bound)
+
+        fan_in, _ = init._calculate_fan_in_and_fan_out(self.scale_weight2)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        init.uniform_(self.scale_bias2, -bound, bound)
+        init.uniform_(self.shift_bias2, -bound, bound)
+
+    def forward(self, x, noise):
+        x = self.norm(x)
+
+        scale = torch.nn.functional.linear(noise, self.scale_weight1, self.scale_bias1)
+        scale = self.activation(scale)
+        scale = torch.nn.functional.linear(scale, self.scale_weight2, self.scale_bias2)
+        scale = scale.reshape(x.shape[0], *[1 for _ in x.shape[1:-1]], self.shape)
+
+        shift = torch.nn.functional.linear(noise, self.shift_weight1, self.shift_bias1)
+        shift = self.activation(shift)
+        shift = torch.nn.functional.linear(shift, self.shift_weight2, self.shift_bias2)
+        shift = shift.reshape(x.shape[0], *[1 for _ in x.shape[1:-1]], self.shape)
+
+        x = scale * x + shift
 
         return x
 
