@@ -1,4 +1,5 @@
 import argparse
+import os
 import time
 
 import torch
@@ -17,8 +18,9 @@ from torch_blue.vi.distributions import Normal
 import evaluation
 
 # Import model
-import Model_GB as Model
-import ViT
+from gb.model import Model_GB as Model
+from gb.model import ViT
+from gb.utils import _create_process_mesh_dict
 
 
 def training_loop(
@@ -30,8 +32,15 @@ def training_loop(
     utils.set_all_seeds(1 + rank % parallelism)
 
     # Set up model  groups
-    model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_comm_groups(
-        rank, parallelism
+    pg_dict = _create_process_mesh_dict(
+        config_dict["mesh_dims"],
+        device="cuda",
+    )
+    model_group, row_subgroup, col_subgroup, ddp_group = (
+        pg_dict["DTP"],
+        pg_dict["JRow"],
+        pg_dict["JCol"],
+        pg_dict["DDP"],
     )
     n_vars_local = 69 if parallelism == 1 else 36
 
@@ -229,10 +238,26 @@ if __name__ == "__main__":
     parser.add_argument("--config_file")
     args = parser.parse_args()
 
-    with open(args.config_file, "r") as f:
+    WORKDIR = os.getenv("WORKDIR")
+
+    with open(f"{WORKDIR}/{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     device, localid, rank, world_size = utils.init_cuda()
+
+    # Override configuration with environment variables
+    if os.getenv("DATA_DIR") is not None:
+        config_dict["data"]["train_data_path"] = (
+            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
+        )
+        config_dict["data"]["valid_data_path"] = (
+            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
+        )
+
+    if os.getenv("MASKS_DIR") is not None:
+        config_dict["data"]["constant_masks_path"] = (
+            os.getenv("MASKS_DIR") + config_dict["data"]["constant_masks_path"]
+        )
 
     training_loop(config_dict, device, localid, rank)
     dist.destroy_process_group()

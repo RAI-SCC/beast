@@ -1,0 +1,9 @@
+# Requirements for FourWay-Jigsaw WeatherMixer
+
+torch
+pyyaml
+zarr
+xarray
+
+-e ./src/libs/torch_blue
+-e ./src/libs/Jigsaw

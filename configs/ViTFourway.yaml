@@ -1,0 +1,75 @@
+data:
+  dt: 6
+  rollout: 1
+  train_data_path: ec.era5/era5.zarr
+  valid_data_path: ec.era5/era5.zarr
+  constant_masks_path: "SmartWeater21/constant_masks"
+  preprocessed: False
+  normalization_dir: "../../data/normalization"
+  constant_mask_dir: "../../data/constant_masks"
+  train_subset: 10
+  valid_subset: 4
+  train_time_range: ["1990-01-01", "2017-12-31"]
+  valid_time_range: ["2018-01-01", "2018-12-31"]
+  test_time_range: ["2019-01-01", "2019-12-31"]
+  dataset_subsampling: 1
+  target_subsampling: 6
+  prefetch_factor: 2
+  num_workers: 16
+  xlat: 721
+  xlon: 1440
+  n_global_variables: 72
+  in_surface_variables: ["msl", "t2m", "u10m", "v10m"]
+  in_pressure_variables: ["z", "q", "t", "u", "v"]
+  in_pressure_levels:
+    [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+  constant_masks: ["topography", "soil_type", "land_mask"]
+  out_surface_variables: ["msl", "t2m", "u10m", "v10m"]
+  out_pressure_variables: ["z", "q", "t", "u", "v"]
+  out_pressure_levels:
+    [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+  lite: false
+model:
+  type: ViT
+  hidden_dim: 1600
+  transformer_dim: 1200
+  heads: 6
+  n_blocks: 2
+  model_parallel: True
+  patch_size: 120
+  stride: 120
+  add: False
+  positional_encoding: False
+  patch_embed: 1
+  latent_rollout: 1
+  upt: False
+  concat: False
+  linear_residual: True
+  dropout: 0.001
+training:
+  lr: 0.0001
+  lr_embedding: 0.00002
+  lr_recovery: 0.00002
+  n_samples: 3
+  n_epochs: 50
+  lr_min: 0.000001
+  surface_weights: [6.0, 3.08, 3.08, 4.0] # MSLP, U10, V10, T2M
+  pressure_weights: [3.0, 0.6, 1.5, 1.0, 1.0] # variables: Z, Q, T, U, V
+  loss: "L2"
+  lr_constant: False
+  train_batch: 1
+  valid_batch: 1
+  identity: False
+  grad_clip: 1
+  save_dir: .
+  preload: False
+  file_path: .
+  load_path: .
+  area_weighted: True
+  print: False
+  tf32: True
+  eval_pressure_levels: [1000, 850]
+model_parallel:
+  parallelism: 2
+  type: jigsaw
+mesh_dims: [1, 1, 1, 1, 1]
