@@ -6,7 +6,7 @@
 #SBATCH --time=00:10:00
 #SBATCH --job-name='gb_test_dist'
 #SBATCH --output='logs/%x_%j.out'
-##SBATCH --constraint=LSDF
+#SBATCH --constraint=LSDF
 
 source utils/utils.sh
 print_slurm_env

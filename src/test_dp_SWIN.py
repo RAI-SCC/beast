@@ -7,6 +7,7 @@ import torch.distributed as dist
 import torch_blue.vi as vi
 import yaml
 from timm.scheduler.cosine_lr import CosineLRScheduler
+
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
@@ -14,65 +15,13 @@ from torch_blue.vi.distributions import (
     MeanFieldNormal as MeanFieldNormalPredictiveDistribution,
 )
 
-from bnn_swin_prototype.architecture import BNNNoEmbeddingModel
-from bnn_swin_prototype.dataloading import get_test_dataloader
-from gb.utils import get_process_group, init_gb_process_group
+from Jigsaw import utils
 
+from gb.model.downsampled_SWIN import BNNNoEmbeddingModel
+from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
 
-def main():
-    start_time = time.perf_counter()
+from gb.utils import get_process_group, init_gb_process_group, download_1_5_degree_data
 
-    # train_subset = None
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config_file",
-        default="../kangu/cases/default_config_0_25_deg.yaml",
-        help="path to config file",
-    )
-    parser.add_argument(
-        "--wall_time", default="-1.", help="wall time of this job in hours"
-    )
-    args = parser.parse_args()
-
-    wall_time = float(args.wall_time)
-
-    with open(args.config_file) as f:
-        config = yaml.load(f, Loader=yaml.SafeLoader)
-
-    # Set seeds for reproducibility
-    set_all_seeds(2)
-
-    init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
-
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
-    rank = get_process_group("DDP").rank()
-    device = f"cuda:{rank}"
-    world_size = get_process_group("DDP").size()
-
-    """
-    if rank == 0:
-        if not os.path.exists(config["training"]["save_dir"]):
-            os.mkdir(f"{config['training']['save_dir']}")
-    """
-
-    if wall_time > 0:
-        wall_time = wall_time * 3600.0 - (time.perf_counter() - start_time)
-    else:
-        wall_time = -1.0
-
-    training_loop(
-        config,
-        device,
-        slurm_localid,
-        rank=rank,
-        world_size=world_size,
-        wall_time=wall_time,
-    )
-
-    if dist.is_initialized():
-        dist.destroy_process_group()
-        if rank == 0:
-            print("Process group destroyed")
 
 
 def set_all_seeds(seed: int) -> None:
@@ -135,36 +84,7 @@ def training_loop(
         "Config error: you cannot enforce usage of float64 and float32 at the same time"
     )
 
-    # nan_checks = config["training"].get("nan_checks", False)
-
-    # loss_type = config["training"].get("loss_type", "mse")
-
     train_data_loader, train_info = get_test_dataloader(config, get_process_group("DP"))
-
-    """
-    train_data_loader, train_info = DataLoader.get_dataloader(
-        config,
-        subset_size=config["data"]["train_subset"],
-        mode='train',
-    )
-    valid_data_loader, valid_info = DataLoader.get_dataloader(
-        config,
-        subset_size=config["data"]["valid_subset"],
-        mode='valid',
-    )
-    """
-
-    # Initialize model based on key
-
-    # num_surface = len(train_info["out_surface_variables"])
-    # num_pressure = len(train_info["out_pressure_variables"])
-    # num_total = num_surface + num_pressure
-
-    # area_weights = (
-    #    torch.tensor(eval.calc_weight(config["data"]["x_lat"]))
-    #    .view(1, 1, config["data"]["x_lat"], 1)
-    #    .to(device)
-    # )
 
     model = BNNNoEmbeddingModel(config=config, device=device)
 
@@ -460,9 +380,9 @@ def training_loop(
         #    "epoch": epoch,
         # }
 
-        end_valid_time = time.perf_counter()
+        end_epoch_time = time.perf_counter()
 
-        full_epoch_time = end_valid_time - start_epoch_time
+        full_epoch_time = end_epoch_time - start_epoch_time
 
         if wall_time > 0:
             max_epoch_time = max(max_epoch_time, full_epoch_time)
@@ -473,6 +393,87 @@ def training_loop(
                 break
 
     return
+
+
+def main():
+    start_time = time.perf_counter()
+
+    # train_subset = None
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config_file",
+        help="path to config file",
+    )
+    parser.add_argument(
+        "--wall_time", default="-1.", help="wall time of this job in hours"
+    )
+    args = parser.parse_args()
+
+    wall_time = float(args.wall_time)
+
+    with open(f"{args.config_file}", "r") as f:
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+        
+    # Set seeds for reproducibility
+    set_all_seeds(2)
+
+
+    mesh_dims = [1, 4, 1, 1, 1]
+    group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
+    #init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
+
+    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    rank = get_process_group("DDP").rank()
+    device = f"cuda:{rank}"
+    world_size = get_process_group("DDP").size()
+
+    
+    if os.getenv("DATA_DIR") is not None:
+        if rank == 0:
+            if not os.path.exists(os.getenv("DATA_DIR") + "1_5_degree_test_data/weather_test_data.zarr"):
+                print(f"Rank {rank} downloading data to {os.getenv("DATA_DIR") + "1_5_degree_test_data/weather_test_data.zarr"}")
+                os.mkdir(os.path.join(os.getenv("DATA_DIR"), "1_5_degree_test_data"))
+                path = download_1_5_degree_data(os.path.join(os.getenv("DATA_DIR"), "1_5_degree_test_data"))
+            
+                print("Download finished")
+
+        dist.barrier()
+        config_dict["data"]["train_data_path"] =os.path.join( 
+            os.getenv("DATA_DIR"), "1_5_degree_test_data/weather_test_data.zarr"
+        )
+    print(f"Train data path: {config_dict['data']['train_data_path']}")
+    
+    config_dict["data"]["constant_masks_path"] = os.path.join(
+        os.getenv("WORKDIR"), config_dict["data"]["constant_masks_path"]
+    )
+        
+    print(f"Constant masks dir: {config_dict['data']['constant_masks_path']}")
+
+    if "normalization_dir" in config_dict["data"]:
+        config_dict["data"]["normalization_dir"] = os.path.join(
+            os.getenv("WORKDIR"), config_dict["data"]["normalization_dir"]
+        )
+        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+
+
+    if wall_time > 0:
+        wall_time = wall_time * 3600.0 - (time.perf_counter() - start_time)
+    else:
+        wall_time = -1.0
+
+    training_loop(
+        config_dict,
+        device,
+        slurm_localid,
+        rank=rank,
+        world_size=world_size,
+        wall_time=wall_time,
+    )
+
+    if dist.is_initialized():
+        dist.destroy_process_group()
+        if rank == 0:
+            print("Process group destroyed")
 
 
 if __name__ == "__main__":

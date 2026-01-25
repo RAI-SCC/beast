@@ -4,8 +4,8 @@ import pandas as pd
 import xarray as xr
 
 
-def main():
-    data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
+def download_1_5_degree_data(data_path):
+    #data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
 
     file_name = "weather_test_data.zarr"
     full_path = os.path.join(data_path, file_name)
@@ -49,6 +49,5 @@ def main():
 
     ds.to_zarr(full_path, mode="w", consolidated=True, zarr_format=2)
 
+    return full_path
 
-if __name__ == "__main__":
-    main()

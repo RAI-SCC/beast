@@ -71,12 +71,8 @@ class WeatherTestDataset(Dataset):
     def __init__(self, config):
         self.config = config["data"]
 
-        self.data_path = os.path.join(
-            # os.path.dirname(os.path.abspath(__file__)), "../../data"
-            os.environ["WORKDIR"],
-            "data",
-        )
-        self.file_path = os.path.join(self.data_path, "weather_test_data.zarr")
+
+        self.file_path = self.config["train_data_path"]
 
         self.dt = 6  # self.config['forecast_step']
         self.deltaTDivisor = 6  # self.config['dataset_subsampling']
@@ -179,10 +175,20 @@ class WeatherTestDataset(Dataset):
 
     def _load_translation_dict(self):
         """Load yaml file that translates shorthands to era5 dataset variable names."""
-        self.translation_dict = {}
-        full_path = os.path.join(self.data_path, "variable_aliases.yaml")
-        with open(full_path) as f:
-            self.translation_dict = yaml.load(f, Loader=yaml.SafeLoader)
+        self.translation_dict = {
+            "t2m": "2m_temperature",
+            "u10m": "10m_u_component_of_wind",
+            "v10m": "10m_v_component_of_wind",
+            "msl": "mean_sea_level_pressure",
+            "u": "u_component_of_wind",
+            "v": "v_component_of_wind",
+            "z": "geopotential",
+            "q": "specific_humidity",
+            "t": "temperature",    
+             }
+        #full_path = os.path.join(self.data_path, "variable_aliases.yaml")
+        #with open(full_path) as f:
+        #    self.translation_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     def _get_data_files_stats(self):
         """Filter desired time points based on parameters and return file statistics."""
@@ -278,7 +284,8 @@ class WeatherTestDataset(Dataset):
 
     def _get_normalization_constants(self):
         surface_normalizations = []
-        with open(f"{self.data_path}/normalizations/surface_norms.csv", "r") as csvfile:
+        #with open(f"{self.data_path}/normalizations/surface_norms.csv", "r") as csvfile:
+        with open(self.config['normalization_dir']+"/surface_norms.csv", "r") as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
                 surface_normalizations.append([row[0], float(row[1]), float(row[2])])
@@ -310,8 +317,7 @@ class WeatherTestDataset(Dataset):
                 )
 
         pressure_normalizations = []
-        with open(
-            f"{self.data_path}/normalizations/pressure_norms.csv", "r"
+        with open(self.config['normalization_dir']+"/pressure_norms.csv", "r"
         ) as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
@@ -361,7 +367,7 @@ class WeatherTestDataset(Dataset):
 
     def _load_constant_masks(self):
         mask_file_paths = {}
-        with open(f"{self.data_path}/constant_masks/file_paths.yaml") as f:
+        with open(self.config['constant_masks_path']+"/file_paths.yaml") as f:
             mask_file_paths = yaml.load(f, Loader=yaml.SafeLoader)
 
         ordered_path_list = []
@@ -382,7 +388,7 @@ class WeatherTestDataset(Dataset):
 
         array_list = []
         for path, normalize in ordered_path_list:
-            data = np.load(f"{self.data_path}/constant_masks/{path}")
+            data = np.load(f"{self.config['constant_masks_path']}/{path}")
 
             if (
                 data.shape[1] == self.resolution[0]

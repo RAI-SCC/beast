@@ -3,6 +3,8 @@
 Test script for PyTorch distributed process group initialization.
 Tests NCCL backend, GPU access, and all-to-all communication.
 """
+import Jigsaw
+import torch_blue
 
 import torch.distributed as dist
 
@@ -23,4 +25,4 @@ def test_process_mesh(mesh_dims: list[int]):
 
 
 if __name__ == "__main__":
-    test_process_mesh([1, 2, 2, 2, 2])
+    test_process_mesh([1, 1, 1, 2, 2])
