@@ -34,7 +34,7 @@ export MASTER_ADDR=$master_addr
 
 
 echo "Running cmd:"
-echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py" " --config_file $WORKDIR/experiments/bnn_swin_prototype/nice_prototype_config.yaml"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py" " --config_file $WORKDIR/configs/nice_prototype_config.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py --config_file $WORKDIR/experiments/bnn_swin_prototype/nice_prototype_config.yaml
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py --config_file $WORKDIR/configs/nice_prototype_config.yaml

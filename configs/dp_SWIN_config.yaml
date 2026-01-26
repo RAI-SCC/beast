@@ -1,7 +1,7 @@
 data:
   forecast_step: 6
   train_data_path: 'weather_test_data.zarr'
-  normalization_dir: "data/normalizations"
+  normalization_dir: "data/normalization"
   constant_masks_path: "data/constant_masks"
   #train_subset: -1 # take full dataset if -1. Else, will read a random subset
   #valid_subset: -1 # take full dataset if -1. Else, will read a random subset
