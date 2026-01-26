@@ -50,6 +50,5 @@ training:
   print: False
   tf32: True
 model_parallel:
-  split: 2
   parallelism: 2
   type: jigsaw

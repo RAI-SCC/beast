@@ -137,7 +137,7 @@ sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gp
 For now, without data parallelism (DDP), so only 4 GPUs in a node:
 
 ```console
-sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_ViT.sh systems/hk_container.sh
+sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_dtp_ViT.sh systems/hk_container.sh
 ```
 
 ## Wiki
