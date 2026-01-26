@@ -20,6 +20,7 @@ def init_gb_process_group(
 
     # # Initialize GPUs and dataloaders
     device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
     if backend == "nccl":
         device = f"cuda:{slurm_localid}"
         torch.cuda.set_device(device)
@@ -34,7 +35,7 @@ def init_gb_process_group(
     else:
         raise RuntimeError("Process group initialization failed.")
 
-    return _create_process_mesh_dict(mesh_dims, device=device)
+    return _create_process_mesh_dict(mesh_dims, device=device_type)
 
 
 def _create_process_mesh_dict(
