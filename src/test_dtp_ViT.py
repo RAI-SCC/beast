@@ -8,7 +8,7 @@ import torch.optim as optim
 import yaml
 
 # Jigsaw imports
-from Jigsaw import eval, utils
+from Jigsaw import utils
 
 # torch blue imports
 from torch_blue import vi
@@ -17,56 +17,78 @@ from torch_blue.vi.distributions import Normal
 
 # Import model
 from gb.model import Model_GB as Model
+from gb.model import ViT
+from gb.utils import _create_process_mesh_dict
 
 
 def training_loop(
     config_dict: dict, device: torch.device, localid: int, rank: int
 ) -> None:
     """Training loop for MLP Mixer model."""
-    n_parallel = config_dict["model_parallel"]["parallelism"]
+    parallelism = config_dict["model_parallel"]["parallelism"]
     # Set all seeds in the same model group to be different
-    utils.set_all_seeds(1 + rank % n_parallel)
+    utils.set_all_seeds(1 + rank % parallelism)
 
     # Set up model  groups
-    match n_parallel:
-        case 1:
-            model_group, ddp_group, _, model_subgroup_col = utils.setup_groups(
-                rank, n_parallel, 1, 1
-            )
-            n_vars_local = 69
-        case 2:
-            model_group, ddp_group, row_subgroup, col_subgroup = utils.setup_groups(
-                rank, n_parallel, 1, 2
-            )
-            n_vars_local = 36
-        case 4:
-            model_group, ddp_group, _, col_subgroup = utils.setup_groups(
-                rank, n_parallel, 2, 2
-            )
-            n_vars_local = 36
+    pg_dict = _create_process_mesh_dict(
+        config_dict["mesh_dims"],
+        device="cuda",
+    )
+    model_group, row_subgroup, col_subgroup, ddp_group = (
+        pg_dict["DTP"],
+        pg_dict["JRow"],
+        pg_dict["JCol"],
+        pg_dict["DDP"],
+    )
+    n_vars_local = 69 if parallelism == 1 else 36
 
     # Define model and load model
-    if n_parallel == 2:
+    if config_dict["model"]["type"] == "Mixer":
         model = (
-            Model.Model_twoway(config_dict, rank, device, n_parallel, model_group)
-            .to(device)
-            .to(torch.float32)
-        )
-    elif n_parallel == 4:
-        model = (
-            Model.Model(
-                config_dict, rank, device, n_parallel, model_group, col_subgroup
+            Model.WeatherMixer(
+                config_dict, rank, device, parallelism, model_group, col_subgroup
             )
             .to(torch.float32)
             .to(device)
         )
+    elif config_dict["model"]["type"] == "ViT":
+        match parallelism:
+            case 1:
+                model = (
+                    ViT.Transformer_Sequential(
+                        config_dict,
+                        rank,
+                        device,
+                        parallelism,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+            case _:
+                model = (
+                    ViT.ViT(
+                        config_dict,
+                        rank,
+                        device,
+                        parallelism,
+                        model_group,
+                        row_subgroup,
+                        col_subgroup,
+                    )
+                    .to(torch.float32)
+                    .to(device)
+                )
+
     if rank == 0:
         print(
-            f"model has {utils.count_parameters(model) * n_parallel / 1e6} million parameters"
+            f"model has {utils.count_parameters(model) * parallelism / 1e6} million parameters"
         )
-
+    utils.set_all_seeds_model_group(1, rank=rank, parallelism=parallelism)
     train_dataloader, valid_dataloader = utils.build_dataloaders(
-        config_dict, n_parallel, rank
+        config_dict, parallelism, rank
     )
 
     # Synchronize parameters
@@ -86,11 +108,11 @@ def training_loop(
 
     utils.setup_precision(config_dict["training"]["tf32"])
 
-    epoch = 0
+    n_epochs = config_dict["training"]["n_epochs"]
     # Train for 10 epochs
     torch.cuda.empty_cache()
-    for epoch in range(epoch, 100):
-        train_one_epoch(
+    for epoch in range(n_epochs):
+        avg_loss = train_one_epoch(
             config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
@@ -104,6 +126,39 @@ def training_loop(
         )
 
         torch.cuda.synchronize()
+
+        # model.eval()
+
+        # val_loss = evaluation.validate(
+        #    config_dict,
+        #    model,
+        #    valid_dataloader,
+        #    valid_dataset_info,
+        #    rank,
+        #    device,
+        #    epoch,
+        #    config_dict["training"]["save_dir"],
+        #    mse_file_path="rmse",
+        #    acc_file_path="acc",
+        #    world_size=world_size,
+        #    model_subgroup_col=col_subgroup,
+        #    ddp_group=ddp_group,
+        #    model_group=model_group,
+        # )
+
+        # if rank < parallelism:
+        #    utils.save_model(
+        #        model,
+        #        optimizer,
+        #        None,
+        #        config_dict["training"]["save_dir"],
+        #        rank,
+        #        epoch,
+        #    )
+        # if rank == 0:
+        #    print(
+        #        f"Epoch {epoch}. Average training loss {avg_loss}. Average validation loss: {val_loss}"
+        #    )
 
 
 def train_one_epoch(
@@ -133,20 +188,25 @@ def train_one_epoch(
 
     utils.set_all_seeds(1)
 
+    if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
+        dataloader.sampler.set_epoch(epoch)
+
     for i, (x, y) in enumerate(dataloader):
         x = x.to(device)
         y = y[0].to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x, samples=4)  # [B, 720, 720, 36]
+        pred = model(
+            x, samples=config_dict["training"]["n_samples"]
+        )  # [B, 720, 720, 36]
 
         loss = loss_fn(pred, y.flatten(start_dim=1, end_dim=2))
 
         # Backpropagation
         loss.backward()
         # # Average loss over all four processes for exactness
-        dist.all_reduce(loss)
-        loss = loss / 4
+        # dist.all_reduce(loss)
+        loss = loss / config_dict["model_parallel"]["parallelism"]
 
         optimizer.step()
 
@@ -165,9 +225,8 @@ def train_one_epoch(
             f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {epoch_average_loss}"
         )
 
-    if config_dict["model_parallel"]["parallelism"] == 2:
-        pred = pred.mean(dim=0).reshape(1, 720, 1440, 36)
-        eval.gen_plots(config_dict, x, pred, y, rank, ".", epoch, True)
+    # if config_dict["model_parallel"]["parallelism"] == 2:
+    #     pred = pred.mean(dim=0).reshape(1, config_dict["data"]["xlat"], config_dict["data"]["xlon"], config_dict["data"]["n_global_variables"]//2)
 
     return epoch_average_loss
 
@@ -179,7 +238,7 @@ if __name__ == "__main__":
 
     WORKDIR = os.getenv("WORKDIR")
 
-    with open(f"{WORKDIR}/{args.config_file}", "r") as f:
+    with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     device, localid, rank, world_size = utils.init_cuda()
@@ -201,7 +260,7 @@ if __name__ == "__main__":
 
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
-            WORKDIR + config_dict["data"]["normalization_dir"]
+            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
         )
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
