@@ -15,8 +15,6 @@ from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
-import evaluation
-
 # Import model
 from gb.model import Model_GB as Model
 from gb.model import ViT
