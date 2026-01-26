@@ -42,3 +42,4 @@ training:
   #use_gradient_clipping: False
   #gradient_clipping_limit: 0.01
   use_float32: True
+mesh_dims: [1,8,1,1,1]

@@ -140,6 +140,13 @@ For now, without data parallelism (DDP), so only 4 GPUs in a node:
 sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_dtp_ViT.sh systems/hk_container.sh
 ```
 
+### Testing Bayesian SWIN Transformer model (Kangu) on HoreKa
+For now only includes data parallelism (DDP):
+
+```console
+sbatch -A hk-project-pai00071 -p accelerated --nodes 2 --tasks-per-node 4 --gres=gpu:4 experiments/test_dp_SWIN.sh systems/hk_container.sh
+```
+
 ## Wiki
 
 ### Distributed Process Groups in GrandBellbeast

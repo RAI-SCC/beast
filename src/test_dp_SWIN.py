@@ -86,6 +86,7 @@ def training_loop(
 
     train_data_loader, train_info = get_test_dataloader(config, get_process_group("DP"))
 
+    print(f'Rank {rank} using device {device}')
     model = BNNNoEmbeddingModel(config=config, device=device)
 
     if use_fl16:
@@ -418,13 +419,13 @@ def main():
     set_all_seeds(2)
 
 
-    mesh_dims = [1, 4, 1, 1, 1]
+    mesh_dims = config_dict["mesh_dims"]#[1, 4, 1, 1, 1]
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
     #init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     rank = get_process_group("DDP").rank()
-    device = f"cuda:{rank}"
+    device = f"cuda:{slurm_localid}"
     world_size = get_process_group("DDP").size()
 
     
