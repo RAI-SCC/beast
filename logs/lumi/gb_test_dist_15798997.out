@@ -1,0 +1,157 @@
+Slurm variables:
+  SLURM_JOB_ID:         15798997
+  SLURM_PARTITION:      standard-g
+  SLURM_NTASKS:         16
+  SLURM_NNODES:         4
+  SLURM_TASKS_PER_NODE: 4(x4)
+  SLURM_NODELIST:       nid[005598-005601]
+/var/spool/slurmd/job15798997/slurm_script systems/lumi_singularity.sh
+System Env File: lumi_singularity.sh
+Sourcing system environment...
+Running cmd:
+  srun --cpu-bind=v singularity exec /appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif systems/lumi_entry.sh python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py /pfs/lustrep3/users/muriedas/code/GrandBellbeast/configs/mesh_dims.yaml
+
+cpu-bind=MASK - nid005598, task  0  0 [22319]: mask 0x2 set
+cpu-bind=MASK - nid005598, task  1  1 [22320]: mask 0x4 set
+cpu-bind=MASK - nid005598, task  2  2 [22321]: mask 0x8 set
+cpu-bind=MASK - nid005598, task  3  3 [22322]: mask 0x10 set
+cpu-bind=MASK - nid005600, task  8  0 [36650]: mask 0x2 set
+cpu-bind=MASK - nid005600, task  9  1 [36651]: mask 0x4 set
+cpu-bind=MASK - nid005600, task 10  2 [36652]: mask 0x8 set
+cpu-bind=MASK - nid005600, task 11  3 [36653]: mask 0x10 set
+cpu-bind=MASK - nid005599, task  4  0 [13689]: mask 0x2 set
+cpu-bind=MASK - nid005601, task 12  0 [50910]: mask 0x2 set
+cpu-bind=MASK - nid005599, task  5  1 [13690]: mask 0x4 set
+cpu-bind=MASK - nid005601, task 13  1 [50911]: mask 0x4 set
+cpu-bind=MASK - nid005599, task  6  2 [13691]: mask 0x8 set
+cpu-bind=MASK - nid005601, task 14  2 [50912]: mask 0x8 set
+cpu-bind=MASK - nid005599, task  7  3 [13692]: mask 0x10 set
+cpu-bind=MASK - nid005601, task 15  3 [50913]: mask 0x10 set
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+Setting up container venv...
+/opt/cray/pe/lmod/lmod/init/bash: /opt/cray/pe/lmod/lmod/libexec/addto: /usr/bin/lua5.3: bad interpreter: No such file or directory
+Setting up container venv...
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Runnning cmd: python -u /pfs/lustrep3/users/muriedas/code/GrandBellbeast/src/test_process_mesh.py
+Rank 3: world_size 16, slurm_localid 3
+Rank 0: world_size 16, slurm_localid 0
+Rank 1: world_size 16, slurm_localid 1
+Rank 2: world_size 16, slurm_localid 2
+Rank 4: world_size 16, slurm_localid 0
+Rank 13: world_size 16, slurm_localid 1
+Rank 8: world_size 16, slurm_localid 0
+Rank 5: world_size 16, slurm_localid 1
+Rank 14: world_size 16, slurm_localid 2
+Rank 11: world_size 16, slurm_localid 3
+Rank 6: world_size 16, slurm_localid 2
+Rank 15: world_size 16, slurm_localid 3
+Rank 10: world_size 16, slurm_localid 2
+Rank 7: world_size 16, slurm_localid 3
+Rank 9: world_size 16, slurm_localid 1
+Rank 12: world_size 16, slurm_localid 0
+Rank 8/16: Process group initialized with torch rank 8 and torch world size 16.
+Rank 8: CUDA Available = True
+Rank 9/16: Process group initialized with torch rank 9 and torch world size 16.
+Rank 9: CUDA Available = True
+Rank 8: CUDA Device count = 4
+Rank 14/16: Process group initialized with torch rank 14 and torch world size 16.
+Rank 14: CUDA Available = True
+Rank 15/16: Process group initialized with torch rank 15 and torch world size 16.
+Rank 15: CUDA Available = True
+Rank 9: CUDA Device count = 4
+Rank 14: CUDA Device count = 4
+Rank 15: CUDA Device count = 4
+Rank 10/16: Process group initialized with torch rank 10 and torch world size 16.
+Rank 10: CUDA Available = True
+Rank 10: CUDA Device count = 4
+Rank 5/16: Process group initialized with torch rank 5 and torch world size 16.
+Rank 5: CUDA Available = True
+Rank 4/16: Process group initialized with torch rank 4 and torch world size 16.
+Rank 4: CUDA Available = True
+Rank 4: CUDA Device count = 4
+Rank 5: CUDA Device count = 4
+[Rank 8]  Mesh Coordinates: Expert:0, DP:1, SP:0, JCol:0, JRow:0, DTP:0, DDP:2
+[Rank 9]  Mesh Coordinates: Expert:0, DP:1, SP:0, JCol:0, JRow:1, DTP:1, DDP:2
+[Rank 14]  Mesh Coordinates: Expert:0, DP:1, SP:1, JCol:1, JRow:0, DTP:2, DDP:3
+[Rank 15]  Mesh Coordinates: Expert:0, DP:1, SP:1, JCol:1, JRow:1, DTP:3, DDP:3
+Rank 2/16: Process group initialized with torch rank 2 and torch world size 16.
+Rank 2: CUDA Available = True
+[Rank 10]  Mesh Coordinates: Expert:0, DP:1, SP:0, JCol:1, JRow:0, DTP:2, DDP:2
+Rank 2: CUDA Device count = 4
+Rank 11/16: Process group initialized with torch rank 11 and torch world size 16.
+Rank 11: CUDA Available = True
+[Rank 4]  Mesh Coordinates: Expert:0, DP:0, SP:1, JCol:0, JRow:0, DTP:0, DDP:1
+[Rank 5]  Mesh Coordinates: Expert:0, DP:0, SP:1, JCol:0, JRow:1, DTP:1, DDP:1
+Rank 11: CUDA Device count = 4
+[Rank 2]  Mesh Coordinates: Expert:0, DP:0, SP:0, JCol:1, JRow:0, DTP:2, DDP:0
+[Rank 11]  Mesh Coordinates: Expert:0, DP:1, SP:0, JCol:1, JRow:1, DTP:3, DDP:2
+Rank 3/16: Process group initialized with torch rank 3 and torch world size 16.
+Rank 3: CUDA Available = True
+Rank 1/16: Process group initialized with torch rank 1 and torch world size 16.
+Rank 1: CUDA Available = True
+Rank 13/16: Process group initialized with torch rank 13 and torch world size 16.
+Rank 13: CUDA Available = True
+Rank 3: CUDA Device count = 4
+Rank 1: CUDA Device count = 4
+Rank 6/16: Process group initialized with torch rank 6 and torch world size 16.
+Rank 6: CUDA Available = True
+Rank 13: CUDA Device count = 4
+Rank 6: CUDA Device count = 4
+Rank 12/16: Process group initialized with torch rank 12 and torch world size 16.
+Rank 12: CUDA Available = True
+Rank 7/16: Process group initialized with torch rank 7 and torch world size 16.
+Rank 7: CUDA Available = True
+Rank 12: CUDA Device count = 4
+Rank 7: CUDA Device count = 4
+[Rank 3]  Mesh Coordinates: Expert:0, DP:0, SP:0, JCol:1, JRow:1, DTP:3, DDP:0
+[Rank 1]  Mesh Coordinates: Expert:0, DP:0, SP:0, JCol:0, JRow:1, DTP:1, DDP:0
+Rank 0/16: Process group initialized with torch rank 0 and torch world size 16.
+Rank 0: CUDA Available = True
+[Rank 13]  Mesh Coordinates: Expert:0, DP:1, SP:1, JCol:0, JRow:1, DTP:1, DDP:3
+Rank 0: CUDA Device count = 4
+[Rank 6]  Mesh Coordinates: Expert:0, DP:0, SP:1, JCol:1, JRow:0, DTP:2, DDP:1
+[Rank 12]  Mesh Coordinates: Expert:0, DP:1, SP:1, JCol:0, JRow:0, DTP:0, DDP:3
+[Rank 7]  Mesh Coordinates: Expert:0, DP:0, SP:1, JCol:1, JRow:1, DTP:3, DDP:1
+[Rank 0]  Mesh Coordinates: Expert:0, DP:0, SP:0, JCol:0, JRow:0, DTP:0, DDP:0

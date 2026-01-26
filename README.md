@@ -104,41 +104,33 @@ apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOM
 
 ### LUMI
 
-**Setup PyTorch with Easybuild in LUMI**
+Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif```
 
-1) Load Easybuild modules
 
-```console
-ml load LUMI partition/container EasyBuild-user/LUMI
-```
+0) Source ```systems/lumi_singularity.sh```
 
-2) Build module
+1) Create virtual env (shared env in project dir, only run when resetting the env)
 
 ```console
-eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
+module use /appl/local/containers/ai-modules
+module load singularity-AI-bindings
+singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
+singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
 ```
-
-3) Go inside container and install dependencies (only squash once we have the final setup)
-
-```console
-ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
-start-shell
-pip update --upgrade pip
-pip install --force-reinstall aiter
-pip install -r requirements.txt
-exit
-make-squashfs
-rm -rf $CONTAINERROO/user-software
-```
-
-4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
 
 ## Example commands
 
 ### Testing distributed process group
 
+**Don't forget to adjust the mesh inside the ```src/test_process_mesh.py``` to match the number of nodes and gpus per node.**
+
 ```console
 sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
+```
+
+On lumi:
+```console
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/lumi_singularity.sh
 ```
 
 ### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
