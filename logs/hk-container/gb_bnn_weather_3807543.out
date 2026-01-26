@@ -11,7 +11,7 @@ Config ID:       weatherMixerFourway
 Sourcing system environment...
 Purging modules
 Running cmd:
-  srun --cpu-bind=v apptainer exec --nv --no-home --bind /scratch --bind /scratch/slurm_tmpdir/job_3807543 --bind /home/hk-project-test-aihero2/io3047/code/GrandBellbeast:/mnt --bind /hkfs/work/workspace/scratch/ke4365-era5_dataset/:/hkfs/work/workspace/scratch/ke4365-era5_dataset/ --bind /home/hk-project-test-aihero2/io3047/code/GrandBellbeast/src/libs --cwd /mnt /home/hk-project-test-aihero2/io3047/containers/gb_pytorch25.06 python -u /mnt/src/train_bnn_weather.py --config_file configs/weatherMixerFourway.yaml 
+  srun --cpu-bind=v apptainer exec --nv --no-home --bind /scratch --bind /scratch/slurm_tmpdir/job_3807543 --bind /home/hk-project-test-aihero2/io3047/code/GrandBellbeast:/mnt --bind /hkfs/work/workspace/scratch/ke4365-era5_dataset/:/hkfs/work/workspace/scratch/ke4365-era5_dataset/ --bind /home/hk-project-test-aihero2/io3047/code/GrandBellbeast/src/libs --cwd /mnt /home/hk-project-test-aihero2/io3047/containers/gb_pytorch25.06 python -u /mnt/src/train_bnn_weather.py --config_file configs/weatherMixerFourway.yaml
 
 GpuFreq=control_disabled
 cpu-bind=MASK - hkn0909, task  0  0 [1729696]: mask 0xffff0000ffff0000ffff0000ffff set

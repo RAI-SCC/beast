@@ -18,13 +18,6 @@ def init_gb_process_group(
 
     print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
 
-    # # Initialize GPUs and dataloaders
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device = f"cuda:{slurm_localid}"
-        torch.cuda.set_device(device)
-
     dist.init_process_group(
         backend=backend, rank=rank, world_size=world_size, init_method="env://"
     )
@@ -35,11 +28,22 @@ def init_gb_process_group(
     else:
         raise RuntimeError("Process group initialization failed.")
 
-    return _create_process_mesh_dict(mesh_dims, device=device_type)
+    print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
+    print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
+
+    # # Initialize GPUs
+    device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
+    if backend == "nccl":
+        device = torch.device("cuda", slurm_localid)
+        torch.cuda.set_device(device)
+
+    return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
 
 def _create_process_mesh_dict(
-    mesh_dims: Sequence[int], device: str = "cuda"
+    mesh_dims: Sequence[int],
+    device_type: str = "cuda",
 ) -> dict[str, dist.ProcessGroup]:
     """Create a process mesh given dimensions and names.
 
@@ -69,7 +73,7 @@ def _create_process_mesh_dict(
 
     mesh_dim_names = ["Expert", "DP", "SP", "JCol", "JRow"]
     _mesh = dist.device_mesh.init_device_mesh(
-        device_type=device,
+        device_type=device_type,
         mesh_shape=tuple(mesh_dims),
         mesh_dim_names=tuple(mesh_dim_names),
     )
@@ -80,7 +84,7 @@ def _create_process_mesh_dict(
 
     # Also create combined groups (Expert, DDP, DPT)
     alternative_mesh = dist.device_mesh.init_device_mesh(
-        device_type=device,
+        device_type=device_type,
         mesh_shape=(
             mesh_dims[0],
             mesh_dims[1] * mesh_dims[2],
