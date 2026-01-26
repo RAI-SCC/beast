@@ -11,24 +11,25 @@ SLURM_TEMPLATE = """#!/bin/bash
 #SBATCH --job-name=era5_{year}
 #SBATCH --partition={partition}
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task={cpus}
-#SBATCH --mem={memory}
+#SBATCH --mem=1027200mb
+#SBATCH --ntasks={n_tasks}
+#SBATCH --cpus-per-task={cpus_per_task}
 #SBATCH --time={time_limit}
 #SBATCH --output=logs/era5_{year}_%j.out
 #SBATCH --error=logs/era5_{year}_%j.err
 
 
 # Activate conda environment
-source activate /hkfs/work/workspace/scratch/ke4365-jigsaw/Jigsaw/.venv/bin/activate
+source /hkfs/work/workspace/scratch/ke4365-jigsaw/Jigsaw/.venv/bin/activate
 
 # Run processing for this year
-python era5_parallel_processing.py \\
+python -u era5_parallel_processing.py \\
     --start_date {start_date} \\
     --end_date {end_date} \\
     --path_out {output_path} \\
-    --n_threads {n_threads} \\
-    --chunk_days {chunk_days}
+    --n_threads {cpus_per_task} \\
+    --chunk_days {chunk_days} \\
+    --resume
 
 echo "Job completed for year {year}"
 """
@@ -39,11 +40,10 @@ def generate_job_scripts(
     end_year,
     output_base_dir,
     scripts_dir="slurm_scripts",
-    partition="cpuonly,",
-    cpus=16,
-    memory="128G",
+    partition="amd-milan-mi100,amd-milan-mi210,amd-milan-mi250",
+    cpus_per_task=16,
+    n_tasks=1,
     time_limit="24:00:00",
-    n_threads=16,
     chunk_days=1,
 ):
     """
@@ -70,22 +70,21 @@ def generate_job_scripts(
     for year in range(start_year, end_year + 1):
         # Define date range for this year
         start_date = f"{year}-01-01"
-        end_date = f"{year}-01-31"
+        end_date = f"{year}-12-31"
 
         # Output path for this year
-        output_path = os.path.join(output_base_dir, f"era5_preprocessed_{year}.zarr")
+        output_path = os.path.join(output_base_dir, "era5_preprocessed.zarr")
 
         # Create job script from template
         job_content = SLURM_TEMPLATE.format(
             year=year,
             partition=partition,
-            cpus=cpus,
-            memory=memory,
+            cpus_per_task=cpus_per_task,
             time_limit=time_limit,
             start_date=start_date,
             end_date=end_date,
             output_path=output_path,
-            n_threads=n_threads,
+            n_tasks=n_tasks,
             chunk_days=chunk_days,
         )
 
@@ -131,18 +130,18 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output_base_dir",
-        default="/hkfs/work/workspace/scratch/ke4365-jigsaw/GrandBellBeast/data/era5_yearly",
+        default="/hkfs/work/workspace/scratch/ke4365-jigsaw/GrandBellbeast/data",
         help="Base directory for output zarr stores",
     )
     parser.add_argument(
         "--scripts_dir", default="slurm_scripts", help="Directory for job scripts"
     )
-    parser.add_argument("--partition", default="gpu_4", help="SLURM partition")
-    parser.add_argument("--cpus", type=int, default=16, help="CPUs per task")
-    parser.add_argument("--memory", default="128G", help="Memory allocation")
-    parser.add_argument("--time_limit", default="24:00:00", help="Job time limit")
-    parser.add_argument("--n_threads", type=int, default=8, help="Threads per job")
-    parser.add_argument("--chunk_days", type=int, default=1, help="Days per chunk")
+    parser.add_argument(
+        "--partition", default="amd-milan-mi250", help="SLURM partition"
+    )
+    parser.add_argument("--cpus", type=int, default=8, help="CPUs per task")
+    parser.add_argument("--time_limit", default="12:00:00", help="Job time limit")
+    parser.add_argument("--chunk_days", type=int, default=3, help="Days per chunk")
 
     args = parser.parse_args()
 
@@ -152,9 +151,7 @@ if __name__ == "__main__":
         output_base_dir=args.output_base_dir,
         scripts_dir=args.scripts_dir,
         partition=args.partition,
-        cpus=args.cpus,
-        memory=args.memory,
+        cpus_per_task=args.cpus,
         time_limit=args.time_limit,
-        n_threads=args.n_threads,
         chunk_days=args.chunk_days,
     )
