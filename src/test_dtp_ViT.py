@@ -89,7 +89,7 @@ def training_loop(
             f"model has {utils.count_parameters(model) * parallelism / 1e6} million parameters"
         )
     utils.set_all_seeds_model_group(1, rank=rank, parallelism=parallelism)
-    train_dataloader, _, valid_dataloader, valid_dataset_info = utils.build_dataloaders(
+    train_dataloader, valid_dataloader = utils.build_dataloaders(
         config_dict, parallelism, rank
     )
 
@@ -110,10 +110,10 @@ def training_loop(
 
     utils.setup_precision(config_dict["training"]["tf32"])
 
-    epoch = 0
+    n_epochs = config_dict["training"]["n_epochs"]
     # Train for 10 epochs
     torch.cuda.empty_cache()
-    for epoch in range(epoch, 100):
+    for epoch in range(n_epochs):
         avg_loss = train_one_epoch(
             config_dict,
             epoch=epoch,
@@ -129,38 +129,38 @@ def training_loop(
 
         torch.cuda.synchronize()
 
-        model.eval()
+        # model.eval()
 
-        val_loss = evaluation.validate(
-            config_dict,
-            model,
-            valid_dataloader,
-            valid_dataset_info,
-            rank,
-            device,
-            epoch,
-            config_dict["training"]["save_dir"],
-            mse_file_path="rmse",
-            acc_file_path="acc",
-            world_size=world_size,
-            model_subgroup_col=col_subgroup,
-            ddp_group=ddp_group,
-            model_group=model_group,
-        )
+        # val_loss = evaluation.validate(
+        #    config_dict,
+        #    model,
+        #    valid_dataloader,
+        #    valid_dataset_info,
+        #    rank,
+        #    device,
+        #    epoch,
+        #    config_dict["training"]["save_dir"],
+        #    mse_file_path="rmse",
+        #    acc_file_path="acc",
+        #    world_size=world_size,
+        #    model_subgroup_col=col_subgroup,
+        #    ddp_group=ddp_group,
+        #    model_group=model_group,
+        # )
 
-        if rank < parallelism:
-            utils.save_model(
-                model,
-                optimizer,
-                None,
-                config_dict["training"]["save_dir"],
-                rank,
-                epoch,
-            )
-        if rank == 0:
-            print(
-                f"Epoch {epoch}. Average training loss {avg_loss}. Average validation loss: {val_loss}"
-            )
+        # if rank < parallelism:
+        #    utils.save_model(
+        #        model,
+        #        optimizer,
+        #        None,
+        #        config_dict["training"]["save_dir"],
+        #        rank,
+        #        epoch,
+        #    )
+        # if rank == 0:
+        #    print(
+        #        f"Epoch {epoch}. Average training loss {avg_loss}. Average validation loss: {val_loss}"
+        #    )
 
 
 def train_one_epoch(
@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     WORKDIR = os.getenv("WORKDIR")
 
-    with open(f"{WORKDIR}/{args.config_file}", "r") as f:
+    with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     device, localid, rank, world_size = utils.init_cuda()
@@ -253,11 +253,18 @@ if __name__ == "__main__":
         config_dict["data"]["valid_data_path"] = (
             os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
         )
-
-    if os.getenv("MASKS_DIR") is not None:
         config_dict["data"]["constant_masks_path"] = (
-            os.getenv("MASKS_DIR") + config_dict["data"]["constant_masks_path"]
+            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
+
+    print(f"Train data path: {config_dict['data']['train_data_path']}")
+    print(f"Valid data path: {config_dict['data']['valid_data_path']}")
+
+    if "normalization_dir" in config_dict["data"]:
+        config_dict["data"]["normalization_dir"] = (
+            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
+        )
+        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict, device, localid, rank)
     dist.destroy_process_group()

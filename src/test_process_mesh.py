@@ -23,4 +23,4 @@ def test_process_mesh(mesh_dims: list[int]):
 
 
 if __name__ == "__main__":
-    test_process_mesh([1, 1, 1, 2, 2])
+    test_process_mesh([1, 2, 2, 2, 2])

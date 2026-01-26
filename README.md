@@ -86,8 +86,8 @@ apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pyto
 3) **Install dependencies in the container**
 
 ```console
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
 ```
 
 **All-in-one**
@@ -98,53 +98,46 @@ export CONTAINER_HOME=$HOME/containers
 mkdir $CONTAINER_HOME
 apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
 ```
 
 ### LUMI
 
-**Setup PyTorch with Easybuild in LUMI**
+Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif```
 
-1) Load Easybuild modules
 
-```console
-ml load LUMI partition/container EasyBuild-user/LUMI
-```
+0) Source ```systems/lumi_singularity.sh```
 
-2) Build module
+1) Create virtual env (shared env in project dir, only run when resetting the env)
 
 ```console
-eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
+module use /appl/local/containers/ai-modules
+module load singularity-AI-bindings
+singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
+singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
 ```
-
-3) Go inside container and install dependencies (only squash once we have the final setup)
-
-```console
-ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
-start-shell
-pip update --upgrade pip
-pip install --force-reinstall aiter
-pip install -r requirements.txt
-exit
-make-squashfs
-rm -rf $CONTAINERROO/user-software
-```
-
-4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
 
 ## Example commands
 
 ### Testing distributed process group
 
+**Don't forget to adjust the mesh inside the ```src/test_process_mesh.py``` to match the number of nodes and gpus per node.**
+
 ```console
 sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
 ```
 
-### Running ```train_bnn_weather.py``` with ```configs/weatherMixerTwoway.yaml```
+On lumi:
+```console
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/lumi_singularity.sh
+```
+
+### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
+For now, without data parallelism (DDP), so only 4 GPUs in a node:
 
 ```console
-sbatch -A hk-project-pai00058 -p accelerated --nodes 1 --tasks-per-node 2 --gres=gpu:2 experiments/weatherMixer/train_bnn.sh systems/hk_acc_ml.sh configs/weatherMixerTwoway.yaml
+sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_dtp_ViT.sh systems/hk_container.sh
 ```
 
 ## Wiki

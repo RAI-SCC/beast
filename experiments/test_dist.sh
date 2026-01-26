@@ -1,13 +1,12 @@
 #!/bin/bash
-#SBATCH --partition=accelerated
+##SBATCH --partition=accelerated
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --time=00:10:00
 #SBATCH --job-name='gb_test_dist'
 #SBATCH --output='logs/%x_%j.out'
-
-cd /workspace
+##SBATCH --constraint=LSDF
 
 source utils/utils.sh
 print_slurm_env
