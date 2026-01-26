@@ -260,7 +260,7 @@ if __name__ == "__main__":
 
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
-            WORKDIR + config_dict["data"]["normalization_dir"]
+            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
         )
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 

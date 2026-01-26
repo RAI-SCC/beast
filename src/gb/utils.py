@@ -2,10 +2,9 @@ import os
 from collections.abc import Sequence
 
 import pandas as pd
-import xarray as xr
-
 import torch
 import torch.distributed as dist
+import xarray as xr
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -109,9 +108,8 @@ def get_process_group(name: str) -> dist.ProcessGroup:
     return _process_group_dict[name]
 
 
-
 def download_1_5_degree_data(data_path):
-    #data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
+    # data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
 
     file_name = "weather_test_data.zarr"
     full_path = os.path.join(data_path, file_name)
