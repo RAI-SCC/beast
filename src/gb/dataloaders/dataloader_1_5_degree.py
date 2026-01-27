@@ -1,5 +1,4 @@
 import csv
-import os
 
 # from .dataset import KanguDataset, UnpaddedDataset, GlobePaddedKanguDataset, AugmentedKanguDataset
 import numpy as np
@@ -9,7 +8,8 @@ import torch.distributed as dist
 import xarray as xr
 import yaml
 from torch.utils.data import DataLoader, Dataset
-from torch.utils.data.distributed import DistributedSampler
+
+from .dp_sp_sampler import DP_SP_Sampler
 
 # from ..gb.utils import get_process_group
 
@@ -31,13 +31,14 @@ def get_test_dataloader(config, pg):
     if dist.is_initialized():
         # pg = get_process_group("DP")
 
-        sampler = DistributedSampler(
-            dataset,
-            shuffle=True,
-            rank=pg.rank(),
-            num_replicas=pg.size(),
-            # seed=
-        )
+        # sampler = DistributedSampler(
+        #    dataset,
+        #    shuffle=True,
+        #    rank=pg.rank(),
+        #    num_replicas=pg.size(),
+        #    # seed=
+        # )
+        sampler = DP_SP_Sampler(dataset, dp_group=pg, shuffle=True, seed=0)
 
         dataloader = DataLoader(
             dataset,
@@ -70,7 +71,6 @@ class WeatherTestDataset(Dataset):
 
     def __init__(self, config):
         self.config = config["data"]
-
 
         self.file_path = self.config["train_data_path"]
 
@@ -184,10 +184,10 @@ class WeatherTestDataset(Dataset):
             "v": "v_component_of_wind",
             "z": "geopotential",
             "q": "specific_humidity",
-            "t": "temperature",    
-             }
-        #full_path = os.path.join(self.data_path, "variable_aliases.yaml")
-        #with open(full_path) as f:
+            "t": "temperature",
+        }
+        # full_path = os.path.join(self.data_path, "variable_aliases.yaml")
+        # with open(full_path) as f:
         #    self.translation_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     def _get_data_files_stats(self):
@@ -284,8 +284,10 @@ class WeatherTestDataset(Dataset):
 
     def _get_normalization_constants(self):
         surface_normalizations = []
-        #with open(f"{self.data_path}/normalizations/surface_norms.csv", "r") as csvfile:
-        with open(self.config['normalization_dir']+"/surface_norms.csv", "r") as csvfile:
+        # with open(f"{self.data_path}/normalizations/surface_norms.csv", "r") as csvfile:
+        with open(
+            self.config["normalization_dir"] + "/surface_norms.csv", "r"
+        ) as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
                 surface_normalizations.append([row[0], float(row[1]), float(row[2])])
@@ -317,7 +319,8 @@ class WeatherTestDataset(Dataset):
                 )
 
         pressure_normalizations = []
-        with open(self.config['normalization_dir']+"/pressure_norms.csv", "r"
+        with open(
+            self.config["normalization_dir"] + "/pressure_norms.csv", "r"
         ) as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             for row in reader:
@@ -367,7 +370,7 @@ class WeatherTestDataset(Dataset):
 
     def _load_constant_masks(self):
         mask_file_paths = {}
-        with open(self.config['constant_masks_path']+"/file_paths.yaml") as f:
+        with open(self.config["constant_masks_path"] + "/file_paths.yaml") as f:
             mask_file_paths = yaml.load(f, Loader=yaml.SafeLoader)
 
         ordered_path_list = []
