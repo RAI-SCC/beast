@@ -163,3 +163,7 @@ Parallel Process Groups keys:
 Mesh Dimensions: [Expert, DP, SP, JCol, JRow]
 
 See `src/util.py` for implementation details.
+
+### Model Library
+
+For the list and descriptions of currently implemented models, see the [model documentation](src/gb/model/README.md)
