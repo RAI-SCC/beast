@@ -32,7 +32,7 @@ master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
 echo "Running cmd:"
-echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_SWIN.py --config_file $WORKDIR/configs/dp_SWIN_config.yaml"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_SWIN.py --config_file $WORKDIR/configs/sp_dp_SWIN_config.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_SWIN.py --config_file $WORKDIR/configs/dp_SWIN_config.yaml
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_SWIN.py --config_file $WORKDIR/configs/sp_dp_SWIN_config.yaml
