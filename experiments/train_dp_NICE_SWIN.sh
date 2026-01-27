@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --time=00:10:00
 #SBATCH --job-name='gb_test_NICE_ddp_SWIN'
-#SBATCH --output='logs/NICE_%x_%j.out'
+#SBATCH --output='logs/%x_%j.out'
 #SBATCH --constraint=LSDF
 
 source utils/utils.sh
