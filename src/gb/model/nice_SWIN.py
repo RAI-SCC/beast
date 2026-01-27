@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import torch_blue
 from torch import permute, reshape
 from torch.utils.checkpoint import checkpoint
 from torch_blue.vi import VIModule, convert_to_vimodule
@@ -986,6 +987,8 @@ class NiceBNNNoEmbeddingModel(VIModule):
             config["model"]["noise_dim"] = 32
 
         self.noise_dim = config["model"]["noise_dim"]
+
+        torch_blue.vi.utils.convert.ban_convert(NiceNorm)
 
         model = NiceNoEmbeddingModel(config, device)
         convert_to_vimodule(model)
