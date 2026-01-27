@@ -32,7 +32,7 @@ def training_loop(
     # Set up model  groups
     pg_dict = _create_process_mesh_dict(
         config_dict["mesh_dims"],
-        device="cuda",
+        device_type="cuda",
     )
     model_group, row_subgroup, col_subgroup, ddp_group = (
         pg_dict["DTP"],
