@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --partition=accelerated
-#SBATCH --nodes=1
+#SBATCH --partition=accelerated,dev_accelerated,accelerated-h100,dev_accelerated-h100
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --time=00:10:00
