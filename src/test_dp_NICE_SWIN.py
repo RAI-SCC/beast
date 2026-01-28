@@ -402,23 +402,25 @@ def main():
     world_size = get_process_group("DDP").size()
 
     if os.getenv("DATA_DIR") is not None:
-        DATA_DIR=os.getenv('DATA_DIR')
+        DATA_DIR = os.getenv("DATA_DIR")
         print(f"DATA_DIR:{DATA_DIR}")
-        data_path = os.path.join(DATA_DIR, "1_5_degree_test_data/weather_test_data.zarr")
+        data_path = os.path.join(
+            DATA_DIR, "1_5_degree_test_data/weather_test_data.zarr"
+        )
         if rank == 0:
             if not os.path.exists(data_path):
                 dirname = os.path.dirname(data_path)
                 print(f"Rank {rank} downloading data to {data_path}")
                 os.mkdir(dirname)
-                path = download_1_5_degree_data(dirname)
-            
+                download_1_5_degree_data(dirname)
+
                 print("Download finished")
 
         dist.barrier()
         config_dict["data"]["train_data_path"] = data_path
     else:
         print("DATA_DIR not set")
-        return 
+        return
 
     print(f"Train data path: {config_dict['data']['train_data_path']}")
 

@@ -31,7 +31,11 @@ def init_gb_process_group(
         torch.cuda.set_device(device)
 
     dist.init_process_group(
-        backend=backend, rank=rank, world_size=world_size, device_id=device, init_method="env://"
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+        device_id=device,
+        init_method="env://",
     )
     if dist.is_initialized():
         print(
@@ -39,7 +43,6 @@ def init_gb_process_group(
         )
     else:
         raise RuntimeError("Process group initialization failed.")
-
 
     return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
