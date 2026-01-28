@@ -28,7 +28,7 @@ model:
   #TODO: make more model hyperparameters accessible: SWIN block depth, window size, FF size, number of heads, ...
 training:
   checkpointing: False
-  epochs: 10
+  epochs: 100
   batch_size: 1
   lr: 0.0001
   optimizer: 'Adam'
