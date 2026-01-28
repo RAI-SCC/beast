@@ -5,6 +5,8 @@ Purpose is to test different loading strategies, depending on the system archite
 """
 
 import os
+import argparse
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -74,7 +76,14 @@ def load_data_scatter(data_path, idx, process_group, device, dim = [84, 721, 144
 
 if __name__ == "__main__":
     
-    mesh_dims = [1, 1, 1, 2, 2]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_file")
+    args = parser.parse_args()
+
+    with open(f"{args.config_file}", "r") as f:
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    mesh_dims = config_dict["mesh_dims"]
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
 
     process_group = get_process_group("DTP")
@@ -85,10 +94,13 @@ if __name__ == "__main__":
 
     device = torch.device(f'cuda:{slurm_localid}')
 
-    dim = [84, 721, 1440]
-    data_path = '/lsdf/kit/scc/projects/bellbeast/era5_stackedvars_test.zarr/' 
+    dim = config_dict["data"]["dims"]
+    if os.getenv("DATA_DIR") is not None:
+        data_path = (os.getenv("DATA_DIR") + config_dict["data"]["path"])
+    else:
+        data_path = '/lsdf/kit/scc/projects/bellbeast/era5_stackedvars_test.zarr/' 
     
-    for idx in range(10):
+    for idx in range(config_dict["data"]["num_items"]):
         load_data_chunked(data_path, idx, process_group, device, dim)
         #load_data_scatter(data_path, idx, process_group, device, dim)
 
