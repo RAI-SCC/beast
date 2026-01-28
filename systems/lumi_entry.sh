@@ -1,5 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 echo "Setting up container venv..."
+echo "VENV_DIR: $VENV_DIR"
+echo "DATA_DIR: $DATA_DIR"
 $WITH_CUDA
 source $VENV_DIR/bin/activate
 echo "Runnning cmd: $@"

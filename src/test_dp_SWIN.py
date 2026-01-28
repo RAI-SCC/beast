@@ -419,7 +419,7 @@ def main():
     set_all_seeds(2)
 
 
-    mesh_dims = config_dict["mesh_dims"]#[1, 4, 1, 1, 1]
+    mesh_dims = config_dict["mesh_dims"]     #[1, 4, 1, 1, 1]
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
     #init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
@@ -430,18 +430,24 @@ def main():
 
     
     if os.getenv("DATA_DIR") is not None:
+        DATA_DIR=os.getenv('DATA_DIR')
+        print(f"DATA_DIR:{DATA_DIR}")
+        data_path = os.path.join(DATA_DIR, "1_5_degree_test_data/weather_test_data.zarr")
         if rank == 0:
-            if not os.path.exists(os.getenv("DATA_DIR") + "1_5_degree_test_data/weather_test_data.zarr"):
-                print(f"Rank {rank} downloading data to {os.getenv("DATA_DIR") + "1_5_degree_test_data/weather_test_data.zarr"}")
-                os.mkdir(os.path.join(os.getenv("DATA_DIR"), "1_5_degree_test_data"))
-                path = download_1_5_degree_data(os.path.join(os.getenv("DATA_DIR"), "1_5_degree_test_data"))
+            if not os.path.exists(data_path):
+                dirname = os.path.dirname(data_path)
+                print(f"Rank {rank} downloading data to {data_path}")
+                os.mkdir(dirname)
+                path = download_1_5_degree_data(dirname)
             
                 print("Download finished")
 
         dist.barrier()
-        config_dict["data"]["train_data_path"] =os.path.join( 
-            os.getenv("DATA_DIR"), "1_5_degree_test_data/weather_test_data.zarr"
-        )
+        config_dict["data"]["train_data_path"] = data_path
+    else:
+        print("DATA_DIR not set")
+        return 
+
     print(f"Train data path: {config_dict['data']['train_data_path']}")
     
     config_dict["data"]["constant_masks_path"] = os.path.join(
