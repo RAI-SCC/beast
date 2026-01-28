@@ -11,7 +11,7 @@ class UP_AllGaussLoss(nn.Module):
 
         self.pg = process_group
 
-        self.kl_loss = vi.AnalyticalKLLoss(
+        self.kl_loss = vi.AnalyticalKullbackLeiblerLoss(
             model,
             MeanFieldNormal(),
             divergence_type=vi.NormalNormalDivergence(),
