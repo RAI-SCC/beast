@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --partition=normal
-#SBATCH --nodes=1
+#SBATCH --partition=accelerated,dev_accelerated,accelerated-h100,dev_accelerated-h100
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
-#SBATCH --gres=gpu:full:4
-#SBATCH --time=00:30:00
+#SBATCH --gres=gpu:4
+#SBATCH --time=00:10:00
 #SBATCH --job-name='gb_test_sp_ddp_SWIN'
 #SBATCH --output='logs/%x_%j.out'
 
@@ -30,6 +30,8 @@ setup_system
 export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
+
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 echo "Running cmd:"
 echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_SWIN.py --config_file $WORKDIR/configs/sp_dp_SWIN_config.yaml"
