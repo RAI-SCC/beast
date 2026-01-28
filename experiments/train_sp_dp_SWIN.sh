@@ -4,7 +4,7 @@
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:full:4
 #SBATCH --time=00:30:00
-#SBATCH --job-name='gb_test_ddp_SWIN'
+#SBATCH --job-name='gb_test_sp_ddp_SWIN'
 #SBATCH --output='logs/%x_%j.out'
 
 source utils/utils.sh
