@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --partition=accelerated
-#SBATCH --nodes=1
+#SBATCH --partition=accelerated,dev_accelerated,accelerated-h100,dev_accelerated-h100
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --time=00:10:00
-#SBATCH --job-name='gb_test_nice_prototype'
-#SBATCH --output='logs/nice_proto_%x_%j.out'
-#SBATCH --account='hk-project-p0026382'
+#SBATCH --job-name='gb_test_NICE_ddp_SWIN'
+#SBATCH --output='logs/%x_%j.out'
+#SBATCH --constraint=LSDF
 
 source utils/utils.sh
 print_slurm_env
@@ -32,9 +32,10 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 echo "Running cmd:"
-echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py" " --config_file $WORKDIR/configs/nice_prototype_config.yaml"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_NICE_SWIN.py" " --config_file $WORKDIR/configs/dp_NICE_SWIN_config.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/train_nice_prototype.py --config_file $WORKDIR/configs/nice_prototype_config.yaml
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dp_NICE_SWIN.py --config_file $WORKDIR/configs/dp_NICE_SWIN_config.yaml
