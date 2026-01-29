@@ -8,8 +8,9 @@ import torch.distributed as dist
 import xarray as xr
 import yaml
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data.distributed import DistributedSampler
 
-from .dp_sp_sampler import DP_SP_Sampler
+# from .dp_sp_sampler import DP_SP_Sampler
 
 # from ..gb.utils import get_process_group
 
@@ -31,14 +32,14 @@ def get_test_dataloader(config, pg):
     if dist.is_initialized():
         # pg = get_process_group("DP")
 
-        # sampler = DistributedSampler(
-        #    dataset,
-        #    shuffle=True,
-        #    rank=pg.rank(),
-        #    num_replicas=pg.size(),
-        #    # seed=
-        # )
-        sampler = DP_SP_Sampler(dataset, dp_group=pg, shuffle=True, seed=0)
+        sampler = DistributedSampler(
+            dataset,
+            shuffle=True,
+            rank=pg.rank(),
+            num_replicas=pg.size(),
+            seed=42,  # Put in config?
+        )
+        # sampler = DP_SP_Sampler(dataset, dp_group=pg, sp_group=spg, validate=validate_sampler, shuffle=True, seed=0)
 
         dataloader = DataLoader(
             dataset,

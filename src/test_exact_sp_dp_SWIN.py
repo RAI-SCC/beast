@@ -116,7 +116,7 @@ def training_loop(
             model,
             device_ids=[slurm_localid],
             output_device=slurm_localid,
-            process_group=get_process_group("DDP"),
+            process_group=get_process_group("DP"),
         )
     else:
         model_ddp = model
