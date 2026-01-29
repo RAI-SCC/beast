@@ -1,0 +1,157 @@
+Slurm variables:
+  SLURM_JOB_ID:         3817855
+  SLURM_PARTITION:      dev_accelerated
+  SLURM_NTASKS:         4
+  SLURM_NNODES:         1
+  SLURM_TASKS_PER_NODE: 4
+  SLURM_NODELIST:       hkn0401
+/var/spool/slurmd/job3817855/slurm_script systems/hk_container.sh
+System Env File: hk_container.sh
+Sourcing system environment...
+Purging modules
+Running cmd:
+  srun --cpu-bind=v apptainer exec --nv --no-home --bind /scratch --bind /scratch/slurm_tmpdir/job_3817855 --bind /home/hk-project-scc/ih5525/GrandBellbeast:/mnt --bind /hkfs/work/workspace/scratch/ih5525-GrandBellbeast/:/hkfs/work/workspace/scratch/ih5525-GrandBellbeast/ --bind /home/hk-project-scc/ih5525/GrandBellbeast/src/libs --cwd /mnt /home/hk-project-scc/ih5525/containers/gb_pytorch25.06 python -u /mnt/src/test_dp_SWIN.py --config_file /mnt/configs/dp_SWIN_config.yaml
+
+GpuFreq=control_disabled
+cpu-bind=MASK - hkn0401, task  0  0 [3752909]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0401, task  1  1 [3752910]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0401, task  2  2 [3752911]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0401, task  3  3 [3752912]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+mkdir -p failed for path /home/hk-project-scc/ih5525/.config/matplotlib: [Errno 30] Read-only file system: '/home/hk-project-scc/ih5525/.config'
+Matplotlib created a temporary cache directory at /scratch/slurm_tmpdir/job_3817855/matplotlib-f02lbn7q because there was an issue with the default path (/home/hk-project-scc/ih5525/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+mkdir -p failed for path /home/hk-project-scc/ih5525/.config/matplotlib: [Errno 30] Read-only file system: '/home/hk-project-scc/ih5525/.config'
+Matplotlib created a temporary cache directory at /scratch/slurm_tmpdir/job_3817855/matplotlib-_hbwls4c because there was an issue with the default path (/home/hk-project-scc/ih5525/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+mkdir -p failed for path /home/hk-project-scc/ih5525/.config/matplotlib: [Errno 30] Read-only file system: '/home/hk-project-scc/ih5525/.config'
+Matplotlib created a temporary cache directory at /scratch/slurm_tmpdir/job_3817855/matplotlib-wqj559sn because there was an issue with the default path (/home/hk-project-scc/ih5525/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+mkdir -p failed for path /home/hk-project-scc/ih5525/.config/matplotlib: [Errno 30] Read-only file system: '/home/hk-project-scc/ih5525/.config'
+Matplotlib created a temporary cache directory at /scratch/slurm_tmpdir/job_3817855/matplotlib-y5l13vd5 because there was an issue with the default path (/home/hk-project-scc/ih5525/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+Rank 2: world_size 4, slurm_localid 2
+Rank 3: world_size 4, slurm_localid 3
+Rank 1: world_size 4, slurm_localid 1
+Rank 0: world_size 4, slurm_localid 0
+Rank 2/4: Process group initialized with torch rank 2 and torch world size 4.
+Rank 1/4: Process group initialized with torch rank 1 and torch world size 4.
+Rank 0/4: Process group initialized with torch rank 0 and torch world size 4.
+[rank2]:[W125 23:29:09.690236158 ProcessGroupNCCL.cpp:4789] [PG ID 0 PG GUID 0 Rank 2]  using GPU 2 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+Rank 3/4: Process group initialized with torch rank 3 and torch world size 4.
+[rank0]:[W125 23:29:09.691307153 ProcessGroupNCCL.cpp:4789] [PG ID 0 PG GUID 0 Rank 0]  using GPU 0 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+[rank1]:[W125 23:29:09.692669882 ProcessGroupNCCL.cpp:4789] [PG ID 0 PG GUID 0 Rank 1]  using GPU 1 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+[rank3]:[W125 23:29:09.696226029 ProcessGroupNCCL.cpp:4789] [PG ID 0 PG GUID 0 Rank 3]  using GPU 3 as device used by this process is currently unknown. This can potentially cause a hang if this rank to GPU mapping is incorrect. You can specify device_id in init_process_group() to force use of a particular device.
+Train data path: /hkfs/work/workspace/scratch/ih5525-GrandBellbeast/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalizations
+Train data path: /hkfs/work/workspace/scratch/ih5525-GrandBellbeast/1_5_degree_test_data/weather_test_data.zarr
+Train data path: /hkfs/work/workspace/scratch/ih5525-GrandBellbeast/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalizations
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalizations
+Train data path: /hkfs/work/workspace/scratch/ih5525-GrandBellbeast/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalizations
+/usr/local/lib/python3.12/dist-packages/torch/nn/init.py:511: UserWarning: Initializing zero-element tensors is a no-op
+  warnings.warn("Initializing zero-element tensors is a no-op")
+/usr/local/lib/python3.12/dist-packages/torch/nn/init.py:511: UserWarning: Initializing zero-element tensors is a no-op
+  warnings.warn("Initializing zero-element tensors is a no-op")
+/usr/local/lib/python3.12/dist-packages/torch/nn/init.py:511: UserWarning: Initializing zero-element tensors is a no-op
+  warnings.warn("Initializing zero-element tensors is a no-op")
+/usr/local/lib/python3.12/dist-packages/torch/nn/init.py:511: UserWarning: Initializing zero-element tensors is a no-op
+  warnings.warn("Initializing zero-element tensors is a no-op")
+model has 75597684 parameters
+Using float32
+Epoch: 001/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 180647859.250018
+/usr/local/lib/python3.12/dist-packages/torch/_tensor.py:1668: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Scalar.cpp:22.)
+  ret = func(*args, **kwargs)
+Epoch: 001/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 181115924.379865
+Epoch: 001/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180815634.441397
+Epoch: 001/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180552394.243586
+Epoch: 001/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 180375954.294141
+Epoch: 001/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 180589818.423854
+Epoch: 001/010 Elapsed training time: 0.090359 [min] Averaged loss 180682930.838810
+Epoch: 002/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 181028913.005974
+Epoch: 002/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 180627402.742535
+Epoch: 002/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180620028.901100
+Epoch: 002/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180715733.080415
+Epoch: 002/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 180843911.431461
+Epoch: 002/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 180914434.441838
+Epoch: 002/010 Elapsed training time: 0.077275 [min] Averaged loss 180791737.267221
+Epoch: 003/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 180654030.248536
+Epoch: 003/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 180608867.771034
+Epoch: 003/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180781734.266874
+Epoch: 003/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180694361.366349
+Epoch: 003/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 180457024.268429
+Epoch: 003/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 180447733.765424
+Epoch: 003/010 Elapsed training time: 0.077840 [min] Averaged loss 180607291.947775
+Epoch: 004/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 179939333.572350
+Epoch: 004/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 180656229.356417
+Epoch: 004/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180301213.331791
+Epoch: 004/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180072421.756377
+Epoch: 004/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 180384481.119250
+Epoch: 004/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 179960363.949209
+Epoch: 004/010 Elapsed training time: 0.079257 [min] Averaged loss 180219007.180899
+Epoch: 005/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 180050302.102054
+Epoch: 005/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 180144092.368395
+Epoch: 005/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180241351.266742
+Epoch: 005/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180123872.581441
+Epoch: 005/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 179781687.866827
+Epoch: 005/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 179783229.282013
+Epoch: 005/010 Elapsed training time: 0.077719 [min] Averaged loss 180020755.911245
+Epoch: 006/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 180122433.349978
+Epoch: 006/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 179473837.150420
+Epoch: 006/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 179563445.393637
+Epoch: 006/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 179944482.961666
+Epoch: 006/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 180043299.832732
+Epoch: 006/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 180068424.281152
+Epoch: 006/010 Elapsed training time: 0.077586 [min] Averaged loss 179869320.494931
+Epoch: 007/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 179701224.641132
+Epoch: 007/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 180101130.313664
+Epoch: 007/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 179833227.051306
+Epoch: 007/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 180164424.999777
+Epoch: 007/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 179981585.076369
+Epoch: 007/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 179400972.843238
+Epoch: 007/010 Elapsed training time: 0.077964 [min] Averaged loss 179863760.820914
+Epoch: 008/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 179402779.866709
+Epoch: 008/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 179609475.755734
+Epoch: 008/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 180008758.760420
+Epoch: 008/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 179679368.265952
+Epoch: 008/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 179839509.961806
+Epoch: 008/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 178817994.216301
+Epoch: 008/010 Elapsed training time: 0.077817 [min] Averaged loss 179559647.804487
+Epoch: 009/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 179736359.484314
+Epoch: 009/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 179543699.638690
+Epoch: 009/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 178927128.466717
+Epoch: 009/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 179238200.928690
+Epoch: 009/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 179311472.431428
+Epoch: 009/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 179330159.114085
+Epoch: 009/010 Elapsed training time: 0.077945 [min] Averaged loss 179347836.677321
+Epoch: 010/010 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 179250926.243869
+Epoch: 010/010 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 179793267.290045
+Epoch: 010/010 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 179363941.169836
+Epoch: 010/010 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 179454044.624599
+Epoch: 010/010 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 179563337.507365
+Epoch: 010/010 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 179492274.655316
+Epoch: 010/010 Elapsed training time: 0.078074 [min] Averaged loss 179486298.581838
+Process group destroyed
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3817855
+Cluster: hk
+User/Group: ih5525/hk-project-scc
+Account: hk-project-pai00071
+State: COMPLETED (exit code 0)
+Partition: dev_accelerated
+Nodes: 1
+Cores per node: 76
+Nodelist: hkn0401
+CPU Utilized: 00:06:03
+CPU Efficiency: 3.62% of 02:47:12 core-walltime
+Job Wall-clock time: 00:02:12
+Starttime: Sun Jan 25 23:27:51 2026
+Endtime: Sun Jan 25 23:30:03 2026
+Memory Utilized: 17.16 GB
+Memory Efficiency: 3.53% of 485.84 GB (485.84 GB/node)
+The task which had the largest memory consumption differs by 101.00% from the average task max memory consumption
+Energy Consumed: 95924 Joule / 26.6455555555556 Watthours
+Average node power draw: 726.69696969697 Watt
