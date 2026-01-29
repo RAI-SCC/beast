@@ -42,16 +42,16 @@ class UP_AllGaussLoss(nn.Module):
         local_mean = model_output.mean(dim=0)
         local_std = model_output.std(dim=0)
 
-        mean = local_mean.clone() / up_num
-        dnn.all_reduce(mean, group=self.pg)
+        mean = local_mean / up_num
+        mean = dnn.all_reduce(mean, group=self.pg)
 
         local_contribution = (loc_sample_num / (total_samples - 1)) * (
-            mean**2 - local_mean**2
+            (mean - local_mean) ** 2
         )
         local_contribution = local_contribution + (
             (loc_sample_num - 1) / (total_samples - 1)
         ) * (local_std**2)
-        dnn.all_reduce(local_contribution, group=self.pg)
+        local_contribution = dnn.all_reduce(local_contribution, group=self.pg)
         std = torch.sqrt(local_contribution)
 
         return mean, std
