@@ -183,6 +183,6 @@ def convert_jigsaw_vi(
     )
 
     for mname, m in module.named_modules():
-        if issubclass(m.__class__, torch_blue.vi.VIModule):
-            print(f"Name: {mname}")
-            print(f"Type: {type(m)}")
+        # if issubclass(m.__class__, torch_blue.vi.VIModule):
+        print(f"Name: {mname}")
+        print(f"Type: {type(m)}")
