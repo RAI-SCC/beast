@@ -4,6 +4,8 @@ from collections.abc import Sequence
 import pandas as pd
 import torch
 import torch.distributed as dist
+import torch_blue
+import torch_blue.vi.distributions as vidist
 import xarray as xr
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
@@ -158,3 +160,29 @@ def download_1_5_degree_data(data_path):
     ds.to_zarr(full_path, mode="w", consolidated=True, zarr_format=2)
 
     return full_path
+
+
+def convert_jigsaw_vi(
+    module,
+    variational_distribution=vidist.Normal(),
+    priot=vidist.Normal(),
+    rescale_prior=False,
+    kaiming_initialization=False,
+    prior_initialization=False,
+    return_log_probs=True,
+):
+    torch_blue.vi.utils.convert_to_vimodule(
+        module,
+        variational_distribution=variational_distribution,
+        priot=priot,
+        rescale_prior=rescale_prior,
+        kaiming_initialization=kaiming_initialization,
+        prior_initialization=prior_initialization,
+        return_log_probs=return_log_probs,
+        keep_weights=False,
+    )
+
+    for mname, m in module.named_modules():
+        if isinstance(m, torch_blue.vi.VIModule):
+            print(f"Name: {mname}")
+            print(f"Type: {type(m)}")
