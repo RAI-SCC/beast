@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import time
 
@@ -203,6 +204,10 @@ def training_loop(
         max_epoch_time = 120.0
         start_up_time = time.perf_counter() - start_up_time
         wall_time -= start_up_time
+
+    seed = 42  # put in config?
+    set_all_seeds(seed + get_process_group("SP").rank())
+    sample_num = math.ceil(sample_num / get_process_group("SP").size())
 
     for epoch in range(start_epoch, num_epochs):
         scheduler.step(epoch)
