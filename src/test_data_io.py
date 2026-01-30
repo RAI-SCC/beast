@@ -119,6 +119,39 @@ def load_data_chunked_8way(data_path, idx, process_group, device, dim = [84, 721
     data_chunk = torch.tensor(zarr_data.isel(time=idx, feature=range(var_start, var_end), latitude=range(0, xlat), longitude=range(xlon_start, xlon_end))["fields"].values, device=device)
 
 
+def load_data_scatterchunked_8way(data_path, idx, process_group, device, dim = [84, 721, 1440]):
+    
+    var,xlon,xlat = dim
+    
+    local_rank = torch.distributed.get_rank(group_dict["DTP"])
+    if local_rank%2 == 0:
+        var_start, var_end = 0, var // 2
+    else:
+        var_start, var_end = var // 2 , var
+
+    if  local_rank // 2 == 0:
+        xlon_start, xlon_end = 0, xlon // 4
+    elif local_rank // 2 == 1:
+        xlon_start, xlon_end = xlon // 4, 2* xlon // 4
+    elif local_rank // 2 == 2:
+        xlon_start, xlon_end = 2*xlon // 4, 3* xlon // 4
+    else:
+        xlon_start, xlon_end = 3* xlon // 4, xlon
+
+    data_chunk = torch.empty((var//2, xlon, xlat//4), dtype=torch.float32, device=device)
+    #print(f'Rank {rank} empty data chunk: element[0,0,0]={data_chunk[0,0,0]}')
+
+    #Even Node-local rank load the data and send half of it to odd node-local ranks
+    if local_rank%2 == 0:        
+        zarr_data = xr.open_dataset(data_path, engine="zarr")
+        data_item = torch.tensor(zarr_data.isel(time=idx, longitude=range(xlon_start, xlon_end))["fields"].values, device=device)
+        data_chunk = data_item[0:var // 2,:,:]
+        dist.isend(data_item[var // 2:,:,:].clone(), group=process_group, tag=0, group_dst=(local_rank+1))
+    
+    else:
+        dist.irecv(data_chunk, src=None, group=process_group, group_src=(local_rank-1))
+
+        
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
