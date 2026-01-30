@@ -67,6 +67,7 @@ def conversion_test(device):
         hidden_dim=16,
         out_dim=16,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        device=device,
         parallelism=full_dtp_group.size(),
     )
 
