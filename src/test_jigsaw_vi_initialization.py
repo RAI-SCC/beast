@@ -62,7 +62,7 @@ def conversion_test(device):
     local_dtp_row = dtp_row_group.rank()
     total_dtp_cols = dtp_col_group.size()
 
-    mlp = Jigsaw.MLP(
+    mlp = Jigsaw.MLP.DistributedMLP(
         in_dim=16,
         hidden_dim=16,
         out_dim=16,
