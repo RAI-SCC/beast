@@ -181,7 +181,7 @@ def convert_jigsaw_vi(
     variational_distribution=vidist.Normal(),
     prior=vidist.Normal(),
     rescale_prior=False,
-    kaiming_initialization=False,
+    kaiming_initialization=True,
     prior_initialization=False,
     return_log_probs=True,
 ):
