@@ -169,7 +169,11 @@ def count_parameters(model) -> int:
 
 
 def sum_abs_parameters(model):
-    return sum(torch.abs(p).sum().item() for p in model.parameters() if p.requires_grad)
+    return sum(
+        torch.abs(p.detach()).sum().detach().item()
+        for p in model.parameters()
+        if p.requires_grad
+    )
 
 
 def convert_jigsaw_vi(
@@ -204,10 +208,12 @@ def convert_jigsaw_vi(
         if class_name.startswith("AVI"):
             match class_name:
                 case "AVIDistributedXWT":
-                    print(f"{mname}: Before fix: {sum_abs_parameters(m)}")
+                    before_num = sum_abs_parameters(m)
+                    print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
-                    print(f"{mname}: After fix: {sum_abs_parameters(m)}")
+                    after_num = sum_abs_parameters(m)
+                    print(f"{mname}: After fix: {after_num}")
                 case _:
                     continue
