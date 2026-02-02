@@ -165,6 +165,8 @@ def load_data_scatterchunked_8way(data_path, idx, process_group, device, dim = [
     var,xlon,xlat = dim
     
     local_rank = torch.distributed.get_rank(group_dict["DTP"])
+    group_size = torch.distributed.get_world_size(group_dict["DTP"])
+
     if local_rank%2 == 0:
         var_start, var_end = 0, var // 2
     else:
@@ -186,11 +188,9 @@ def load_data_scatterchunked_8way(data_path, idx, process_group, device, dim = [
         zarr_data = xr.open_dataset(data_path, engine="zarr")
         data_item = torch.tensor(zarr_data.isel(time=idx, longitude=range(xlon_start, xlon_end))["fields"].values, device=device)
         data_chunk = data_item[0:var // 2,:,:]
-        dist.isend(data_item[var // 2:,:,:].clone(), group=process_group, tag=0, group_dst=(local_rank+1))
-    
+        dist.isend(data_item[var // 2:,:,:].clone(), group=process_group, tag=0, group_dst=(local_rank+1)%group_size)
     else:
-        dist.irecv(data_chunk, src=None, group=process_group, group_src=(local_rank-1))
-
+        dist.irecv(data_chunk, src=None, group=process_group, group_src=(local_rank-1)%group_size)
         
 if __name__ == "__main__":
     
@@ -221,6 +221,9 @@ if __name__ == "__main__":
     for idx in range(config_dict["data"]["num_items"]):
         load_data_chunked_8way(data_path, idx, process_group, device, dim)
         load_data_scatter_8way(data_path, idx, process_group, device, dim)
-
+        load_data_scatterchunked_8way(data_path, idx, process_group, device, dim)
+        if rank ==0: 
+            print(f'Index {idx} done')
+        
+    print(f'Rank {rank} done!')
     dist.destroy_process_group()
-
