@@ -1,3 +1,4 @@
+import math
 import os
 import types
 from collections.abc import Sequence
@@ -5,6 +6,7 @@ from collections.abc import Sequence
 import pandas as pd
 import torch
 import torch.distributed as dist
+import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
@@ -176,6 +178,11 @@ def sum_abs_parameters(model):
     )
 
 
+def _init_uniform_override(parameter, fan_in) -> None:
+    bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
+    init.uniform_(parameter, -bound, bound)
+
+
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
@@ -185,6 +192,8 @@ def convert_jigsaw_vi(
     prior_initialization=False,
     return_log_probs=True,
 ):
+    torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
+
     torch_blue.vi.convert_to_vimodule(
         module,
         variational_distribution=variational_distribution,
