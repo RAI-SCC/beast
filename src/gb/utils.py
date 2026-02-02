@@ -206,10 +206,15 @@ def convert_jigsaw_vi(
     )
 
     num_jcols = get_process_group("JCol").size()
+    num_jrows = get_process_group("JRow").size()
 
     def new_cf_col(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
         return previous * num_jcols
+
+    def new_cf_row(self, variable_shapes=None):
+        previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
+        return previous * num_jrows
 
     for mname, m in module.named_modules():
         # if issubclass(m.__class__, torch_blue.vi.VIModule):
@@ -221,6 +226,14 @@ def convert_jigsaw_vi(
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
+                    m.reset_variational_parameters()
+                    after_num = sum_abs_parameters(m)
+                    print(f"{mname}: After fix: {after_num}")
+                case "AVIRowSplit":  # TODO: actual list here
+                    before_num = sum_abs_parameters(m)
+                    print(f"{mname}: Before fix: {before_num}")
+                    m._old_calculate_fan_in = m._calculate_fan_in
+                    m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
                     after_num = sum_abs_parameters(m)
                     print(f"{mname}: After fix: {after_num}")
