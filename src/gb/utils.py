@@ -178,7 +178,7 @@ def sum_abs_parameters(model):
     )
 
 
-def _init_uniform_override(parameter, fan_in) -> None:
+def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
 
