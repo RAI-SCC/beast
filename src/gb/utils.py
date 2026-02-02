@@ -196,7 +196,7 @@ def convert_jigsaw_vi(
 
     def new_cf_col(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-        return previous / num_jcols
+        return previous * num_jcols
 
     for mname, m in module.named_modules():
         # if issubclass(m.__class__, torch_blue.vi.VIModule):
@@ -204,10 +204,10 @@ def convert_jigsaw_vi(
         if class_name.startswith("AVI"):
             match class_name:
                 case "AVIDistributedXWT":
-                    print(f"Before fix: {sum_abs_parameters(m)}")
+                    print(f"{mname}: Before fix: {sum_abs_parameters(m)}")
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
-                    print(f"After fix: {sum_abs_parameters(m)}")
+                    print(f"{mname}: After fix: {sum_abs_parameters(m)}")
                 case _:
                     continue
