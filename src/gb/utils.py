@@ -180,7 +180,7 @@ def convert_jigsaw_vi(
     prior_initialization=False,
     return_log_probs=True,
 ):
-    torch_blue.vi.utils.convert_to_vimodule(
+    torch_blue.vi.convert_to_vimodule(
         module,
         variational_distribution=variational_distribution,
         prior=prior,
