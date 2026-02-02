@@ -162,6 +162,15 @@ def download_1_5_degree_data(data_path):
     return full_path
 
 
+def count_parameters(model) -> int:
+    """Count num trainable parameters in the model."""
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def sum_abs_parameters(model):
+    return sum(torch.abs(p).sum().item() for p in model.parameters() if p.requires_grad)
+
+
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
@@ -182,7 +191,22 @@ def convert_jigsaw_vi(
         keep_weights=False,
     )
 
+    num_jcols = get_process_group("JCol").size()
+
+    def new_cf_col(self, variable_shapes=None):
+        previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
+        return previous / num_jcols
+
     for mname, m in module.named_modules():
         # if issubclass(m.__class__, torch_blue.vi.VIModule):
-        print(f"Name: {mname}")
-        print(f"Type: {type(m)}")
+        class_name = m.__class__.__name__
+        if class_name.startswith("AVI"):
+            match class_name:
+                case "AVIDistributedXWT":
+                    print(f"Before fix: {sum_abs_parameters(m)}")
+                    m._old_calculate_fan_in = m.calculate_fan_in
+                    m.calculate_fan_in = new_cf_col
+                    m.reset_variational_parameters()
+                    print(f"After fix: {sum_abs_parameters(m)}")
+                case _:
+                    continue
