@@ -204,8 +204,8 @@ def convert_jigsaw_vi(
             match class_name:
                 case "AVIDistributedXWT":
                     print(f"Before fix: {sum_abs_parameters(m)}")
-                    m._old_calculate_fan_in = m.calculate_fan_in
-                    m.calculate_fan_in = new_cf_col
+                    m._old_calculate_fan_in = m._calculate_fan_in
+                    m._calculate_fan_in = new_cf_col
                     m.reset_variational_parameters()
                     print(f"After fix: {sum_abs_parameters(m)}")
                 case _:
