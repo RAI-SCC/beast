@@ -1,4 +1,5 @@
 import os
+import types
 from collections.abc import Sequence
 
 import pandas as pd
@@ -205,7 +206,7 @@ def convert_jigsaw_vi(
                 case "AVIDistributedXWT":
                     print(f"Before fix: {sum_abs_parameters(m)}")
                     m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = new_cf_col
+                    m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
                     print(f"After fix: {sum_abs_parameters(m)}")
                 case _:
