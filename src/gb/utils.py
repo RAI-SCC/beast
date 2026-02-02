@@ -171,8 +171,8 @@ def count_parameters(model) -> int:
 def sum_abs_parameters(model):
     return sum(
         torch.abs(p.detach()).sum().detach().item()
-        for p in model.parameters()
-        if p.requires_grad
+        for p_name, p in model.named_parameters()
+        if p.requires_grad and "log_" not in p_name
     )
 
 
