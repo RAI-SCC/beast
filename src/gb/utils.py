@@ -174,7 +174,7 @@ def sum_abs_parameters(model):
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
-    priot=vidist.Normal(),
+    prior=vidist.Normal(),
     rescale_prior=False,
     kaiming_initialization=False,
     prior_initialization=False,
@@ -183,7 +183,7 @@ def convert_jigsaw_vi(
     torch_blue.vi.utils.convert_to_vimodule(
         module,
         variational_distribution=variational_distribution,
-        priot=priot,
+        prior=prior,
         rescale_prior=rescale_prior,
         kaiming_initialization=kaiming_initialization,
         prior_initialization=prior_initialization,
