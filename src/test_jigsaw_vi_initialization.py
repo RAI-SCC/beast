@@ -77,7 +77,7 @@ def conversion_test(device):
         out_dim=32,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
         device=device,
-        n_parallel=full_dtp_group.size(),
+        parallelism=full_dtp_group.size(),
         model_group=full_dtp_group,
     )
 
@@ -86,7 +86,7 @@ def conversion_test(device):
         out_dim=32,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
         device=device,
-        n_parallel=full_dtp_group.size(),
+        parallelism=full_dtp_group.size(),
         model_group=full_dtp_group,
     )
 
