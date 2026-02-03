@@ -2,6 +2,7 @@ import math
 import os
 import types
 from collections.abc import Sequence
+from typing import Tuple, cast
 
 import pandas as pd
 import torch
@@ -183,6 +184,46 @@ def _init_uniform_override(self, parameter, fan_in) -> None:
     init.uniform_(parameter, -bound, bound)
 
 
+def _calculate_fan_out(self, variable_shapes=None):
+    """
+    calculates fan_out for a Bayesian layer assuming that weight shape is (out_dim, in_dim); if weight shape is
+    (in_dim, out_dim) instead calculates fan_in, which is what it will be used for in this project
+    """
+
+    if variable_shapes is None:
+        loop = self.random_variables
+        checked_dict = self.variational_distribution
+    else:
+        loop = checked_dict = variable_shapes  # type:ignore[assignment]
+
+    if len(loop) == 0:
+        raise torch_blue.vi.utils.errors.NoVariablesError(
+            "All module variables are set to None."
+        )
+
+    for var in cast(Tuple[str, ...], loop):
+        if checked_dict[var] is None:
+            continue
+
+        if variable_shapes is None:
+            weight_name = self.variational_parameter_name(
+                var,
+                self.variational_distribution[var].primary_parameter,
+            )
+            shape_dummy = getattr(self, weight_name)
+        else:
+            shape_dummy = torch.zeros(variable_shapes[var])
+
+        if shape_dummy.dim() < 2:
+            continue
+
+        _, fan_out = init._calculate_fan_in_and_fan_out(shape_dummy)
+        return fan_out
+    else:
+        # TODO raise warning here
+        return 1
+
+
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
@@ -220,8 +261,12 @@ def convert_jigsaw_vi(
         # if issubclass(m.__class__, torch_blue.vi.VIModule):
         class_name = m.__class__.__name__
         if class_name.startswith("AVI"):
+            if class_name in ["AVIDistributedXW", "AVIDistributedXTW"]:
+                m._calculate_fan_in = types.MethodType(_calculate_fan_out, m)
+            # switches fan_in and fan_out dimensions for layers with different weight shape initialization
+
             match class_name:
-                case "AVIDistributedXWT":
+                case "AVIDistributedConvTranspose2D":
                     before_num = sum_abs_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
@@ -229,7 +274,7 @@ def convert_jigsaw_vi(
                     m.reset_variational_parameters()
                     after_num = sum_abs_parameters(m)
                     print(f"{mname}: After fix: {after_num}")
-                case "AVIRowSplit":  # TODO: actual list here
+                case "AVIDistributedXWT" | "AVIDistributedXW" | "AVIDistributedXTW":
                     before_num = sum_abs_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
