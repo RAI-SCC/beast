@@ -5,5 +5,5 @@ pyyaml
 zarr
 xarray
 
-#-e ./src/libs/torch_blue
-#-e ./src/libs/Jigsaw
+-e ./src/libs/torch_blue
+-e ./src/libs/Jigsaw
