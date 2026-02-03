@@ -171,9 +171,9 @@ def count_parameters(model) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def sum_abs_parameters(model):
+def sum_square_parameters(model):
     return sum(
-        torch.abs(p.detach()).sum().detach().item()
+        (p.detach() ** 2).sum().detach().item()
         for p_name, p in model.named_parameters()
         if p.requires_grad and "log_" not in p_name
     )
@@ -271,20 +271,20 @@ def convert_jigsaw_vi(
                     | "AVIDistributedXWTSync"
                     | "AVIDistributedConvTranspose2D"
                 ):
-                    before_num = sum_abs_parameters(m)
+                    before_num = sum_square_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
-                    after_num = sum_abs_parameters(m)
+                    after_num = sum_square_parameters(m)
                     print(f"{mname}: After fix: {after_num}")
                 case "AVIDistributedXW" | "AVIDistributedXTW":
-                    before_num = sum_abs_parameters(m)
+                    before_num = sum_square_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
-                    after_num = sum_abs_parameters(m)
+                    after_num = sum_square_parameters(m)
                     print(f"{mname}: After fix: {after_num}")
                 case _:
                     continue

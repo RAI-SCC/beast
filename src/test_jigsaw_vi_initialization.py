@@ -72,9 +72,18 @@ def conversion_test(device):
         model_group=full_dtp_group,
     )
 
+    xwt = Jigsaw.Linear.DistributedXWT(
+        in_dim=16,
+        out_dim=64,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        device=device,
+        parallelism=full_dtp_group.size(),
+        model_group=full_dtp_group,
+    )
+
     xw = Jigsaw.Linear.DistributedXW(
         in_dim=16,
-        out_dim=32,
+        out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
         device=device,
         parallelism=full_dtp_group.size(),
@@ -83,7 +92,7 @@ def conversion_test(device):
 
     xtw = Jigsaw.Linear.DistributedXTW(
         in_dim=16,
-        out_dim=32,
+        out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
         device=device,
         parallelism=full_dtp_group.size(),
@@ -91,7 +100,11 @@ def conversion_test(device):
     )
 
     convert_jigsaw_vi(mlp)
+
+    convert_jigsaw_vi(xwt)
+
     convert_jigsaw_vi(xw)
+
     convert_jigsaw_vi(xtw)
 
 
