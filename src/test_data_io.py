@@ -328,8 +328,8 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_chunked_4way(data_path, idx, process_group, gpu_direct=True, load_order=[0,1,2,3], dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_chunked_4way = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_chunked_4way = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_chunked_4way, tensor_in)
         dist.barrier()
 
@@ -337,8 +337,8 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_chunked_4way(data_path, idx, process_group, gpu_direct=True, load_order=[0,2,1,3], dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_chunked2_4way = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_chunked2_4way = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_chunked2_4way, tensor_in)
         dist.barrier()
         
@@ -347,8 +347,8 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_scatter_4way(data_path, idx, process_group, 0, gpu_direct=True , dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_scatter_4way_0 = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_scatter_4way_0 = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_scatter_4way_0, tensor_in)
         dist.barrier()
 
@@ -357,8 +357,8 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_scatter_4way(data_path, idx, process_group, 1, gpu_direct=True , dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_scatter_4way_1 = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_scatter_4way_1 = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_scatter_4way_1, tensor_in)
         dist.barrier()
 
@@ -367,8 +367,8 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_scatter_4way(data_path, idx, process_group, 2, gpu_direct=True , dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_scatter_4way_2 = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_scatter_4way_2 = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_scatter_4way_2, tensor_in)
         dist.barrier()
 
@@ -377,13 +377,14 @@ if __name__ == "__main__":
         for idx in range(config_dict["data"]["num_items"]):
             load_data_scatter_4way(data_path, idx, process_group, 3, gpu_direct=True , dim = [84, 721, 1440])
         end_time = time.perf_counter()
-        tensor_in = torch.tensor([end_time-start_time], dtype=torch.int64, device=device)
-        time_scatter_4way_3 = torch.zeros(world_size, dtype=torch.int64, device=device)
+        tensor_in = torch.tensor([end_time-start_time], dtype=torch.float64, device=device)
+        time_scatter_4way_3 = torch.zeros(world_size, dtype=torch.float64, device=device)
         dist.all_gather_into_tensor(time_scatter_4way_3, tensor_in)
         dist.barrier()
 
         if rank == 0:
-            print(f'RESULTS:\n Chunked with load order [0,1,2,3] : Mean {time_chunked_4way.mean.item()}, Max {time_chunked_4way.max.item()}\n Chunked with load order [0,2,1,3] : Mean {time_chunked2_4way.mean.item()}, Max {time_chunked2_4way.max.item()}\n Scatter with loaderID = 0: Mean {time_scatter_4way_0.mean.item()}, Max {time_scatter_4way_0.max.item()}\n Scatter with loaderID = 1: Mean {time_scatter_4way_1.mean.item()}, Max {time_scatter_4way_1.max.item()}\n Scatter with loaderID = 2: Mean {time_scatter_4way_2.mean.item()}, Max {time_scatter_4way_2.max.item()}\n Scatter with loaderID = 3: Mean {time_scatter_4way_3.mean.item()}, Max {time_scatter_4way_3.max.item()}\n')
+            print(f'RESULTS on rank {dist.get_rank(group=None)} (out of {time_chunked_4way.shape} elements):\n Chunked with load order [0,1,2,3] : Mean {time_chunked_4way.mean().item()}, Max {time_chunked_4way.max().item()}\n Chunked with load order [0,2,1,3] : Mean {time_chunked2_4way.mean().item()}, Max {time_chunked2_4way.max().item()}\n Scatter with loaderID = 0: Mean {time_scatter_4way_0.mean().item()}, Max {time_scatter_4way_0.max().item()}\n Scatter with loaderID = 1: Mean {time_scatter_4way_1.mean().item()}, Max {time_scatter_4way_1.max().item()}\n Scatter with loaderID = 2: Mean {time_scatter_4way_2.mean().item()}, Max {time_scatter_4way_2.max().item()}\n Scatter with loaderID = 3: Mean {time_scatter_4way_3.mean().item()}, Max {time_scatter_4way_3.max().item()}\n')
+            
 
 
     elif group_size == 8:#For LUMI
