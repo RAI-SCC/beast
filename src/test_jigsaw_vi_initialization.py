@@ -64,14 +64,35 @@ def conversion_test(device):
 
     mlp = Jigsaw.MLP.DistributedMLP(
         in_dim=16,
-        hidden_dim=16,
+        hidden_dim=32,
         out_dim=16,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
         device=device,
-        parallelism=full_dtp_group.size(),
+        n_parallel=full_dtp_group.size(),
+        model_group=full_dtp_group,
+    )
+
+    xw = Jigsaw.Linear.DistributedXW(
+        in_dim=16,
+        out_dim=32,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        device=device,
+        n_parallel=full_dtp_group.size(),
+        model_group=full_dtp_group,
+    )
+
+    xtw = Jigsaw.Linear.DistributedXTW(
+        in_dim=16,
+        out_dim=32,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        device=device,
+        n_parallel=full_dtp_group.size(),
+        model_group=full_dtp_group,
     )
 
     convert_jigsaw_vi(mlp)
+    convert_jigsaw_vi(xw)
+    convert_jigsaw_vi(xtw)
 
 
 if __name__ == "__main__":

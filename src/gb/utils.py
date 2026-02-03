@@ -266,7 +266,11 @@ def convert_jigsaw_vi(
             # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
             match class_name:
-                case "AVIDistributedConvTranspose2D":
+                case (
+                    "AVIDistributedXWT"
+                    | "AVIDistributedXWTSync"
+                    | "AVIDistributedConvTranspose2D"
+                ):
                     before_num = sum_abs_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
@@ -274,7 +278,7 @@ def convert_jigsaw_vi(
                     m.reset_variational_parameters()
                     after_num = sum_abs_parameters(m)
                     print(f"{mname}: After fix: {after_num}")
-                case "AVIDistributedXWT" | "AVIDistributedXW" | "AVIDistributedXTW":
+                case "AVIDistributedXW" | "AVIDistributedXTW":
                     before_num = sum_abs_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
                     m._old_calculate_fan_in = m._calculate_fan_in
