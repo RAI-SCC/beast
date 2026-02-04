@@ -9,45 +9,47 @@ class SWIN(torch.nn.Module):
         xlon,
         in_channels,
         embed_dim,
-        output_dim,
+        out_channels,
         heads,
         kernel_size,
-        window_size_out,
-        window_size_in,
+        window_size_outer,
+        window_size_inner,
         n_full_blocks,
-        rank,
+        dtp_rank,
         device,
+        dtp_group,
         spatial_group,
         channel_group,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
-        self.window_size_out = window_size_out
-        self.window_size_in = window_size_in
+        self.window_size_outer= window_size_outer
+        self.window_size_inner = window_size_inner
         self.kernel_size = kernel_size
         self.stride = kernel_size
         self.padding = 0
         self.dilation = 1
 
-        self.rank = rank
+        self.local_rank = dtp_rank
         self.device = device
         self.parallelism = 4
-        self.model_group = None  # world
+        self.model_group = dtp_group  
         self.spatial_group = spatial_group
         self.channel_group = channel_group
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-        self.output_dim = output_dim
+        self.heads = heads
+        self.out_channels = out_channels
 
         self.patch_embedding = Convolutions.DistributedConv2D(
-            in_channels,
-            embed_dim,  # global values
+            self.in_channels,
+            self.embed_dim,  # global values
             self.kernel_size,
             self.stride,
             self.padding,
             self.dilation,
             groups=1,
-            rank=self.rank,
+            rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
@@ -55,14 +57,14 @@ class SWIN(torch.nn.Module):
             bias=True,
         )
         self.downsample = Convolutions.DistributedConv2D(
-            embed_dim,
-            embed_dim * 2,  # global values
-            2,
-            2,
-            0,
-            1,
+            self.embed_dim,
+            self.embed_dim * 2,  # global values
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
             groups=1,
-            rank=self.rank,
+            rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
@@ -71,14 +73,14 @@ class SWIN(torch.nn.Module):
         )
 
         self.upsample = Convolutions.DistributedConvTranspose2D(
-            embed_dim * 2,
-            embed_dim,  # global values
-            2,
-            2,
-            0,
-            1,
+            self.embed_dim * 2,
+            self.embed_dim,  # global values
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
             groups=1,
-            rank=self.rank,
+            rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
@@ -88,16 +90,16 @@ class SWIN(torch.nn.Module):
 
         self.patch_recovery = Convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
-            output_dim,  # global values
+            self.out_channels,  # global values
             self.kernel_size,
             self.stride,
             self.padding,
             self.dilation,
             groups=1,
-            rank=self.rank,
+            rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
-            device=device,
+            device=self.device,
             parallelism=4,
             bias=True,
         )
@@ -109,15 +111,15 @@ class SWIN(torch.nn.Module):
                     self.embed_dim,
                     self.embed_dim,
                     self.embed_dim,
-                    6,
-                    rank,
-                    device,
+                    self.heads,
+                    self.local_rank,
+                    self.device,
                     2,
-                    self.model_group,
+                    self.dtp_group,
                     self.spatial_group,
                     self.channel_group,
-                ).to(device)
-                for i in torch.arange(12)
+                ).to(self.device)
+                for i in torch.arange(2*(self.n_full_blocks[0]+self.n_full_blocks[2]))
             ]
         )
 
@@ -127,56 +129,56 @@ class SWIN(torch.nn.Module):
                     self.embed_dim * 2,
                     self.embed_dim * 2,
                     self.embed_dim * 2,
-                    12,
-                    rank,
-                    device,
+                    self.heads,
+                    self.rank,
+                    self.device,
                     2,
-                    self.model_group,
+                    self.dtp_group,
                     self.spatial_group,
                     self.channel_group,
-                ).to(device)
-                for i in torch.arange(6)
+                ).to(self.device)
+                for i in torch.arange(2*self.n_full_blocks[1])
             ]
         )
 
-        assert window_size_out[0] % 2 == 0, "window[0] size must be divisible by 2"
-        assert window_size_out[1] % 2 == 0, "window[1] size must be divisible by 2"
-        assert window_size_in[0] % 2 == 0, "window[0] size must be divisible by 2"
-        assert window_size_in[1] % 2 == 0, "window[1] size must be divisible by 2"
+        assert window_size_outer[0] % 2 == 0, "window[0] size must be divisible by 2"
+        assert window_size_outer[1] % 2 == 0, "window[1] size must be divisible by 2"
+        assert window_size_inner[0] % 2 == 0, "window[0] size must be divisible by 2"
+        assert window_size_inner[1] % 2 == 0, "window[1] size must be divisible by 2"
 
         self.roll_out = Linear.DistributedRoll(
-            shifts=(window_size_out[0] // 2, window_size_out[1] // 2),
+            shifts=(window_size_outer[0] // 2, window_size_outer[1] // 2),
             dims=(-3, -2),
-            rank=rank,
-            device=device,
+            rank=self.rank,
+            device=self.device,
             parallelism=4,
-            spatial_group=spatial_group,
+            spatial_group=self.spatial_group,
         )
 
         self.unroll_out = Linear.DistributedRoll(
-            shifts=(-window_size_out[0] // 2, -window_size_out[1] // 2),
+            shifts=(-window_size_outer[0] // 2, -window_size_outer[1] // 2),
             dims=(-3, -2),
-            rank=rank,
-            device=device,
+            rank=self.rank,
+            device=self.device,
             parallelism=4,
-            spatial_group=spatial_group,
+            spatial_group=self.spatial_group,
         )
         self.roll_in = Linear.DistributedRoll(
-            shifts=(window_size_in[0] // 2, window_size_in[1] // 2),
+            shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
             dims=(-3, -2),
-            rank=rank,
-            device=device,
+            rank=self.rank,
+            device=self.device,
             parallelism=4,
-            spatial_group=spatial_group,
+            spatial_group=self.spatial_group,
         )
 
         self.unroll_in = Linear.DistributedRoll(
-            shifts=(-window_size_in[0] // 2, -window_size_in[1] // 2),
+            shifts=(-window_size_inner[0] // 2, -window_size_inner[1] // 2),
             dims=(-3, -2),
-            rank=rank,
-            device=device,
+            rank=self.rank,
+            device=self.device,
             parallelism=4,
-            spatial_group=spatial_group,
+            spatial_group=self.spatial_group,
         )
 
     def _get_windows(self, x, window_size):
@@ -217,18 +219,18 @@ class SWIN(torch.nn.Module):
         x = x.view(B, xlat, xlon, channels)
 
         # attention
-        for i in range(3):
-            x = self._get_windows(x, self.window_size_out)
+        for i in range(self.n_full_blocks[0]):
+            x = self._get_windows(x, self.window_size_outer)
             x = self.transformer[i * 2](x, mask=None)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_out)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
             x = self.roll_out(x)
-            x = self._get_windows(x, self.window_size_out)
-            mask = self._gen_mask_(xlat, xlon, self.window_size_out).unsqueeze(
+            x = self._get_windows(x, self.window_size_outer)
+            mask = self._gen_mask_(xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
             mask.requires_grad_(False)
             x = self.transformer[i * 2 + 1](x, mask)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_out)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
             x = self.unroll_out(x)  # [B, lat, lon, channels]
 
         x_res2 = x.clone()
@@ -239,18 +241,18 @@ class SWIN(torch.nn.Module):
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
 
-        for i in range(2):
-            x = self._get_windows(x, self.window_size_in)
+        for i in range(self.n_full_blocks[1]):
+            x = self._get_windows(x, self.window_size_inner)
             x = self.transformer_down[i * 2](x, mask=None)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_in)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_inner)
             x = self.roll_in(x)
-            x = self._get_windows(x, self.window_size_in)
-            mask = self._gen_mask_(xlat, xlon, self.window_size_in).unsqueeze(
+            x = self._get_windows(x, self.window_size_inner)
+            mask = self._gen_mask_(xlat, xlon, self.window_size_inner).unsqueeze(
                 1
             )  # unsqueeze for head dimension
             mask.requires_grad_(False)
             x = self.transformer_down[i * 2 + 1](x, mask)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_in)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_inner)
             x = self.unroll_in(x)  # [B, lat, lon, channels]
         x = x.permute(0, 3, 1, 2).contiguous()
         x = self.upsample(x)
@@ -259,19 +261,19 @@ class SWIN(torch.nn.Module):
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x + x_res2
 
-        for i in range(3):
-            x = self._get_windows(x, self.window_size_out)
-            x = self.transformer[i * 2 + 6](x, mask=None)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_out)
+        for i in range(self.n_full_blocks[2]):
+            x = self._get_windows(x, self.window_size_outer)
+            x = self.transformer[i * 2 + 2 * self.n_full_blocks[0]](x, mask=None)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
 
             x = self.roll_out(x)
-            x = self._get_windows(x, self.window_size_out)
-            mask = self._gen_mask_(xlat, xlon, self.window_size_out).unsqueeze(
+            x = self._get_windows(x, self.window_size_outer)
+            mask = self._gen_mask_(xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
             mask.requires_grad_(False)
-            x = self.transformer[i * 2 + 7](x, mask)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_out)
+            x = self.transformer[i * 2 + 2 * self.n_full_blocks[0] + 1](x, mask)
+            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
             x = self.unroll_out(x)  # [B, lat, lon, channels]
 
         B, xlat, xlon, channels = x.shape
