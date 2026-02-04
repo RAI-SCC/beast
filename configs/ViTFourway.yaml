@@ -51,7 +51,7 @@ training:
   lr_embedding: 0.00002
   lr_recovery: 0.00002
   n_samples: 3
-  n_epochs: 10
+  n_epochs: 50
   lr_min: 0.000001
   surface_weights: [6.0, 3.08, 3.08, 4.0] # MSLP, U10, V10, T2M
   pressure_weights: [3.0, 0.6, 1.5, 1.0, 1.0] # variables: Z, Q, T, U, V

@@ -1,0 +1,816 @@
+Slurm variables:
+  SLURM_JOB_ID:         3826903
+  SLURM_PARTITION:      dev_accelerated
+  SLURM_NTASKS:         8
+  SLURM_NNODES:         2
+  SLURM_TASKS_PER_NODE: 4(x2)
+  SLURM_NODELIST:       hkn[0402-0403]
+/var/spool/slurmd/job3826903/slurm_script systems/hk_container.sh
+System Env File: hk_container.sh
+Sourcing system environment...
+Purging modules
+Running cmd:
+  srun --cpu-bind=v apptainer exec --nv --no-home --bind /scratch --bind /scratch/slurm_tmpdir/job_3826903 --bind /home/hk-project-epais/qb6846/GordonBell/GrandBellbeast:/mnt --bind /hkfs/work/workspace/scratch/ke4365-era5_dataset/:/hkfs/work/workspace/scratch/ke4365-era5_dataset/ --bind /home/hk-project-epais/qb6846/GordonBell/GrandBellbeast/src/libs --cwd /mnt /home/hk-project-epais/qb6846/containers/gb_pytorch25.06 python -u /mnt/src/test_exact_up_dp_SWIN.py --config_file /mnt/configs/up_dp_SWIN_config.yaml
+
+GpuFreq=control_disabled
+GpuFreq=control_disabled
+cpu-bind=MASK - hkn0403, task  4  0 [2574619]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0403, task  5  1 [2574620]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0403, task  6  2 [2574621]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0402, task  0  0 [465119]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0402, task  1  1 [465120]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0402, task  2  2 [465121]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0403, task  7  3 [2574622]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+cpu-bind=MASK - hkn0402, task  3  3 [465122]: mask 0x1ffffc00007ffff00001ffffc00007ffff set
+Rank 3: world_size 8, slurm_localid 3
+Rank 0: world_size 8, slurm_localid 0
+Rank 2: world_size 8, slurm_localid 2
+Rank 1: world_size 8, slurm_localid 1
+Rank 4: world_size 8, slurm_localid 0
+Rank 5: world_size 8, slurm_localid 1
+Rank 6: world_size 8, slurm_localid 2
+Rank 7: world_size 8, slurm_localid 3
+Rank 2: CUDA Available = True
+Rank 0: CUDA Available = True
+Rank 1: CUDA Available = True
+Rank 2: CUDA Device count = 4
+Rank 3: CUDA Available = True
+Rank 1: CUDA Device count = 4
+Rank 0: CUDA Device count = 4
+Rank 3: CUDA Device count = 4
+Rank 6: CUDA Available = True
+Rank 7: CUDA Available = True
+Rank 5: CUDA Available = True
+Rank 4: CUDA Available = True
+Rank 6: CUDA Device count = 4
+Rank 7: CUDA Device count = 4
+Rank 5: CUDA Device count = 4
+Rank 4: CUDA Device count = 4
+Rank 2/8: Process group initialized with torch rank 2 and torch world size 8.
+Rank 6/8: Process group initialized with torch rank 6 and torch world size 8.
+Rank 3/8: Process group initialized with torch rank 3 and torch world size 8.
+Rank 5/8: Process group initialized with torch rank 5 and torch world size 8.
+Rank 7/8: Process group initialized with torch rank 7 and torch world size 8.
+Rank 1/8: Process group initialized with torch rank 1 and torch world size 8.
+Rank 4/8: Process group initialized with torch rank 4 and torch world size 8.
+Rank 0/8: Process group initialized with torch rank 0 and torch world size 8.
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Train data path: /hkfs/work/workspace/scratch/ke4365-era5_dataset/1_5_degree_test_data/weather_test_data.zarr
+Constant masks dir: /mnt/data/constant_masks
+Normalization dir: /mnt/data/normalization
+Rank 2 using device cuda:2
+Rank 0 using device cuda:0
+Rank 1 using device cuda:1
+Rank 3 using device cuda:3
+Rank 4 using device cuda:0
+Rank 6 using device cuda:2
+Rank 7 using device cuda:3
+Rank 5 using device cuda:1
+model has 250498284 parameters
+Using float32
+Epoch: 001/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 364803092.872521
+/usr/local/lib/python3.12/dist-packages/torch/_tensor.py:1668: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/native/Scalar.cpp:22.)
+  ret = func(*args, **kwargs)
+Epoch: 001/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 363436537.168025
+Epoch: 001/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 364416894.097508
+Epoch: 001/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 361630132.976491
+Epoch: 001/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 364117959.629384
+Epoch: 001/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 364287787.960751
+Epoch: 001/100 Elapsed training time: 0.086602 [min] Averaged loss 363782067.450780
+Epoch: 002/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 363487256.957803
+Epoch: 002/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 364706072.185464
+Epoch: 002/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 362127367.611321
+Epoch: 002/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 364105530.939900
+Epoch: 002/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362638194.936717
+Epoch: 002/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 364416684.447349
+Epoch: 002/100 Elapsed training time: 0.060625 [min] Averaged loss 363580184.513092
+Epoch: 003/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 363755785.091467
+Epoch: 003/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 362975154.368425
+Epoch: 003/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 361498397.592709
+Epoch: 003/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 362836051.038383
+Epoch: 003/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362266991.861770
+Epoch: 003/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 363464271.316768
+Epoch: 003/100 Elapsed training time: 0.061520 [min] Averaged loss 362799441.878254
+Epoch: 004/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 362809347.180869
+Epoch: 004/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 359679507.894621
+Epoch: 004/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 363116225.880315
+Epoch: 004/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 360406941.487393
+Epoch: 004/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362187843.092164
+Epoch: 004/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360137548.008521
+Epoch: 004/100 Elapsed training time: 0.059604 [min] Averaged loss 361389568.923980
+Epoch: 005/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 361476592.155685
+Epoch: 005/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 362184381.055403
+Epoch: 005/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 363619842.496793
+Epoch: 005/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 363845379.318104
+Epoch: 005/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362002101.766797
+Epoch: 005/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360894049.585335
+Epoch: 005/100 Elapsed training time: 0.059873 [min] Averaged loss 362337057.729686
+Epoch: 006/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 364659160.161297
+Epoch: 006/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 363382319.690033
+Epoch: 006/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 361472816.035844
+Epoch: 006/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 362513723.748328
+Epoch: 006/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362333641.045216
+Epoch: 006/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360725387.155134
+Epoch: 006/100 Elapsed training time: 0.060452 [min] Averaged loss 362514507.972642
+Epoch: 007/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 363338325.386817
+Epoch: 007/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 362500630.488634
+Epoch: 007/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 361163635.971527
+Epoch: 007/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 364655070.318337
+Epoch: 007/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 361491569.689979
+Epoch: 007/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 364698113.947794
+Epoch: 007/100 Elapsed training time: 0.060090 [min] Averaged loss 362974557.633848
+Epoch: 008/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 361023084.392723
+Epoch: 008/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 361735890.742422
+Epoch: 008/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 363139108.428867
+Epoch: 008/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 361755796.719491
+Epoch: 008/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358609019.932902
+Epoch: 008/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 361837866.324508
+Epoch: 008/100 Elapsed training time: 0.059693 [min] Averaged loss 361350127.756819
+Epoch: 009/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 362590492.158043
+Epoch: 009/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 362731432.189562
+Epoch: 009/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 362063282.346060
+Epoch: 009/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 361721315.839383
+Epoch: 009/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 362586714.094774
+Epoch: 009/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 362990678.550514
+Epoch: 009/100 Elapsed training time: 0.061207 [min] Averaged loss 362447319.196389
+Epoch: 010/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 359653111.169085
+Epoch: 010/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 360042335.796016
+Epoch: 010/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 362441927.147225
+Epoch: 010/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 359089109.123261
+Epoch: 010/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 363970018.407907
+Epoch: 010/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360669494.317401
+Epoch: 010/100 Elapsed training time: 0.059526 [min] Averaged loss 360977665.993483
+Epoch: 011/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 361143830.409217
+Epoch: 011/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 360007175.109506
+Epoch: 011/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 360344149.213224
+Epoch: 011/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 359751369.921918
+Epoch: 011/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 361636586.982643
+Epoch: 011/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360080280.063924
+Epoch: 011/100 Elapsed training time: 0.059014 [min] Averaged loss 360493898.616739
+Epoch: 012/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 359416430.279369
+Epoch: 012/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 361513319.412272
+Epoch: 012/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 361922430.796934
+Epoch: 012/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 360881108.031049
+Epoch: 012/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 361466763.361900
+Epoch: 012/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356965258.426341
+Epoch: 012/100 Elapsed training time: 0.060333 [min] Averaged loss 360360885.051311
+Epoch: 013/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 361387664.861637
+Epoch: 013/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357861264.817140
+Epoch: 013/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 358868185.064711
+Epoch: 013/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 360092209.291342
+Epoch: 013/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 360335704.255070
+Epoch: 013/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360411102.322878
+Epoch: 013/100 Elapsed training time: 0.060079 [min] Averaged loss 359826021.768796
+Epoch: 014/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 359964345.239831
+Epoch: 014/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 358349649.704899
+Epoch: 014/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 360121792.881466
+Epoch: 014/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 361271694.095000
+Epoch: 014/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 360246876.508358
+Epoch: 014/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360395145.853099
+Epoch: 014/100 Elapsed training time: 0.059396 [min] Averaged loss 360058250.713776
+Epoch: 015/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 360070738.690500
+Epoch: 015/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 360963424.714070
+Epoch: 015/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 359774336.838729
+Epoch: 015/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358775856.105959
+Epoch: 015/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358807073.851847
+Epoch: 015/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 358867688.829449
+Epoch: 015/100 Elapsed training time: 0.059267 [min] Averaged loss 359543186.505092
+Epoch: 016/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 361180439.249096
+Epoch: 016/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357416263.421094
+Epoch: 016/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 359129225.565766
+Epoch: 016/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 360177655.998486
+Epoch: 016/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 360366163.635082
+Epoch: 016/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 360824825.739568
+Epoch: 016/100 Elapsed training time: 0.060532 [min] Averaged loss 359849095.601515
+Epoch: 017/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 358165952.591898
+Epoch: 017/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 360034571.051817
+Epoch: 017/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 358366908.112763
+Epoch: 017/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 360534222.917186
+Epoch: 017/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358234354.894026
+Epoch: 017/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 357155364.591125
+Epoch: 017/100 Elapsed training time: 0.059380 [min] Averaged loss 358748562.359803
+Epoch: 018/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 358045342.587374
+Epoch: 018/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 359685893.770263
+Epoch: 018/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 360727498.078115
+Epoch: 018/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358659311.725879
+Epoch: 018/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358858413.826451
+Epoch: 018/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 357854663.486799
+Epoch: 018/100 Elapsed training time: 0.060285 [min] Averaged loss 358971853.912480
+Epoch: 019/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 359180489.260225
+Epoch: 019/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357128395.908398
+Epoch: 019/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 358262127.181426
+Epoch: 019/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358493039.567029
+Epoch: 019/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358470574.129662
+Epoch: 019/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 358413662.150072
+Epoch: 019/100 Elapsed training time: 0.060189 [min] Averaged loss 358324714.699469
+Epoch: 020/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357054205.135344
+Epoch: 020/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 359348548.189975
+Epoch: 020/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 358076328.376901
+Epoch: 020/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358545324.976921
+Epoch: 020/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 356777269.474936
+Epoch: 020/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 358288122.977026
+Epoch: 020/100 Elapsed training time: 0.060012 [min] Averaged loss 358014966.521851
+Epoch: 021/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 359014912.163888
+Epoch: 021/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 359850847.391604
+Epoch: 021/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 359276556.707799
+Epoch: 021/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356616476.704655
+Epoch: 021/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 356972868.043757
+Epoch: 021/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 358446240.301656
+Epoch: 021/100 Elapsed training time: 0.060519 [min] Averaged loss 358362983.552227
+Epoch: 022/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 356537878.981295
+Epoch: 022/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357584589.921200
+Epoch: 022/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 357784563.730055
+Epoch: 022/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358228868.306318
+Epoch: 022/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 356866695.605674
+Epoch: 022/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356875360.298219
+Epoch: 022/100 Elapsed training time: 0.059083 [min] Averaged loss 357312992.807127
+Epoch: 023/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 358955160.240933
+Epoch: 023/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 358263659.491967
+Epoch: 023/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 357058518.627005
+Epoch: 023/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356448300.605257
+Epoch: 023/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 357674407.531650
+Epoch: 023/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 359873141.269490
+Epoch: 023/100 Elapsed training time: 0.059943 [min] Averaged loss 358045531.294384
+Epoch: 024/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357490731.261590
+Epoch: 024/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355456366.938326
+Epoch: 024/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 358065963.255986
+Epoch: 024/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355857447.610059
+Epoch: 024/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 357301311.702461
+Epoch: 024/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356836818.846246
+Epoch: 024/100 Elapsed training time: 0.059091 [min] Averaged loss 356834773.269111
+Epoch: 025/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357673154.285702
+Epoch: 025/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 356817537.165104
+Epoch: 025/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 359422692.718576
+Epoch: 025/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 359271269.565807
+Epoch: 025/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 357630642.218177
+Epoch: 025/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356140942.494037
+Epoch: 025/100 Elapsed training time: 0.060212 [min] Averaged loss 357826039.741234
+Epoch: 026/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357540808.007143
+Epoch: 026/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 358378447.039538
+Epoch: 026/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356959486.954506
+Epoch: 026/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354981052.069728
+Epoch: 026/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 358573214.016018
+Epoch: 026/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 357729098.525728
+Epoch: 026/100 Elapsed training time: 0.061181 [min] Averaged loss 357360351.102110
+Epoch: 027/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 356408336.758382
+Epoch: 027/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357473784.299779
+Epoch: 027/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356495568.121496
+Epoch: 027/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356526583.358182
+Epoch: 027/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 356619473.859292
+Epoch: 027/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356951636.761857
+Epoch: 027/100 Elapsed training time: 0.059290 [min] Averaged loss 356745897.193165
+Epoch: 028/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357530093.430287
+Epoch: 028/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353832907.953987
+Epoch: 028/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356982129.867186
+Epoch: 028/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 357704803.698214
+Epoch: 028/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355920599.247140
+Epoch: 028/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356848496.573383
+Epoch: 028/100 Elapsed training time: 0.059758 [min] Averaged loss 356469838.461700
+Epoch: 029/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357673365.883670
+Epoch: 029/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 358207574.332467
+Epoch: 029/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 357013520.315837
+Epoch: 029/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 357793658.004937
+Epoch: 029/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355699647.037358
+Epoch: 029/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356783029.874623
+Epoch: 029/100 Elapsed training time: 0.059110 [min] Averaged loss 357195132.574815
+Epoch: 030/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357404684.333594
+Epoch: 030/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355395248.103945
+Epoch: 030/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355652995.344696
+Epoch: 030/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356172130.141243
+Epoch: 030/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355905291.282327
+Epoch: 030/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 357267909.388218
+Epoch: 030/100 Elapsed training time: 0.059106 [min] Averaged loss 356299709.765671
+Epoch: 031/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357372654.614070
+Epoch: 031/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 356411382.716835
+Epoch: 031/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355052310.923561
+Epoch: 031/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355801984.273912
+Epoch: 031/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 356679314.962195
+Epoch: 031/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356282247.313131
+Epoch: 031/100 Elapsed training time: 0.060351 [min] Averaged loss 356266649.133951
+Epoch: 032/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 357753053.497630
+Epoch: 032/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355966551.797143
+Epoch: 032/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354939530.360763
+Epoch: 032/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 358848239.870094
+Epoch: 032/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355103509.620786
+Epoch: 032/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355265911.930204
+Epoch: 032/100 Elapsed training time: 0.060488 [min] Averaged loss 356312799.512770
+Epoch: 033/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354393378.443179
+Epoch: 033/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355390376.264457
+Epoch: 033/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356027827.963728
+Epoch: 033/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355600295.310167
+Epoch: 033/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355329001.064902
+Epoch: 033/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355426645.587806
+Epoch: 033/100 Elapsed training time: 0.059350 [min] Averaged loss 355361254.105706
+Epoch: 034/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355815399.457251
+Epoch: 034/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354616701.971121
+Epoch: 034/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355051563.514390
+Epoch: 034/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356777064.368269
+Epoch: 034/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355419935.142788
+Epoch: 034/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 354472478.441670
+Epoch: 034/100 Elapsed training time: 0.059372 [min] Averaged loss 355358857.149248
+Epoch: 035/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355778814.688824
+Epoch: 035/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354600950.799228
+Epoch: 035/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354681470.246285
+Epoch: 035/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355619468.643120
+Epoch: 035/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 357101556.814819
+Epoch: 035/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353417668.170986
+Epoch: 035/100 Elapsed training time: 0.060486 [min] Averaged loss 355199988.227210
+Epoch: 036/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355752113.092180
+Epoch: 036/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355032772.903827
+Epoch: 036/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354977792.407275
+Epoch: 036/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354996642.612841
+Epoch: 036/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354287451.587845
+Epoch: 036/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 356826154.216112
+Epoch: 036/100 Elapsed training time: 0.059277 [min] Averaged loss 355312154.470013
+Epoch: 037/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355779925.518250
+Epoch: 037/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354177090.873196
+Epoch: 037/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355915555.048626
+Epoch: 037/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 357106279.209627
+Epoch: 037/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353110555.834832
+Epoch: 037/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355986203.975591
+Epoch: 037/100 Elapsed training time: 0.059200 [min] Averaged loss 355345935.076687
+Epoch: 038/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355705531.489848
+Epoch: 038/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355061878.755028
+Epoch: 038/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355894645.256969
+Epoch: 038/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354969266.017122
+Epoch: 038/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353897186.989368
+Epoch: 038/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355664350.512889
+Epoch: 038/100 Elapsed training time: 0.059143 [min] Averaged loss 355198809.836871
+Epoch: 039/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355678184.413149
+Epoch: 039/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355057072.995014
+Epoch: 039/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354565402.274481
+Epoch: 039/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354637292.210586
+Epoch: 039/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355123140.976790
+Epoch: 039/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 357159608.353686
+Epoch: 039/100 Elapsed training time: 0.059219 [min] Averaged loss 355370116.870618
+Epoch: 040/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355990040.314150
+Epoch: 040/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 355067983.623664
+Epoch: 040/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354281548.525590
+Epoch: 040/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354326594.018172
+Epoch: 040/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355938286.525798
+Epoch: 040/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353861392.304119
+Epoch: 040/100 Elapsed training time: 0.059061 [min] Averaged loss 354910974.218582
+Epoch: 041/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 356249347.094639
+Epoch: 041/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354190534.885257
+Epoch: 041/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356985515.043301
+Epoch: 041/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351775521.537920
+Epoch: 041/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354063687.633053
+Epoch: 041/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353555996.339074
+Epoch: 041/100 Elapsed training time: 0.059166 [min] Averaged loss 354470100.422207
+Epoch: 042/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354273948.578337
+Epoch: 042/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354317105.776290
+Epoch: 042/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353077768.431994
+Epoch: 042/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355039853.852438
+Epoch: 042/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354376545.851498
+Epoch: 042/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 354942034.017100
+Epoch: 042/100 Elapsed training time: 0.061526 [min] Averaged loss 354337876.084609
+Epoch: 043/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353139718.766646
+Epoch: 043/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353480936.513180
+Epoch: 043/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355856952.944349
+Epoch: 043/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 356261553.525543
+Epoch: 043/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350900109.626865
+Epoch: 043/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 354600241.104478
+Epoch: 043/100 Elapsed training time: 0.059238 [min] Averaged loss 354039918.746843
+Epoch: 044/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355364102.974593
+Epoch: 044/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 357221047.807324
+Epoch: 044/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 356539634.219388
+Epoch: 044/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354247491.604069
+Epoch: 044/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355510071.635210
+Epoch: 044/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 354192044.851057
+Epoch: 044/100 Elapsed training time: 0.060005 [min] Averaged loss 355512398.848607
+Epoch: 045/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 355091957.383357
+Epoch: 045/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353930494.487808
+Epoch: 045/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355715586.652176
+Epoch: 045/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351929058.176874
+Epoch: 045/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353736398.769529
+Epoch: 045/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355089377.160368
+Epoch: 045/100 Elapsed training time: 0.059094 [min] Averaged loss 354248812.105018
+Epoch: 046/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353026911.139428
+Epoch: 046/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351981158.552280
+Epoch: 046/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354679683.540091
+Epoch: 046/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352212598.923412
+Epoch: 046/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354021585.248057
+Epoch: 046/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353080067.733073
+Epoch: 046/100 Elapsed training time: 0.059219 [min] Averaged loss 353167000.856057
+Epoch: 047/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354292016.343582
+Epoch: 047/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354418808.308133
+Epoch: 047/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353165666.096296
+Epoch: 047/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353514253.476571
+Epoch: 047/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352661567.902042
+Epoch: 047/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355293406.637004
+Epoch: 047/100 Elapsed training time: 0.063715 [min] Averaged loss 353890953.127272
+Epoch: 048/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354040348.549983
+Epoch: 048/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354483418.295896
+Epoch: 048/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353926899.959405
+Epoch: 048/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353270951.105269
+Epoch: 048/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352155122.194629
+Epoch: 048/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 355329252.262214
+Epoch: 048/100 Elapsed training time: 0.058653 [min] Averaged loss 353867665.394566
+Epoch: 049/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353927440.228087
+Epoch: 049/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354706616.809862
+Epoch: 049/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354267258.704741
+Epoch: 049/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353259794.415487
+Epoch: 049/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353234078.277559
+Epoch: 049/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353232513.443908
+Epoch: 049/100 Elapsed training time: 0.059141 [min] Averaged loss 353771283.646607
+Epoch: 050/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353441918.606467
+Epoch: 050/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352229676.808299
+Epoch: 050/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353598450.990179
+Epoch: 050/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354410572.138386
+Epoch: 050/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351120827.625727
+Epoch: 050/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352761886.654834
+Epoch: 050/100 Elapsed training time: 0.059363 [min] Averaged loss 352927222.137315
+Epoch: 051/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354274368.069089
+Epoch: 051/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354666214.255349
+Epoch: 051/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353421122.527751
+Epoch: 051/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353261111.602545
+Epoch: 051/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351672521.932142
+Epoch: 051/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351352211.444673
+Epoch: 051/100 Elapsed training time: 0.059340 [min] Averaged loss 353107924.971925
+Epoch: 052/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 356859036.780830
+Epoch: 052/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353091841.509343
+Epoch: 052/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354062993.140466
+Epoch: 052/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352948125.421451
+Epoch: 052/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355348365.229778
+Epoch: 052/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353670478.675347
+Epoch: 052/100 Elapsed training time: 0.059179 [min] Averaged loss 354330140.126203
+Epoch: 053/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353048456.875482
+Epoch: 053/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351339828.381954
+Epoch: 053/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354201320.064344
+Epoch: 053/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353230869.874095
+Epoch: 053/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351884366.353468
+Epoch: 053/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353623239.367992
+Epoch: 053/100 Elapsed training time: 0.059214 [min] Averaged loss 352888013.486223
+Epoch: 054/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353472205.810015
+Epoch: 054/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353388300.162315
+Epoch: 054/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354898877.356961
+Epoch: 054/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 354368935.587628
+Epoch: 054/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 355038656.999225
+Epoch: 054/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 354210600.870313
+Epoch: 054/100 Elapsed training time: 0.059275 [min] Averaged loss 354229596.131076
+Epoch: 055/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353747500.771967
+Epoch: 055/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354913821.851337
+Epoch: 055/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352794560.927243
+Epoch: 055/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351958058.581841
+Epoch: 055/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354182640.298097
+Epoch: 055/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352333163.972810
+Epoch: 055/100 Elapsed training time: 0.059575 [min] Averaged loss 353321624.400549
+Epoch: 056/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351627242.932976
+Epoch: 056/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352765247.270854
+Epoch: 056/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354324987.017748
+Epoch: 056/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353694618.137887
+Epoch: 056/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353866211.475810
+Epoch: 056/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352387078.058293
+Epoch: 056/100 Elapsed training time: 0.059360 [min] Averaged loss 353110897.482261
+Epoch: 057/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352085689.265987
+Epoch: 057/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352154599.743769
+Epoch: 057/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353522597.876217
+Epoch: 057/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351915064.811889
+Epoch: 057/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354065988.738120
+Epoch: 057/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350970486.741485
+Epoch: 057/100 Elapsed training time: 0.061042 [min] Averaged loss 352452404.529578
+Epoch: 058/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354336678.574212
+Epoch: 058/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352595534.204274
+Epoch: 058/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352009162.735442
+Epoch: 058/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353455685.621321
+Epoch: 058/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353223142.626496
+Epoch: 058/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352641708.508395
+Epoch: 058/100 Elapsed training time: 0.059875 [min] Averaged loss 353043652.045023
+Epoch: 059/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352864945.658767
+Epoch: 059/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351962492.859172
+Epoch: 059/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353905289.345867
+Epoch: 059/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 355995150.363253
+Epoch: 059/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351976615.575767
+Epoch: 059/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353102169.845651
+Epoch: 059/100 Elapsed training time: 0.059526 [min] Averaged loss 353301110.608079
+Epoch: 060/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352492097.950601
+Epoch: 060/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352482462.017368
+Epoch: 060/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354367170.190298
+Epoch: 060/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351765245.133332
+Epoch: 060/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352555673.243912
+Epoch: 060/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351617302.448177
+Epoch: 060/100 Elapsed training time: 0.059905 [min] Averaged loss 352546658.497281
+Epoch: 061/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352939760.776140
+Epoch: 061/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353092965.484157
+Epoch: 061/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 355008120.016364
+Epoch: 061/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352097684.258285
+Epoch: 061/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353005578.332221
+Epoch: 061/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353956234.448604
+Epoch: 061/100 Elapsed training time: 0.060500 [min] Averaged loss 353350057.219295
+Epoch: 062/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353363255.168834
+Epoch: 062/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351893300.888923
+Epoch: 062/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353453927.523905
+Epoch: 062/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351665139.359921
+Epoch: 062/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352566293.915890
+Epoch: 062/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350974600.540254
+Epoch: 062/100 Elapsed training time: 0.060933 [min] Averaged loss 352319419.566288
+Epoch: 063/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353465388.991190
+Epoch: 063/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352563315.687316
+Epoch: 063/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353448366.593917
+Epoch: 063/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351596812.736505
+Epoch: 063/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351930793.383214
+Epoch: 063/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353803958.387500
+Epoch: 063/100 Elapsed training time: 0.059594 [min] Averaged loss 352801439.296607
+Epoch: 064/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352637433.018037
+Epoch: 064/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351303507.048113
+Epoch: 064/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351813758.026360
+Epoch: 064/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 353513220.896748
+Epoch: 064/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352419166.420272
+Epoch: 064/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352717398.995058
+Epoch: 064/100 Elapsed training time: 0.059469 [min] Averaged loss 352400747.400765
+Epoch: 065/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354251645.318053
+Epoch: 065/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350451222.354626
+Epoch: 065/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 354088075.549096
+Epoch: 065/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352330356.403928
+Epoch: 065/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 354972714.758557
+Epoch: 065/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351544747.515987
+Epoch: 065/100 Elapsed training time: 0.059603 [min] Averaged loss 352939793.650041
+Epoch: 066/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353488036.831088
+Epoch: 066/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352663154.464956
+Epoch: 066/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352537491.309472
+Epoch: 066/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352220196.380981
+Epoch: 066/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352866104.791983
+Epoch: 066/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353840562.771791
+Epoch: 066/100 Elapsed training time: 0.059839 [min] Averaged loss 352935924.425045
+Epoch: 067/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351223289.242169
+Epoch: 067/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351943522.646102
+Epoch: 067/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352708800.332764
+Epoch: 067/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350382900.746201
+Epoch: 067/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351347661.203588
+Epoch: 067/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351171843.030201
+Epoch: 067/100 Elapsed training time: 0.059594 [min] Averaged loss 351463002.866837
+Epoch: 068/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352483707.906976
+Epoch: 068/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 356137679.053475
+Epoch: 068/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351728635.390935
+Epoch: 068/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 349840063.866676
+Epoch: 068/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350515334.377593
+Epoch: 068/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351486983.626272
+Epoch: 068/100 Elapsed training time: 0.059745 [min] Averaged loss 352032067.370321
+Epoch: 069/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351917035.822674
+Epoch: 069/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351902800.762496
+Epoch: 069/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351523802.562366
+Epoch: 069/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352180693.539681
+Epoch: 069/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351601669.854790
+Epoch: 069/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 349236607.341934
+Epoch: 069/100 Elapsed training time: 0.060817 [min] Averaged loss 351393768.313990
+Epoch: 070/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352250694.074535
+Epoch: 070/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352925358.137484
+Epoch: 070/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351941689.338856
+Epoch: 070/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351549532.650656
+Epoch: 070/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352265748.640292
+Epoch: 070/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351573654.530747
+Epoch: 070/100 Elapsed training time: 0.059498 [min] Averaged loss 352084446.228762
+Epoch: 071/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 349556372.203269
+Epoch: 071/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352412912.448763
+Epoch: 071/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353151350.488705
+Epoch: 071/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352687706.337192
+Epoch: 071/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351895559.310343
+Epoch: 071/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353176942.535219
+Epoch: 071/100 Elapsed training time: 0.060399 [min] Averaged loss 352146807.220582
+Epoch: 072/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 349363381.000115
+Epoch: 072/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353774462.247977
+Epoch: 072/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352480422.109691
+Epoch: 072/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352528715.624272
+Epoch: 072/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351724815.520075
+Epoch: 072/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350915531.596903
+Epoch: 072/100 Elapsed training time: 0.059798 [min] Averaged loss 351797888.016506
+Epoch: 073/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 350230269.304345
+Epoch: 073/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352363878.268367
+Epoch: 073/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350400457.154702
+Epoch: 073/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351383675.588401
+Epoch: 073/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351620428.975279
+Epoch: 073/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351613148.514993
+Epoch: 073/100 Elapsed training time: 0.059665 [min] Averaged loss 351268642.967681
+Epoch: 074/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353116558.609833
+Epoch: 074/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352442071.722613
+Epoch: 074/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352068472.181076
+Epoch: 074/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350747433.821734
+Epoch: 074/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351602018.428993
+Epoch: 074/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353884176.701052
+Epoch: 074/100 Elapsed training time: 0.060694 [min] Averaged loss 352310121.910883
+Epoch: 075/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351696375.172536
+Epoch: 075/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351540640.753336
+Epoch: 075/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351758280.294977
+Epoch: 075/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350804428.565928
+Epoch: 075/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353004659.153008
+Epoch: 075/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352873537.552348
+Epoch: 075/100 Elapsed training time: 0.060655 [min] Averaged loss 351946320.248689
+Epoch: 076/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 354024763.118931
+Epoch: 076/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351936398.055066
+Epoch: 076/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350575129.368038
+Epoch: 076/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351428689.804775
+Epoch: 076/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351893516.489336
+Epoch: 076/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 349588300.023108
+Epoch: 076/100 Elapsed training time: 0.059548 [min] Averaged loss 351574466.143209
+Epoch: 077/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351233270.927089
+Epoch: 077/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352665093.524356
+Epoch: 077/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350012221.452129
+Epoch: 077/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352265054.208753
+Epoch: 077/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351643955.147004
+Epoch: 077/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350745076.373929
+Epoch: 077/100 Elapsed training time: 0.060796 [min] Averaged loss 351427445.272210
+Epoch: 078/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353292027.885473
+Epoch: 078/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353076396.457869
+Epoch: 078/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352043287.421437
+Epoch: 078/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352124430.143555
+Epoch: 078/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 349490747.698460
+Epoch: 078/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351470181.829407
+Epoch: 078/100 Elapsed training time: 0.061111 [min] Averaged loss 351916178.572700
+Epoch: 079/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351585441.506960
+Epoch: 079/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352890470.165642
+Epoch: 079/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351409886.898940
+Epoch: 079/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352713018.862517
+Epoch: 079/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353253164.994036
+Epoch: 079/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351617145.644610
+Epoch: 079/100 Elapsed training time: 0.059614 [min] Averaged loss 352244854.678784
+Epoch: 080/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351978437.214977
+Epoch: 080/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350632130.068469
+Epoch: 080/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351909946.932761
+Epoch: 080/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350991818.327768
+Epoch: 080/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351987161.812062
+Epoch: 080/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350278788.321769
+Epoch: 080/100 Elapsed training time: 0.061173 [min] Averaged loss 351296380.446301
+Epoch: 081/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 350554474.719736
+Epoch: 081/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351206297.756505
+Epoch: 081/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353260434.259352
+Epoch: 081/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352702937.803029
+Epoch: 081/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350088583.301828
+Epoch: 081/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352200609.648344
+Epoch: 081/100 Elapsed training time: 0.061265 [min] Averaged loss 351668889.581466
+Epoch: 082/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352367865.270899
+Epoch: 082/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350207320.259002
+Epoch: 082/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353580170.957985
+Epoch: 082/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351895774.361373
+Epoch: 082/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350223923.459700
+Epoch: 082/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352715268.870405
+Epoch: 082/100 Elapsed training time: 0.060722 [min] Averaged loss 351831720.529894
+Epoch: 083/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 350198029.008675
+Epoch: 083/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352122999.835870
+Epoch: 083/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350459239.544733
+Epoch: 083/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350331108.811673
+Epoch: 083/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351048086.507528
+Epoch: 083/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351636231.385490
+Epoch: 083/100 Elapsed training time: 0.059854 [min] Averaged loss 350965949.182328
+Epoch: 084/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 349970409.581212
+Epoch: 084/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350606702.095385
+Epoch: 084/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 352582639.886794
+Epoch: 084/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352860397.650022
+Epoch: 084/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351147057.809345
+Epoch: 084/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353060564.599580
+Epoch: 084/100 Elapsed training time: 0.059920 [min] Averaged loss 351704628.603723
+Epoch: 085/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351837039.343034
+Epoch: 085/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353644068.365085
+Epoch: 085/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353407805.872123
+Epoch: 085/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352147880.350258
+Epoch: 085/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 348871457.560681
+Epoch: 085/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351175693.968061
+Epoch: 085/100 Elapsed training time: 0.059719 [min] Averaged loss 351847324.243207
+Epoch: 086/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351696548.185831
+Epoch: 086/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351810064.260903
+Epoch: 086/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351605250.130295
+Epoch: 086/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351546241.213830
+Epoch: 086/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 353931252.264858
+Epoch: 086/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351166897.205601
+Epoch: 086/100 Elapsed training time: 0.060852 [min] Averaged loss 351959375.543553
+Epoch: 087/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 350365647.448839
+Epoch: 087/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353371074.088244
+Epoch: 087/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350422763.002160
+Epoch: 087/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350960317.507210
+Epoch: 087/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351782291.523064
+Epoch: 087/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352286179.182665
+Epoch: 087/100 Elapsed training time: 0.060904 [min] Averaged loss 351531378.792030
+Epoch: 088/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351017895.492238
+Epoch: 088/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352231234.008288
+Epoch: 088/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 353079836.076782
+Epoch: 088/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352623125.384996
+Epoch: 088/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351262617.490920
+Epoch: 088/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350412462.560429
+Epoch: 088/100 Elapsed training time: 0.060675 [min] Averaged loss 351771195.168942
+Epoch: 089/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351096286.482527
+Epoch: 089/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351286081.862501
+Epoch: 089/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350798022.275922
+Epoch: 089/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350992184.125743
+Epoch: 089/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 349152276.646366
+Epoch: 089/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350572091.844998
+Epoch: 089/100 Elapsed training time: 0.059362 [min] Averaged loss 350649490.539676
+Epoch: 090/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352418458.852138
+Epoch: 090/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352300060.587634
+Epoch: 090/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351629959.818408
+Epoch: 090/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350428594.954742
+Epoch: 090/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351692654.181047
+Epoch: 090/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351362948.294720
+Epoch: 090/100 Elapsed training time: 0.059530 [min] Averaged loss 351638779.448115
+Epoch: 091/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353203259.569158
+Epoch: 091/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350582701.705130
+Epoch: 091/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 349858572.118265
+Epoch: 091/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350453599.014403
+Epoch: 091/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351407433.391051
+Epoch: 091/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350135524.137524
+Epoch: 091/100 Elapsed training time: 0.060976 [min] Averaged loss 350940181.655922
+Epoch: 092/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 348970206.801923
+Epoch: 092/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 352615067.813673
+Epoch: 092/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351974697.670670
+Epoch: 092/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350926049.920475
+Epoch: 092/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350939328.927615
+Epoch: 092/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 350690518.460430
+Epoch: 092/100 Elapsed training time: 0.060895 [min] Averaged loss 351019311.599131
+Epoch: 093/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 350412788.374877
+Epoch: 093/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351429798.169151
+Epoch: 093/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351786333.937371
+Epoch: 093/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 349952802.223954
+Epoch: 093/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351252710.443322
+Epoch: 093/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353618322.572098
+Epoch: 093/100 Elapsed training time: 0.059868 [min] Averaged loss 351408792.620129
+Epoch: 094/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351748333.944422
+Epoch: 094/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350643207.014246
+Epoch: 094/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350291972.978885
+Epoch: 094/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350918774.647589
+Epoch: 094/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350512980.373265
+Epoch: 094/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351992685.087970
+Epoch: 094/100 Elapsed training time: 0.060814 [min] Averaged loss 351017992.341063
+Epoch: 095/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353018299.547151
+Epoch: 095/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351423155.617286
+Epoch: 095/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 349478241.767495
+Epoch: 095/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350218811.663836
+Epoch: 095/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 351868687.806321
+Epoch: 095/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351689134.323321
+Epoch: 095/100 Elapsed training time: 0.060427 [min] Averaged loss 351282721.787568
+Epoch: 096/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351501710.375608
+Epoch: 096/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 354746880.947566
+Epoch: 096/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350449206.197183
+Epoch: 096/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351051132.453300
+Epoch: 096/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 349641549.219313
+Epoch: 096/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 353149191.541076
+Epoch: 096/100 Elapsed training time: 0.060644 [min] Averaged loss 351756611.789008
+Epoch: 097/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352552206.903669
+Epoch: 097/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351848369.355725
+Epoch: 097/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350284595.636031
+Epoch: 097/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 349278427.167824
+Epoch: 097/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352996883.960945
+Epoch: 097/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351473987.884993
+Epoch: 097/100 Elapsed training time: 0.059501 [min] Averaged loss 351405745.151531
+Epoch: 098/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 351157731.478187
+Epoch: 098/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 351629752.316884
+Epoch: 098/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 350855105.941965
+Epoch: 098/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 350568263.257160
+Epoch: 098/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350899833.538850
+Epoch: 098/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 351243234.865969
+Epoch: 098/100 Elapsed training time: 0.060635 [min] Averaged loss 351058986.899836
+Epoch: 099/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 352237710.005967
+Epoch: 099/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 353621013.397184
+Epoch: 099/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351044274.213525
+Epoch: 099/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 352407227.123228
+Epoch: 099/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 350282197.061566
+Epoch: 099/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 352441589.972552
+Epoch: 099/100 Elapsed training time: 0.060743 [min] Averaged loss 352005668.629004
+Epoch: 100/100 | Batch 0000/0006 | Rollout 1 steps | Averaged Loss: 353454675.708946
+Epoch: 100/100 | Batch 0001/0006 | Rollout 1 steps | Averaged Loss: 350713164.551227
+Epoch: 100/100 | Batch 0002/0006 | Rollout 1 steps | Averaged Loss: 351442986.847251
+Epoch: 100/100 | Batch 0003/0006 | Rollout 1 steps | Averaged Loss: 351554136.925862
+Epoch: 100/100 | Batch 0004/0006 | Rollout 1 steps | Averaged Loss: 352236646.918643
+Epoch: 100/100 | Batch 0005/0006 | Rollout 1 steps | Averaged Loss: 349576715.729202
+Epoch: 100/100 Elapsed training time: 0.059439 [min] Averaged loss 351496387.780188
+Process group destroyed
+
+============================= JOB FEEDBACK =============================
+
+Job ID: 3826903
+Cluster: hk
+User/Group: qb6846/hk-project-epais
+Account: hk-project-p0026382
+State: COMPLETED (exit code 0)
+Partition: dev_accelerated
+Nodes: 2
+Cores per node: 76
+Nodelist: hkn[0402-0403]
+CPU Utilized: 01:41:28
+CPU Efficiency: 7.75% of 21:49:44 core-walltime
+Job Wall-clock time: 00:08:37
+Starttime: Thu Jan 29 16:53:21 2026
+Endtime: Thu Jan 29 17:01:58 2026
+Memory Utilized: 38.63 GB
+Memory Efficiency: 3.98% of 971.68 GB (485.84 GB/node)
+The task which had the largest memory consumption differs by 101.87% from the average task max memory consumption
+Energy Consumed: 1111604 Joule / 308.778888888889 Watthours
+Average node power draw: 2150.10444874275 Watt

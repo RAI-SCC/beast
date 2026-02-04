@@ -118,6 +118,51 @@ singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-
 singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
 ```
 
+2) Build module
+
+```console
+eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
+```
+
+3) Go inside container and install dependencies (only squash once we have the final setup)
+
+```console
+ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
+start-shell
+pip update --upgrade pip
+pip install --force-reinstall aiter
+pip install -r requirements.txt
+exit
+make-squashfs
+rm -rf $CONTAINERROO/user-software
+```
+
+4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
+
+
+### Jupiter
+
+Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
+
+
+**Setup (for documentation purposes, don't do this again unless necessary)**
+
+0) Create apptainer cache and tmp dir: At the moment located on ```$PROJECT_jureap1/GBB/images/.tmp```
+
+```console
+export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
+export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
+```
+
+1) Pull the image ```apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3```
+
+2) Create the sandbox image and install dependencies
+
+```
+apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install --upgrade pip
+apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install -r requirements.txt
+```
+
 ## Example commands
 
 ### Testing distributed process group
@@ -140,6 +185,13 @@ For now, without data parallelism (DDP), so only 4 GPUs in a node:
 sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_dtp_ViT.sh systems/hk_container.sh
 ```
 
+### Testing Bayesian SWIN Transformer model (Kangu) on HoreKa
+For now only includes data parallelism (DDP):
+
+```console
+sbatch -A hk-project-pai00071 -p accelerated --nodes 2 --tasks-per-node 4 --gres=gpu:4 experiments/test_dp_SWIN.sh systems/hk_container.sh
+```
+
 ## Wiki
 
 ### Distributed Process Groups in GrandBellbeast
@@ -156,3 +208,7 @@ Parallel Process Groups keys:
 Mesh Dimensions: [Expert, DP, SP, JCol, JRow]
 
 See `src/util.py` for implementation details.
+
+### Model Library
+
+For the list and descriptions of currently implemented models, see the [model documentation](src/gb/model/README.md)
