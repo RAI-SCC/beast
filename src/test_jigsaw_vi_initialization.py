@@ -109,7 +109,7 @@ def conversion_test(device):
         sync_group=dtp_col_group,
     )
 
-    conv = Jigsaw.Convolution.DistributedConv2D(
+    conv = Jigsaw.Convolutions.DistributedConv2D(
         in_channels=16,
         out_channels=64,
         kernel_size=3,
@@ -126,7 +126,7 @@ def conversion_test(device):
         bayesian=True,
     )
 
-    trp_conv = Jigsaw.Convolution.DistributedConvTranspose2D(
+    trp_conv = Jigsaw.Convolutions.DistributedConvTranspose2D(
         in_channels=16,
         out_channels=64,
         kernel_size=3,
