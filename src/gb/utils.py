@@ -267,30 +267,32 @@ def convert_jigsaw_vi(
 
             match class_name:
                 case (
-                    "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2D"
+                    "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2d"
                 ):
                     before_num = sum_square_parameters(m)
                     print(
-                        f"Rank {get_process_group('DTP').rank()}, {mname}: Before fix: {before_num}"
+                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: Before fix: {before_num}"
                     )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
                     after_num = sum_square_parameters(m)
                     print(
-                        f"Rank {get_process_group('DTP').rank()}, {mname}: After fix: {after_num}"
+                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: After fix: {after_num}"
                     )
                 case "AVIDistributedXW" | "AVIDistributedXTW":
                     before_num = sum_square_parameters(m)
                     print(
-                        f"Rank {get_process_group('DTP').rank()}, {mname}: Before fix: {before_num}"
+                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: Before fix: {before_num}"
                     )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
                     after_num = sum_square_parameters(m)
                     print(
-                        f"Rank {get_process_group('DTP').rank()}, {mname}: After fix: {after_num}"
+                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: After fix: {after_num}"
                     )
                 case _:
-                    continue
+                    print(
+                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: unchanged"
+                    )
