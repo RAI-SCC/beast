@@ -5,6 +5,7 @@ import Jigsaw
 import torch
 import torch.distributed as dist
 import yaml
+from Jigsaw import Convolutions
 
 from gb.utils import convert_jigsaw_vi, get_process_group, init_gb_process_group
 
@@ -109,7 +110,7 @@ def conversion_test(device):
         sync_group=dtp_col_group,
     )
 
-    conv = Jigsaw.Convolutions.DistributedConv2D(
+    conv = Convolutions.DistributedConv2D(
         in_channels=16,
         out_channels=64,
         kernel_size=3,
@@ -126,7 +127,7 @@ def conversion_test(device):
         bayesian=True,
     )
 
-    trp_conv = Jigsaw.Convolutions.DistributedConvTranspose2D(
+    trp_conv = Convolutions.DistributedConvTranspose2D(
         in_channels=16,
         out_channels=64,
         kernel_size=3,
