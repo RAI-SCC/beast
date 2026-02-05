@@ -270,19 +270,27 @@ def convert_jigsaw_vi(
                     "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2D"
                 ):
                     before_num = sum_square_parameters(m)
-                    print(f"{mname}: Before fix: {before_num}")
+                    print(
+                        f"Rank {get_process_group('JCol').rank()}, {mname}: Before fix: {before_num}"
+                    )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
                     after_num = sum_square_parameters(m)
-                    print(f"{mname}: After fix: {after_num}")
+                    print(
+                        f"Rank {get_process_group('JCol').rank()}, {mname}: After fix: {after_num}"
+                    )
                 case "AVIDistributedXW" | "AVIDistributedXTW":
                     before_num = sum_square_parameters(m)
-                    print(f"{mname}: Before fix: {before_num}")
+                    print(
+                        f"Rank {get_process_group('JCol').rank()}, {mname}: Before fix: {before_num}"
+                    )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
                     after_num = sum_square_parameters(m)
-                    print(f"{mname}: After fix: {after_num}")
+                    print(
+                        f"Rank {get_process_group('JCol').rank()}, {mname}: After fix: {after_num}"
+                    )
                 case _:
                     continue
