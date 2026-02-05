@@ -108,15 +108,15 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 
 0) Source ```systems/lumi_singularity.sh```
 
-> [!WARNING]
-> 1) Create virtual env (shared env in project dir, only run when resetting the env)
->
-> ```console
-> module use /appl/local/containers/ai-modules
-> module load singularity-AI-bindings
-> singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-> singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
-> ```
+1) Create virtual env (shared env in project dir, only run when resetting the env)
+
+```console
+module use /appl/local/containers/ai-modules
+module load singularity-AI-bindings
+singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
+singularity exec $SIF systems/lumi_entry.sh pip install -r requirenments.txt
+singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
+```
 
 ### Jupiter
 
