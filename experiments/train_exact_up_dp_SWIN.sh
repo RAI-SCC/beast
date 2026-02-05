@@ -37,4 +37,4 @@ echo "Running cmd:"
 echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_exact_up_dp_SWIN.py --config_file $WORKDIR/configs/up_dp_SWIN_config.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_exact_up_dp_SWIN.py --config_file $WORKDIR/configs/up_dp_SWIN_config.yaml
+srun --cpu-bind=v --mpi=pmi2 ${SYSTEM_SLURM_PARAMS[@]} perun --log_lvl DEBUG --log_file logs/perun.log monitor $WORKDIR/src/test_exact_up_dp_SWIN.py --config_file $WORKDIR/configs/up_dp_SWIN_config.yaml
