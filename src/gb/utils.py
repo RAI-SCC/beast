@@ -267,9 +267,7 @@ def convert_jigsaw_vi(
 
             match class_name:
                 case (
-                    "AVIDistributedXWT"
-                    | "AVIDistributedXWTSync"
-                    | "AVIDistributedConvTranspose2D"
+                    "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2D"
                 ):
                     before_num = sum_square_parameters(m)
                     print(f"{mname}: Before fix: {before_num}")
