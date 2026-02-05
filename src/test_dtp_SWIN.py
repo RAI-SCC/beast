@@ -5,6 +5,7 @@ import time
 import torch
 import torch.distributed as dist
 import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel
 import yaml
 
 # Jigsaw imports
@@ -20,6 +21,7 @@ from torch_blue.vi.distributions import Normal
 from gb.model.SWIN_Jigsaw_025 import SWIN 
 from gb.utils import init_gb_process_group, get_process_group
 from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 
 def set_all_seeds(seed: int) -> None:
     """Set random seeds."""
@@ -31,7 +33,7 @@ def training_loop(config_dict):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
-    #up_group = get_process_group("SP")
+    up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
@@ -55,7 +57,8 @@ def training_loop(config_dict):
         device = device,
         dtp_group = dtp_group,
         spatial_group = spatial_group,
-        channel_group = channel_group
+        channel_group = channel_group,
+        bayesian=True
     ) 
 
     model = model.to(torch.float32).to(device)
@@ -65,55 +68,31 @@ def training_loop(config_dict):
             if "bias" in name:
                 dist.all_reduce(param.data, op=dist.ReduceOp.AVG, group=spatial_group)
 
-    set_all_seeds(dp_group.rank())# Check if needed, or which PG needs the same seeds here?!?! Should maybe be UP?
     
-    ### Get Data Loaders
-    train_dataloader, valid_dataloader = utils.build_dataloaders(
-        config_dict, 4, dtp_group.rank()
-    )
-    # train_subset = config_dict["data"]["train_subset"]
-    # valid_subset = config_dict["data"]["valid_subset"]
-    # train_subset = -1 if train_subset < 0 else train_subset
-    # valid_subset = -1 if valid_subset < 0 else valid_subset
-
-    # train_dataloader, _ = get_dataloader(
-    #     config_dict,
-    #     config_dict["data"]["train_data_path"],
-    #     mode="train",
-    #     distributed=(not model_parallel),
-    #     batch_size=config_dict["training"]["train_batch"],
-    #     subset_size=train_subset,
-    #     rank=rank,
-    # )
-    # valid_dataloader, _ = get_dataloader(
-    #     config_dict,
-    #     config_dict["data"]["valid_data_path"],
-    #     mode="validation",
-    #     distributed=(not model_parallel),
-    #     batch_size=config_dict["training"]["valid_batch"],
-    #     subset_size=valid_subset,
-    #     rank=rank,
-    # )
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    # loss_fn = torch.nn.MSELoss()
-
-    # Make Model Bayesian
+    # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
     convert_to_vimodule(model)
     predictive_distribution = Normal()
     loss_fn = vi.KullbackLeiblerLoss(
         predictive_distribution, dataset_size=config_dict["data"]["train_subset"]
     )
-    # model_ddp = DistributedDataParallel(
-    #     model,
-    #     device_ids=[slurm_localid],
-    #     output_device=slurm_localid,
-    #     process_group=dp_group,
-    # )
 
+    # Get the data loaders
+    train_dataloader = get_dataloader(
+        config_dict,
+        process_group=dp_group,
+        mode="train",
+    )
+    valid_dataloader = get_dataloader(
+        config_dict,
+        process_group=dp_group,
+        mode="validation"
+    )
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     utils.setup_precision(config_dict["training"]["tf32"]) ##Check if this works with Torch-blue
     torch.cuda.empty_cache()
+
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):

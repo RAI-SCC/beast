@@ -20,6 +20,8 @@ class SWIN(torch.nn.Module):
         dtp_group,
         spatial_group,
         channel_group,
+        bayesian
+
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -41,6 +43,8 @@ class SWIN(torch.nn.Module):
         self.heads = heads
         self.out_channels = out_channels
 
+        self.bayesian = bayesian
+
         self.patch_embedding = Convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
@@ -55,6 +59,7 @@ class SWIN(torch.nn.Module):
             device=self.device,
             parallelism=4,
             bias=True,
+            bayesian = self.bayesian
         )
         # self.downsample = Convolutions.DistributedConv2D(
         #     self.embed_dim,
@@ -102,7 +107,8 @@ class SWIN(torch.nn.Module):
             device=self.device,
             parallelism=4,
             bias=True,
-        )
+            bayesian = self.bayesian
+       )
 
         self.n_full_blocks = n_full_blocks
         self.transformer = torch.nn.ModuleList(
@@ -228,7 +234,7 @@ class SWIN(torch.nn.Module):
             mask = self._gen_mask_(xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
-            mask.requires_grad_(False)
+            mask=mask.detach()
             x = self.transformer[i * 2 + 1](x, mask)
             x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
             x = self.unroll_out(x)  # [B, lat, lon, channels]
