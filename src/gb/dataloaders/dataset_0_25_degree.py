@@ -1,8 +1,4 @@
-
 import os
-from datetime import datetime
-import yaml
-import csv
 
 import numpy as np
 import pandas as pd
@@ -49,7 +45,6 @@ class ERA5DatasetDistributed(Dataset):
         self.rank = rank
         self.datapath = config["data"]["train_data_path"]
 
-        
         self.deltaTDivisor = 1
 
         self.forecast_length = forecast_length
@@ -58,7 +53,7 @@ class ERA5DatasetDistributed(Dataset):
         self._get_files_stats(mode=self.mode)
 
         self.level_ordering = range(0, 13)
-        
+
         # normalization for pressure levels and standard deviation
         self.p_mean = np.load(
             f"{config['data']['constant_masks_path']}/pressure_zarr.npy",
@@ -80,7 +75,7 @@ class ERA5DatasetDistributed(Dataset):
         self.patch_size = patch_size
         self.xlat, self.xlon = config["data"]["xlat"], config["data"]["xlon"]
         self.batch_size = config["training"]["batch_size"]
-        if self.rank % 4 in [0, 1]: # Todo: Move to process group
+        if self.rank % 4 in [0, 1]:  # Todo: Move to process group
             self.start, self.end = 0, self.xlon // 2
         else:
             self.start, self.end = self.xlon // 2, self.xlon
@@ -291,15 +286,13 @@ class ERA5DatasetDistributed(Dataset):
                 temp = (temp - self.p_mean[32:]) / self.p_std[32:]
 
                 target.append(
-                    torch.nn.functional.pad(
-                        torch.tensor(temp), (0, 0, 0, 0, 0, 3)
-                    )
+                    torch.nn.functional.pad(torch.tensor(temp), (0, 0, 0, 0, 0, 3))
                 )
 
         input = torch.tensor(input)
 
         return input, target
-    
+
 
 def load_constant_mask_2d(folder_path, xlat=721):
     """

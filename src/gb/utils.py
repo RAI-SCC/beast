@@ -16,7 +16,7 @@ def init_gb_process_group(
     world_size = int(os.getenv("SLURM_NTASKS"))  # Total number of processes.
     slurm_localid = int(os.getenv("SLURM_LOCALID", rank))  # Local GPU ID.
 
-    #print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
+    # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
 
     dist.init_process_group(
         backend=backend, rank=rank, world_size=world_size, init_method="env://"
@@ -28,8 +28,8 @@ def init_gb_process_group(
     else:
         raise RuntimeError("Process group initialization failed.")
 
-    #print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
-    #print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
+    # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
+    # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
 
     # # Initialize GPUs
     device = "cuda" if backend == "nccl" else "cpu"
