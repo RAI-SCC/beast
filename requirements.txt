@@ -4,6 +4,7 @@ torch
 pyyaml
 zarr
 xarray
+git+https://github.com/Helmholtz-AI-Energy/perun@feat/new-sysfs-backends
 
--e ./src/libs/torch_blue
--e ./src/libs/Jigsaw
+./src/libs/torch_blue
+./src/libs/Jigsaw
