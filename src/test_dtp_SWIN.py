@@ -8,9 +8,10 @@ import torch.optim as optim
 import yaml
 
 # Jigsaw imports
-from Jigsaw import utils
+from Jigsaw import utils, Normalization
 
 # torch blue imports
+import torch_blue
 from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
@@ -95,15 +96,15 @@ def training_loop(config_dict):
     # )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    loss_fn = torch.nn.MSELoss()
+    # loss_fn = torch.nn.MSELoss()
 
     # Make Model Bayesian
-    #torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    #convert_to_vimodule(model)
-    #predictive_distribution = Normal()
-    #loss_fn = vi.KullbackLeiblerLoss(
-    #    predictive_distribution, dataset_size=config_dict["data"]["train_subset"]
-    #)
+    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    convert_to_vimodule(model)
+    predictive_distribution = Normal()
+    loss_fn = vi.KullbackLeiblerLoss(
+        predictive_distribution, dataset_size=config_dict["data"]["train_subset"]
+    )
     # model_ddp = DistributedDataParallel(
     #     model,
     #     device_ids=[slurm_localid],
@@ -159,8 +160,7 @@ def train_one_epoch(
 
         # # Average loss over all four processes for exactness
         dist.all_reduce(loss, group=dtp_group)
-        loss = loss / 4
-
+        
         # Backpropagation
         loss.backward()
 
