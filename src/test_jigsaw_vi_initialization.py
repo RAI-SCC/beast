@@ -99,13 +99,70 @@ def conversion_test(device):
         model_group=full_dtp_group,
     )
 
+    xwt_sync = Jigsaw.Linear.DistributedXWTSync(
+        in_dim=16,
+        out_dim=64,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        device=device,
+        parallelism=full_dtp_group.size(),
+        model_group=full_dtp_group,
+        sync_group=dtp_col_group,
+    )
+
+    conv = Jigsaw.Convolution.DistributedConv2D(
+        in_channels=16,
+        out_channels=64,
+        kernel_size=3,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        spatial_group=dtp_col_group,
+        channel_group=dtp_row_group,
+        device=device,
+        parallelism=full_dtp_group.size(),
+        bias=True,
+        bayesian=True,
+    )
+
+    trp_conv = Jigsaw.Convolution.DistributedConvTranspose2D(
+        in_channels=16,
+        out_channels=64,
+        kernel_size=3,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
+        spatial_group=dtp_col_group,
+        channel_group=dtp_row_group,
+        device=device,
+        parallelism=full_dtp_group.size(),
+        bias=True,
+        bayesian=True,
+    )
+
     convert_jigsaw_vi(mlp)
+    print(f"Targets: linear1: ~{18}, linear2: ~{8.5}")
 
     convert_jigsaw_vi(xwt)
+    print(f"Target: ~{68}")
 
     convert_jigsaw_vi(xw)
+    print(f"Target: ~{68}")
 
     convert_jigsaw_vi(xtw)
+    print(f"Target: ~{68}")
+
+    convert_jigsaw_vi(xwt_sync)
+    print(f"Target: ~{68}")
+
+    convert_jigsaw_vi(conv)
+    # print(f"Target: ~{68}")
+
+    convert_jigsaw_vi(trp_conv)
+    # print(f"Target: ~{68}")
 
 
 if __name__ == "__main__":
