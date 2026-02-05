@@ -118,28 +118,6 @@ singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-
 singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
 ```
 
-2) Build module
-
-```console
-eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
-```
-
-3) Go inside container and install dependencies (only squash once we have the final setup)
-
-```console
-ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
-start-shell
-pip update --upgrade pip
-pip install --force-reinstall aiter
-pip install -r requirements.txt
-exit
-make-squashfs
-rm -rf $CONTAINERROO/user-software
-```
-
-4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
-
-
 ### Jupiter
 
 Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
