@@ -9,7 +9,6 @@ import yaml
 
 # Jigsaw imports
 from Jigsaw import utils
-from Jigsaw import Linear, Attention, Convolutions
 
 # torch blue imports
 from torch_blue import vi
@@ -18,7 +17,8 @@ from torch_blue.vi.distributions import Normal
 
 # Import model
 from gb.model.SWIN_Jigsaw_025 import SWIN 
-from gb.utils import _create_process_mesh_dict
+from gb.utils import init_gb_process_group, get_process_group
+from gb.losses.UP_Loss import UP_AllGaussLoss
 
 def set_all_seeds(seed: int) -> None:
     """Set random seeds."""
@@ -26,7 +26,7 @@ def set_all_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def training_loop():
+def training_loop(config_dict):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
@@ -48,13 +48,13 @@ def training_loop():
         heads = config_dict['model']['n_attn_heads'], # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept 
         kernel_size = config_dict['model']['patch_size'],
         window_size_outer = config_dict['model']['window_size_outer'],
-        window_size_inner = config_dict['model']['window_size_outer'],
+        window_size_inner = config_dict['model']['window_size_inner'],
         n_full_blocks = config_dict['model']['n_attn_blocks'], # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
-        dtp_group.rank(),
-        device,
-        dtp_group,
-        spatial_group,
-        channel_group,
+        dtp_rank = dtp_group.rank(),
+        device = device,
+        dtp_group = dtp_group,
+        spatial_group = spatial_group,
+        channel_group = channel_group
     ) 
 
     model = model.to(torch.float32).to(device)
@@ -70,17 +70,46 @@ def training_loop():
     train_dataloader, valid_dataloader = utils.build_dataloaders(
         config_dict, 4, dtp_group.rank()
     )
+    # train_subset = config_dict["data"]["train_subset"]
+    # valid_subset = config_dict["data"]["valid_subset"]
+    # train_subset = -1 if train_subset < 0 else train_subset
+    # valid_subset = -1 if valid_subset < 0 else valid_subset
+
+    # train_dataloader, _ = get_dataloader(
+    #     config_dict,
+    #     config_dict["data"]["train_data_path"],
+    #     mode="train",
+    #     distributed=(not model_parallel),
+    #     batch_size=config_dict["training"]["train_batch"],
+    #     subset_size=train_subset,
+    #     rank=rank,
+    # )
+    # valid_dataloader, _ = get_dataloader(
+    #     config_dict,
+    #     config_dict["data"]["valid_data_path"],
+    #     mode="validation",
+    #     distributed=(not model_parallel),
+    #     batch_size=config_dict["training"]["valid_batch"],
+    #     subset_size=valid_subset,
+    #     rank=rank,
+    # )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    loss = torch.nn.MSELoss()
+    loss_fn = torch.nn.MSELoss()
 
     # Make Model Bayesian
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    #torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
     #convert_to_vimodule(model)
     #predictive_distribution = Normal()
     #loss_fn = vi.KullbackLeiblerLoss(
     #    predictive_distribution, dataset_size=config_dict["data"]["train_subset"]
     #)
+    # model_ddp = DistributedDataParallel(
+    #     model,
+    #     device_ids=[slurm_localid],
+    #     output_device=slurm_localid,
+    #     process_group=dp_group,
+    # )
 
     utils.setup_precision(config_dict["training"]["tf32"]) ##Check if this works with Torch-blue
     torch.cuda.empty_cache()
@@ -89,16 +118,13 @@ def training_loop():
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
         avg_loss = train_one_epoch(
-            config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
             optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
-            n_vars_local=n_vars_local,
-            rank=rank,
-            col_group=col_subgroup,
+            dtp_group=dtp_group,
         )
         end_time = time.perf_counter()
 
@@ -131,11 +157,12 @@ def train_one_epoch(
 
         loss = loss_fn(pred, y)
 
-        # Backpropagation
-        loss.backward()
         # # Average loss over all four processes for exactness
         dist.all_reduce(loss, group=dtp_group)
         loss = loss / 4
+
+        # Backpropagation
+        loss.backward()
 
         optimizer.step()
 
@@ -143,8 +170,8 @@ def train_one_epoch(
         if dist.get_rank(group=None) == 0:
             print(f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}")
 
-    epoch_average_loss = epoch_loss / max(1, len(dataloader))
-    return epoch_average_loss
+    average_loss = loss_sum / max(1, len(dataloader))
+    return average_loss
     
 def validate_epoch():
     pass
@@ -164,9 +191,9 @@ def main():
     global_rank = dist.get_rank(group=None)
     global_world_size = dist.get_world_size(group=None)
 
-    ## Set all the relevant process groups to pass to the relevant parts
-
     ### Data Stuff ###
+    WORKDIR = os.getenv("WORKDIR")
+
     if os.getenv("DATA_DIR") is not None:
         config_dict["data"]["train_data_path"] = (
             os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
@@ -178,7 +205,7 @@ def main():
             os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
 
-   if "normalization_dir" in config_dict["data"]:
+    if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
             WORKDIR + "/" + config_dict["data"]["normalization_dir"]
         )
@@ -191,10 +218,8 @@ def main():
 
  
     training_loop(config_dict)
-
-
-
-dist.destroy_process_group()
+    
+    dist.destroy_process_group()
 
 
 
