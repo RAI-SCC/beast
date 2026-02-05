@@ -145,27 +145,25 @@ def conversion_test(device):
     )
 
     convert_jigsaw_vi(mlp)
-    print(
-        f"Rank {get_process_group('JCol').rank()}, MLP Targets: linear1: ~{18}, linear2: ~{8.5}"
-    )
+    print(f"Rank {full_dtp_group.rank()}, MLP Targets: linear1: ~{18}, linear2: ~{8.5}")
 
     convert_jigsaw_vi(xwt)
-    print(f"Rank {get_process_group('JCol').rank()}, XWT Target: ~{68}")
+    print(f"Rank {full_dtp_group.rank()}, XWT Target: ~{68}")
 
     convert_jigsaw_vi(xw)
-    print(f"Rank {get_process_group('JCol').rank()}, XW Target: ~{68}")
+    print(f"Rank {full_dtp_group.rank()}, XW Target: ~{68}")
 
     convert_jigsaw_vi(xtw)
-    print(f"Rank {get_process_group('JCol').rank()}, XTW Target: ~{68}")
+    print(f"Rank {full_dtp_group.rank()}, XTW Target: ~{68}")
 
     convert_jigsaw_vi(xwt_sync)
-    print(f"Rank {get_process_group('JCol').rank()}, XWTSync Target: ~{68}")
+    print(f"Rank {full_dtp_group.rank()}, XWTSync Target: ~{68}")
 
     convert_jigsaw_vi(conv)
-    print(f"Rank {get_process_group('JCol').rank()}, Conv2d Target: unknown")
+    print(f"Rank {full_dtp_group.rank()}, Conv2d Target: unknown")
 
     convert_jigsaw_vi(trp_conv)
-    print(f"Rank {get_process_group('JCol').rank()}, ConvTranspose2d Target: unknown")
+    print(f"Rank {full_dtp_group.rank()}, ConvTranspose2d Target: unknown")
 
 
 if __name__ == "__main__":
