@@ -116,6 +116,8 @@ module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
 singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
 singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
+singularity exec $SIF systems/lumi_entry.sh pip install --force-reinstall aiter
+singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
 ```
 
 ### Jupiter
