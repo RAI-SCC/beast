@@ -15,9 +15,9 @@ def set_all_seeds(seed: int) -> None:
 
 class DummyModule(torch_blue.vi.VIModule):
     def __init__(self):
-        self.linear = torch_blue.vi.VILinear(3, 3)
-
         super().__init__()
+
+        self.linear = torch_blue.vi.VILinear(3, 3)
 
     def forward(self, x):
         return self.linear(x)
