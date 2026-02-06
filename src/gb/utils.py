@@ -171,14 +171,6 @@ def count_parameters(model) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def sum_square_parameters(model):
-    return sum(
-        (p.detach() ** 2).sum().detach().item()
-        for p_name, p in model.named_parameters()
-        if p.requires_grad and "log_" not in p_name
-    )
-
-
 def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
@@ -246,8 +238,8 @@ def convert_jigsaw_vi(
         keep_weights=False,
     )
 
-    num_jcols = get_process_group("JCol").size()
-    num_jrows = get_process_group("JRow").size()
+    num_jcols = get_process_group("JSpatial")  # get_process_group("JCol").size()
+    num_jrows = get_process_group("JChannel")  # get_process_group("JRow").size()
 
     def new_cf_col(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
@@ -258,7 +250,6 @@ def convert_jigsaw_vi(
         return previous * num_jrows
 
     for mname, m in module.named_modules():
-        # if issubclass(m.__class__, torch_blue.vi.VIModule):
         class_name = m.__class__.__name__
         if class_name.startswith("AVI"):
             if class_name in ["AVIDistributedXW", "AVIDistributedXTW"]:
@@ -269,30 +260,10 @@ def convert_jigsaw_vi(
                 case (
                     "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2d"
                 ):
-                    before_num = sum_square_parameters(m)
-                    print(
-                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: Before fix: {before_num}"
-                    )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_col, m)
                     m.reset_variational_parameters()
-                    after_num = sum_square_parameters(m)
-                    print(
-                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: After fix: {after_num}"
-                    )
                 case "AVIDistributedXW" | "AVIDistributedXTW":
-                    before_num = sum_square_parameters(m)
-                    print(
-                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: Before fix: {before_num}"
-                    )
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
-                    after_num = sum_square_parameters(m)
-                    print(
-                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: After fix: {after_num}"
-                    )
-                case _:
-                    print(
-                        f"Rank {get_process_group('DTP').rank()}, {class_name}, {mname}: unchanged"
-                    )
