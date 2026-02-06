@@ -32,6 +32,8 @@ def main():
     init_gb_process_group(mesh_dims)
     # init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
+    dataset_size = 10
+
     up_group = get_process_group("SP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
@@ -40,14 +42,14 @@ def main():
     world_size = up_group.size()
 
     list_of_samples = [
-        [1.0, 2.0, 3.0],
-        [2.0, 3.0, 1.0],
-        [3.0, 1.0, 2.0],
-        [3.0, 2.0, 1.0],
-        [2.0, 3.0, 1.0],
-        [1.0, 3.0, 2.0],
-        [1.0, 1.0, 1.0],
-        [2.0, 2.0, 2.0],
+        [[1.0, 2.0, 3.0]],
+        [[2.0, 3.0, 1.0]],
+        [[3.0, 1.0, 2.0]],
+        [[3.0, 2.0, 1.0]],
+        [[2.0, 3.0, 1.0]],
+        [[1.0, 3.0, 2.0]],
+        [[1.0, 1.0, 1.0]],
+        [[2.0, 2.0, 2.0]],
     ]
 
     total_samples = 8
@@ -61,9 +63,9 @@ def main():
 
     dummy_module = DummyModule()
 
-    up_loss_no_prior = UP_AllGaussLoss(dummy_module, 10, up_group, heat=0.0)
+    up_loss_no_prior = UP_AllGaussLoss(dummy_module, dataset_size, up_group, heat=0.0)
 
-    up_loss_with_prior = UP_AllGaussLoss(dummy_module, 10, up_group, heat=1.0)
+    up_loss_with_prior = UP_AllGaussLoss(dummy_module, dataset_size, up_group, heat=1.0)
 
     full_samples = torch.stack(list_of_tensors, dim=0)
     print(f"Rank {rank}: all samples mean: {full_samples.mean(dim=0)}")
@@ -72,7 +74,7 @@ def main():
     ideal_value_no_prior = (
         full_samples.mean(dim=0) ** 2 / (2 * full_samples.std(dim=0) ** 2)
         + torch.log(full_samples.std(dim=0))
-    ).sum()
+    ).sum() * dataset_size
     ideal_value_with_prior = (
         ideal_value_no_prior + up_loss_with_prior.kl_loss.prior_matching()
     )
