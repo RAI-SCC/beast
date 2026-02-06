@@ -114,7 +114,7 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 module use /appl/local/containers/ai-modules
 module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/lumi_entry.sh pip install -r requirenments.txt
+singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
 singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
 ```
 
