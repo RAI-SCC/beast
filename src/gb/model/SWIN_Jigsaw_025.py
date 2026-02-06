@@ -52,12 +52,12 @@ class SWIN(torch.nn.Module):
             self.padding,
             self.dilation,
             groups=1,
+            bias=True,
             rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
             parallelism=4,
-            bias=True,
             bayesian=self.bayesian,
         )
         # self.downsample = Convolutions.DistributedConv2D(
@@ -99,13 +99,13 @@ class SWIN(torch.nn.Module):
             self.stride,
             self.padding,
             self.dilation,
+            bias=True,
             groups=1,
             rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
             parallelism=4,
-            bias=True,
             bayesian=self.bayesian,
         )
 
