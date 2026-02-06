@@ -108,7 +108,7 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 
 0) Source ```systems/lumi_singularity.sh```
 
-1) Create virtual env (shared env in project dir, only run when resetting the env)
+1) Create virtual env
 
 ```console
 module use /appl/local/containers/ai-modules
