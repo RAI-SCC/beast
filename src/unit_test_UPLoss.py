@@ -65,7 +65,7 @@ def main():
 
     up_loss_with_prior = UP_AllGaussLoss(dummy_module, 10, up_group, heat=1.0)
 
-    full_samples = torch.tensor(list_of_tensors, device=device, dtype=torch.float32)
+    full_samples = torch.stack(list_of_tensors, dim=0)
     print(f"Rank {rank}: all samples mean: {full_samples.mean(dim=0)}")
     print(f"Rank {rank}: all samples std: {full_samples.std(dim=0)}")
 
@@ -80,14 +80,13 @@ def main():
     print(f"Rank {rank}: ideal value without prior {ideal_value_no_prior.item()}")
     print(f"Rank {rank}: ideal value with prior {ideal_value_with_prior.item()}")
 
-    local_samples = torch.tensor(
+    local_samples = torch.stack(
         list_of_tensors[
             (rank * (total_samples // world_size)) : (
                 (rank + 1) * (total_samples // world_size)
             )
         ],
-        device=device,
-        dtype=torch.float32,
+        dim=0,
     )
 
     print(f"Rank {rank}: local samples mean: {local_samples.mean(dim=0)}")
