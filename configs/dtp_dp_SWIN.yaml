@@ -16,7 +16,8 @@ data:
     num_workers: 16
     xlat: 720
     xlon: 1440
-    n_global_variables: 72
+    n_variables: 69
+    n_masks : 3
     in_surface_variables: ["msl", "t2m", "u10m", "v10m"]
     in_pressure_variables: ["z", "q", "t", "u", "v"]
     in_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
@@ -36,10 +37,10 @@ model:
     latent_rollout: 1
 training:
     tf32: True
-    n_samples: 3 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_samples: 10 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 10
     batch_size: 1
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1,2,1,2,2]
+mesh_dims: [1,2,2,2,2]

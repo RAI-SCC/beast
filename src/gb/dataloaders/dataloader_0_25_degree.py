@@ -5,7 +5,7 @@ from torch.utils.data.distributed import DistributedSampler
 from gb.dataloaders.dataset_0_25_degree import ERA5DatasetDistributed
 
 
-def get_dataloader(config_dict, process_group, mode="train"):
+def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
     if mode == "train":
@@ -18,7 +18,7 @@ def get_dataloader(config_dict, process_group, mode="train"):
         data_path,
         mode=mode,
         patch_size=(2, 4, 4),
-        rank=process_group.rank(),
+        rank=dtp_process_group.rank(),
         forecast_length=1,
         normalize=True,
         dt=dt,
@@ -30,8 +30,8 @@ def get_dataloader(config_dict, process_group, mode="train"):
     sampler = DistributedSampler(
         dataset,
         shuffle=True,
-        rank=process_group.rank(),
-        num_replicas=process_group.size(),
+        rank=dp_process_group.rank(),
+        num_replicas=dp_process_group.size(),
         seed=42,
     )
 
