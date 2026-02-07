@@ -5,7 +5,7 @@ data:
     constant_masks_path: "constant_masks"
     preprocessed: False
     normalization_dir: "data/normalization"
-    train_subset: 20
+    train_subset: 50
     valid_subset: 4
     train_time_range: ["1990-01-01", "2017-12-31"]
     valid_time_range: ["2018-01-01", "2018-12-31"]
@@ -30,18 +30,15 @@ model:
     n_output_channels: 72
     n_attn_heads: 6
     patch_size: 4
-    window_size_outer: [6, 12] 
+    window_size_outer: [6, 12]
     window_size_inner: [6, 6]
     n_attn_blocks: [3,2,3]
     latent_rollout: 1
 training:
     tf32: True
-    n_epochs: 2
-    training:
-    n_samples: 3
+    n_samples: 3 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 10
-    train_batch: 1
-    valid_batch: 1
+    batch_size: 1
 model_parallel:
     parallelism: 4
     type: jigsaw

@@ -20,10 +20,11 @@ class SWIN(torch.nn.Module):
         dtp_group,
         spatial_group,
         channel_group,
+        bayesian,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
-        self.window_size_outer= window_size_outer
+        self.window_size_outer = window_size_outer
         self.window_size_inner = window_size_inner
         self.kernel_size = kernel_size
         self.stride = kernel_size
@@ -33,13 +34,15 @@ class SWIN(torch.nn.Module):
         self.local_rank = dtp_rank
         self.device = device
         self.parallelism = 4
-        self.dtp_group = dtp_group  
+        self.dtp_group = dtp_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
         self.in_channels = in_channels
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_channels = out_channels
+
+        self.bayesian = bayesian
 
         self.patch_embedding = Convolutions.DistributedConv2D(
             self.in_channels,
@@ -49,12 +52,13 @@ class SWIN(torch.nn.Module):
             self.padding,
             self.dilation,
             groups=1,
+            bias=True,
             rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
             parallelism=4,
-            bias=True,
+            bayesian=self.bayesian,
         )
         # self.downsample = Convolutions.DistributedConv2D(
         #     self.embed_dim,
@@ -95,13 +99,14 @@ class SWIN(torch.nn.Module):
             self.stride,
             self.padding,
             self.dilation,
+            bias=True,
             groups=1,
             rank=self.local_rank,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
             parallelism=4,
-            bias=True,
+            bayesian=self.bayesian,
         )
 
         self.n_full_blocks = n_full_blocks
@@ -119,7 +124,9 @@ class SWIN(torch.nn.Module):
                     self.spatial_group,
                     self.channel_group,
                 ).to(self.device)
-                for i in torch.arange(2*(self.n_full_blocks[0]))#+self.n_full_blocks[2]))
+                for i in torch.arange(
+                    2 * (self.n_full_blocks[0])
+                )  # +self.n_full_blocks[2]))
             ]
         )
 
@@ -222,15 +229,19 @@ class SWIN(torch.nn.Module):
         for i in range(self.n_full_blocks[0]):
             x = self._get_windows(x, self.window_size_outer)
             x = self.transformer[i * 2](x, mask=None)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
+            x = self._reverse_windows(
+                x, B, xlat, xlon, channels, self.window_size_outer
+            )
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
             mask = self._gen_mask_(xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
-            mask.requires_grad_(False)
+            mask = mask.detach()
             x = self.transformer[i * 2 + 1](x, mask)
-            x = self._reverse_windows(x, B, xlat, xlon, channels, self.window_size_outer)
+            x = self._reverse_windows(
+                x, B, xlat, xlon, channels, self.window_size_outer
+            )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
 
         # x_res2 = x.clone()
@@ -319,7 +330,10 @@ class SWIN(torch.nn.Module):
         attention_mask = attention_mask.masked_fill(
             attention_mask != 0, float(-10000.0)
         ).masked_fill(attention_mask == 0, float(0.0))
-        if self.local_rank in [0, 2]:  # TODO: "left side" ranks. i.e., those in first column
+        if self.local_rank in [
+            0,
+            2,
+        ]:  # TODO: "left side" ranks. i.e., those in first column
             attention_mask = attention_mask[
                 ..., : (window_size[0] * window_size[1] // 2)
             ]
