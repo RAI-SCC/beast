@@ -26,6 +26,9 @@ class DummyModule(torch_blue.vi.VIModule):
 def main():
     set_all_seeds(42)
 
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+
     mesh_dims = [1, 1, 2, 1, 1]  # two-way UP
     # mesh_dims = [1, 1, 4, 1, 1] # four-way UP
 
