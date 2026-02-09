@@ -55,7 +55,7 @@ python_script=$2
 shift 2
 remaining_args=("$@")
 
-SYSTEM_ENV_FILE="$(basename $system_env .env)"
+SYSTEM_ENV_FILE="$(basename $system_env .sh)"
 SCRIPT_FILE="$(basename $python_script .py)"
 
 echo "System Env File: $SYSTEM_ENV_FILE"
@@ -69,7 +69,7 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
-if [[perun == true ]]; then
+if [[ $perun == true ]]; then
     PYTHON_CMD="perun --log_file=logs/perun_${SCRIPT_FILE}_${SYSTEM_ENV_FILE}_${SLURM_JOB_ID}.log monitor"
 else
     PYTHON_CMD="python -u"
