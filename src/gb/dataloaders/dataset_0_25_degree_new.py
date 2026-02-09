@@ -62,6 +62,8 @@ class ERA5DatasetDistributed(Dataset):
         self.n_data_items = len(self.zarr_data["time"])
         self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
         self.total_vars = self.num_vars + self.num_masks
+        if self.total_vars%2 == 1:
+            self.total_vars += 1
         # normalization for pressure levels and standard deviation
         # self.norm_values = np.load(
         #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
@@ -123,8 +125,13 @@ class ERA5DatasetDistributed(Dataset):
         x = (
             x - self.norm_values["mean"][self.var_start : self.var_end]
         ) / self.norm_values["std"][self.var_start : self.var_end]
-        x = np.concatenate([x, self.land_mask, self.soil_type, self.topography], axis=0)
-        input = torch.tensor(x)
+        if self.local_rank//2 == 1:
+            x = np.concatenate([x, self.land_mask, self.soil_type, self.topography], axis=0)
+        
+        if (((self.num_vars + self.num_masks)%2) == 1) and (self.local_rank//2 == 1):
+            input = torch.nn.functional.pad(torch.tensor(x), (0, 0, 0, 0, 0, 1))
+        else:
+            input = torch.tensor(x)
 
         # Output data
         y = self.zarr_data.isel(
@@ -136,7 +143,12 @@ class ERA5DatasetDistributed(Dataset):
         y = (
             y - self.norm_values["mean"][self.var_start : self.var_end]
         ) / self.norm_values["std"][self.var_start : self.var_end]
-        target = torch.nn.functional.pad(torch.tensor(y), (0, 0, 0, 0, 0, 3))
+        
+        if (((self.num_vars + self.num_masks)%2) == 1) and (self.local_rank//2 == 1):
+            target = torch.nn.functional.pad(torch.tensor(y), (0, 0, 0, 0, 0, self.num_masks + 1))
+        else:
+            target = torch.tensor(y)
+
         return input, target
 
 

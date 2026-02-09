@@ -19,9 +19,9 @@ data:
     n_variables: 84
     n_masks : 3
 model:
-    n_input_channels: 87
+    n_input_channels: 88
     embedding_dimension: 192
-    n_output_channels: 87
+    n_output_channels: 88
     n_attn_heads: 6
     patch_size: 4
     window_size_outer: [6, 12]
@@ -36,4 +36,4 @@ training:
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1,1,1,2,2]
+mesh_dims: [1,2,2,2,2]

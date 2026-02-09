@@ -106,7 +106,7 @@ def training_loop(config_dict):
     #     mode="validation"
     # )
     loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
-
+    n_samples = config_dict["training"]["n_samples"]
     # loss_fn = vi.KullbackLeiblerLoss(
     #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
     #    )
@@ -124,6 +124,7 @@ def training_loop(config_dict):
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
+            n_samples=n_samples,
             optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
@@ -137,7 +138,7 @@ def training_loop(config_dict):
             )
 
 
-def train_one_epoch(epoch, dataloader, model, optimizer, loss_fn, device, dtp_group):
+def train_one_epoch(epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group):
     model.train()
     loss_sum = 0.0
 
@@ -146,11 +147,10 @@ def train_one_epoch(epoch, dataloader, model, optimizer, loss_fn, device, dtp_gr
 
     for i, (x, y) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
-        y = y[0].to(device)
+        y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x)
-
+        pred = model(x, samples=n_samples) #Add samples = config_dict["training"]["n_samples"]
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness
