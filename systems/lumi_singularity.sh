@@ -6,7 +6,7 @@ export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.1
 export PROJECT_DIR=/projappl/project_462001248
 export SCRATCH_DIR=/scratch/project_462001248
 export VENV_DIR=$HOME/venv
-export DATA_DIR=$SCRATCH_DIR/data
+export DATA_DIR=$SCRATCH_DIR/data/
 
 export SYSTEM_SLURM_PARAMS=(
     singularity
