@@ -86,7 +86,8 @@ def training_loop(config_dict):
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
-        process_group=dp_group,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
         mode="train",
     )
     # valid_dataloader = get_dataloader(

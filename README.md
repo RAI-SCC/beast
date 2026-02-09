@@ -50,9 +50,8 @@
 
 ### Update torch_blue and Jigsaw submodules
 
-```git submodule init```
-
 ```console
+git submodule init
 git submodule update --remote --recursive
 ```
 
@@ -115,53 +114,33 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 module use /appl/local/containers/ai-modules
 module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF bash -c '$WITH_CONDA && source $VENV_DIR/bin/activate && pip install -r requirenments.txt'
+singularity exec $SIF systems/lumi_entry.sh pip install -r requirenments.txt
+singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
 ```
-
-2) Build module
-
-```console
-eb PyTorch-2.7.1-rocm-6.2.4-python-3.12-singularity-20250827.eb
-```
-
-3) Go inside container and install dependencies (only squash once we have the final setup)
-
-```console
-ml load PyTorch/2.7.1-rocm-6.2.4-python-3.12-singularity-20250827
-start-shell
-pip update --upgrade pip
-pip install --force-reinstall aiter
-pip install -r requirements.txt
-exit
-make-squashfs
-rm -rf $CONTAINERROO/user-software
-```
-
-4) Done, now you can use the experiment scripts, making sure to load the `systems/lumi_pG_eb_pytorch.sh` system file.
-
 
 ### Jupiter
 
 Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
 
-
-**Setup (for documentation purposes, don't do this again unless necessary)**
-
-0) Create apptainer cache and tmp dir: At the moment located on ```$PROJECT_jureap1/GBB/images/.tmp```
-
-```console
-export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
-export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
-```
-
-1) Pull the image ```apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3```
-
-2) Create the sandbox image and install dependencies
-
-```
-apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install -r requirements.txt
-```
+> [!WARNING]
+> **Setup (for documentation purposes, don't do this again unless necessary)**
+>
+>
+> 0) Create apptainer cache and tmp dir: At the moment located on ```$PROJECT_jureap1/GBB/images/.tmp```
+>
+> ```console
+> export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
+> export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
+> ```
+>
+> 1) Pull the image ```apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3```
+>
+> 2) Create the sandbox image and install dependencies
+>
+> ```
+> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install --upgrade pip
+> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install -r requirements.txt
+> ```
 
 ## Example commands
 

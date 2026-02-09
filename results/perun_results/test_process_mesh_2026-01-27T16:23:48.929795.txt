@@ -1,0 +1,20 @@
+PERUN REPORT
+
+App name: test_process_mesh
+First run: 2026-01-27T16:12:48.948809
+Last run: 2026-01-27T16:23:48.929795
+
+
+RUN ID: 2026-01-27T16:23:48.929795
+
+|   Round # |      Host |   RUNTIME |    ENERGY |     POWER |   CPU_UTIL |   GPU_POWER |    GPU_MEM |   DRAM_MEM |
+|----------:|----------:|----------:|----------:|----------:|-----------:|------------:|-----------:|-----------:|
+|         0 |       All |  18.355 s | 12.553 kJ | 713.511 W |    1.098 % |   713.511 W | 179.967 MB |  71.420 GB |
+|         0 | nid005805 |  18.270 s |  3.323 kJ | 182.000 W |    0.996 % |   182.000 W |  44.994 MB |  17.903 GB |
+|         0 | nid005806 |  16.747 s |  2.975 kJ | 177.778 W |    0.929 % |   177.778 W |  44.974 MB |  17.736 GB |
+|         0 | nid005807 |  18.355 s |  3.253 kJ | 177.400 W |    1.275 % |   177.400 W |  45.005 MB |  17.869 GB |
+|         0 | nid005808 |  17.024 s |  3.001 kJ | 176.333 W |    1.193 % |   176.333 W |  44.994 MB |  17.912 GB |
+
+Application Summary
+
+The application has been run 3 times. In total, it has used 0.006 kWh, released a total of 0.001 kgCO2e into the atmosphere, and you paid 0.00 € in electricity for it.

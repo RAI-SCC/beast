@@ -5,8 +5,8 @@ export LOCAL_WORKDIR="$( pwd )"
 export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
 export PROJECT_DIR=/projappl/project_462001248
 export SCRATCH_DIR=/scratch/project_462001248
-export VENV_DIR=$PROJECT_DIR/venv
-export DATA_DIR=$SCRATCH_DIR/data
+export VENV_DIR=$HOME/venv
+export DATA_DIR=$SCRATCH_DIR/data/
 
 export SYSTEM_SLURM_PARAMS=(
     singularity

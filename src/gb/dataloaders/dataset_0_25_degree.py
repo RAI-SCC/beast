@@ -53,22 +53,21 @@ class ERA5DatasetDistributed(Dataset):
         self._get_files_stats(mode=self.mode)
 
         self.level_ordering = range(0, 13)
-
         # normalization for pressure levels and standard deviation
         self.p_mean = np.load(
-            f"{config['data']['constant_masks_path']}/pressure_zarr.npy",
+            f"{config['data']['normalization_dir']}/pressure_zarr.npy",
             allow_pickle=True,
         )[0].reshape(65, 1, 1)
         self.p_std = np.load(
-            f"{config['data']['constant_masks_path']}/pressure_zarr.npy",
+            f"{config['data']['normalization_dir']}/pressure_zarr.npy",
             allow_pickle=True,
         )[1].reshape(65, 1, 1)
         self.s_mean = np.load(
-            f"{config['data']['constant_masks_path']}/surface_zarr.npy",
+            f"{config['data']['normalization_dir']}/surface_zarr.npy",
             allow_pickle=True,
         )[0].reshape(4, 1, 1)
         self.s_std = np.load(
-            f"{config['data']['constant_masks_path']}/surface_zarr.npy",
+            f"{config['data']['normalization_dir']}/surface_zarr.npy",
             allow_pickle=True,
         )[1].reshape(4, 1, 1)
 
