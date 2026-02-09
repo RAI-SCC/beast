@@ -156,7 +156,7 @@ sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres
 
 On lumi:
 ```console
-sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/lumi_singularity.sh
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 --constraint="" --cpus-per-task=14 --experiments/test_dist.sh systems/lumi_singularity.sh
 ```
 
 ### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
