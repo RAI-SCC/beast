@@ -74,9 +74,12 @@ def main():
     print(f"Rank {rank}: all samples mean: {full_samples.mean(dim=0)}")
     print(f"Rank {rank}: all samples std: {full_samples.std(dim=0)}")
 
+    # Create separate tensor of total samples
+    total_samples = torch.tensor(list_of_samples).detach().to(device).requires_grad_(True)
+    
     ideal_value_no_prior = (
-        (full_samples.mean(dim=0) - target) ** 2 / (2 * full_samples.std(dim=0) ** 2)
-        + torch.log(full_samples.std(dim=0))
+        (total_samples.mean(dim=0) - target) ** 2 / (2 * total_samples.std(dim=0) ** 2)
+        + torch.log(total_samples.std(dim=0))
     ).sum() * dataset_size
     ideal_value_with_prior = (
         ideal_value_no_prior + up_loss_with_prior.kl_loss.prior_matching()
@@ -93,15 +96,11 @@ def main():
             )
         ],
         dim=0,
-    ).to(device).requires_grad_(True)
-    # Create separate tensor of total samples
-    total_samples = torch.tensor(list_of_samples).to(device).requires_grad_(True)
+    ).detach().to(device).requires_grad_(True)
     
     print(f"Rank {rank}: local samples mean: {local_samples.mean(dim=0)}")
     print(f"Rank {rank}: local samples std: {local_samples.std(dim=0)}")
 
-    ideal_value_no_parallel = up_loss_no_prior(total_samples, target)
-    
     local_value_no_prior = up_loss_no_prior(local_samples, target)
     # local_value_with_prior = up_loss_with_prior(local_samples, target)
 
@@ -114,20 +113,24 @@ def main():
     # assert torch.allclose(local_value_with_prior, ideal_value_with_prior), (
     #     "Local value with prior differs from ideal value"
     # )
-    ideal_value_no_parallel.backward()
+    
+    # Call backward pass
+    ideal_value_no_prior.backward()
     local_value_no_prior.backward()
+    
     
     ideal_grad = total_samples.grad[
         rank * (n_samples_total // world_size) : (rank + 1) * (n_samples_total // world_size)
     ]
-    assert torch.allclose(local_samples.grad, ideal_grad), (
-        "gradient wrt input data differs from ideal value"
-    )
     
     # Print statements for local 
     print(f'Local samples grad {local_samples.grad}')
     if rank == 0:
         print(f'Ideal samples grad {total_samples.grad}')
+    
+    assert torch.allclose(local_samples.grad, ideal_grad), (
+        "gradient wrt input data differs from ideal value"
+    )
     
     
     torch.distributed.destroy_process_group()
