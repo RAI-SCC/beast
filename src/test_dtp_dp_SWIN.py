@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 import time
 
 import torch
@@ -22,11 +23,15 @@ from gb.model.SWIN_Jigsaw_025 import SWIN
 from gb.utils import get_process_group, init_gb_process_group
 
 
-def set_all_seeds(seed: int) -> None:
+def set_all_seeds(seed_value: int) -> None:
     """Set random seeds."""
-    # os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    random.seed(seed_value)  # Python random module
+    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
+    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
+    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
+    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
+    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
+    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
 def training_loop(config_dict):
@@ -90,12 +95,14 @@ def training_loop(config_dict):
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
-        process_group=dp_group,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
         mode="train",
     )
     # valid_dataloader = get_dataloader(
     #     config_dict,
-    #     process_group=dp_group,
+    #       dtp_process_group = dtp_group,
+    #        dp_process_group=dp_group,
     #     mode="validation"
     # )
     loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
