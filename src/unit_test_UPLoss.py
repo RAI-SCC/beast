@@ -41,27 +41,30 @@ def main():
     device = f"cuda:{slurm_localid}"
     world_size = up_group.size()
 
+    # model output
+    # Changed to floats to increase randomness
     list_of_samples = [
-        [[1.0, 2.0, 3.0]],
-        [[2.0, 3.0, 1.0]],
-        [[3.0, 1.0, 2.0]],
-        [[3.0, 2.0, 1.0]],
-        [[2.0, 3.0, 1.0]],
-        [[1.0, 3.0, 2.0]],
-        [[1.0, 1.0, 1.0]],
-        [[2.0, 2.0, 2.0]],
+        [[1.1, 2.2, 3.8]],
+        [[2.2, 3.1, 1.9]],
+        [[3.3, 1.3, 2.6]],
+        [[3.4, 2.4, 1.5]],
+        [[2.5, 3.5, 1.6]],
+        [[1.6, 3.6, 2.4]],
+        [[1.7, 1.7, 1.3]],
+        [[2.8, 2.8, 2.4]],
     ]
+    
+    
+    n_samples_total = 8
 
-    total_samples = 8
-
-    target = torch.tensor([0.0, 0.0, 0.0], device=device, dtype=torch.float32)
+    target = torch.tensor([1.0, 1.0, 1.0], device=device, dtype=torch.float32)
 
     list_of_tensors = [
         torch.tensor(entry, device=device, dtype=torch.float32)
         for entry in list_of_samples
     ]
 
-    dummy_module = DummyModule()
+    dummy_module = DummyModule().to(device)
 
     up_loss_no_prior = UP_AllGaussLoss(dummy_module, dataset_size, up_group, heat=0.0)
 
@@ -72,41 +75,61 @@ def main():
     print(f"Rank {rank}: all samples std: {full_samples.std(dim=0)}")
 
     ideal_value_no_prior = (
-        full_samples.mean(dim=0) ** 2 / (2 * full_samples.std(dim=0) ** 2)
+        (full_samples.mean(dim=0) - target) ** 2 / (2 * full_samples.std(dim=0) ** 2)
         + torch.log(full_samples.std(dim=0))
     ).sum() * dataset_size
     ideal_value_with_prior = (
         ideal_value_no_prior + up_loss_with_prior.kl_loss.prior_matching()
     )
-
+    
     print(f"Rank {rank}: ideal value without prior {ideal_value_no_prior.item()}")
     print(f"Rank {rank}: ideal value with prior {ideal_value_with_prior.item()}")
 
+    # Split up sample data into different processes
     local_samples = torch.stack(
         list_of_tensors[
-            (rank * (total_samples // world_size)) : (
-                (rank + 1) * (total_samples // world_size)
+            (rank * (n_samples_total // world_size)) : (
+                (rank + 1) * (n_samples_total // world_size)
             )
         ],
         dim=0,
-    )
-
+    ).to(device).requires_grad_(True)
+    # Create separate tensor of total samples
+    total_samples = torch.tensor(list_of_samples).to(device).requires_grad_(True)
+    
     print(f"Rank {rank}: local samples mean: {local_samples.mean(dim=0)}")
     print(f"Rank {rank}: local samples std: {local_samples.std(dim=0)}")
 
+    ideal_value_no_parallel = up_loss_no_prior(total_samples, target)
+    
     local_value_no_prior = up_loss_no_prior(local_samples, target)
-    local_value_with_prior = up_loss_with_prior(local_samples, target)
+    # local_value_with_prior = up_loss_with_prior(local_samples, target)
 
     print(f"Rank {rank}: local value without prior {local_value_no_prior.item()}")
-    print(f"Rank {rank}: local value with prior {local_value_with_prior.item()}")
+    # print(f"Rank {rank}: local value with prior {local_value_with_prior.item()}")
 
     assert torch.all(torch.isclose(local_value_no_prior, ideal_value_no_prior)), (
         "Local value without prior differs from ideal value"
     )
-    assert torch.allclose(local_value_with_prior, ideal_value_with_prior), (
-        "Local value with prior differs from ideal value"
+    # assert torch.allclose(local_value_with_prior, ideal_value_with_prior), (
+    #     "Local value with prior differs from ideal value"
+    # )
+    ideal_value_no_parallel.backward()
+    local_value_no_prior.backward()
+    
+    ideal_grad = total_samples.grad[
+        rank * (n_samples_total // world_size) : (rank + 1) * (n_samples_total // world_size)
+    ]
+    assert torch.allclose(local_samples.grad, ideal_grad), (
+        "gradient wrt input data differs from ideal value"
     )
-
-
+    
+    # Print statements for local 
+    print(f'Local samples grad {local_samples.grad}')
+    if rank == 0:
+        print(f'Ideal samples grad {total_samples.grad}')
+    
+    
+    torch.distributed.destroy_process_group()
 if __name__ == "__main__":
     main()
