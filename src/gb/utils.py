@@ -24,24 +24,10 @@ def init_gb_process_group(
     world_size = int(os.getenv("SLURM_NTASKS"))  # Total number of processes.
     slurm_localid = int(os.getenv("SLURM_LOCALID", rank))  # Local GPU ID.
 
-    print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
-
-    print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
-    print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
-
-    # # Initialize GPUs
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device = torch.device("cuda", slurm_localid)
-        torch.cuda.set_device(device)
+    # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
 
     dist.init_process_group(
-        backend=backend,
-        rank=rank,
-        world_size=world_size,
-        device_id=device,
-        init_method="env://",
+        backend=backend, rank=rank, world_size=world_size, init_method="env://"
     )
     if dist.is_initialized():
         print(
@@ -49,6 +35,16 @@ def init_gb_process_group(
         )
     else:
         raise RuntimeError("Process group initialization failed.")
+
+    # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
+    # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
+
+    # # Initialize GPUs
+    device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
+    if backend == "nccl":
+        device = torch.device("cuda", slurm_localid)
+        torch.cuda.set_device(device)
 
     return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
@@ -62,9 +58,9 @@ def _create_process_mesh_dict(
     Input: 5D process mesh for (Expert, DP, SP, JCol, JRow)
 
     Parallel Process Groups keys:
-     - JCol: Jigsaw Column Tensor Parallel group (part of DTP)
-     - JRow: Jigsaw Row Tensor Parallel group (part of DTP)
-     - DTP: Domain Tensor Parallel group, equal to Column x Row
+     - JSpatial: Jigsaw Column Tensor Parallel group (part of DTP)
+     - JChannel: Jigsaw Row Tensor Parallel group (part of DTP)
+     - DTP: Domain Tensor Parallel group, equal to JSpatial x JChannel
      - SP: Sample Parallel Group
      - DP: Data Parallel Group
      - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
@@ -83,7 +79,7 @@ def _create_process_mesh_dict(
     elif len(mesh_dims) != 5:
         raise ValueError("mesh_dims must be of length 4 or 5.")
 
-    mesh_dim_names = ["Expert", "DP", "SP", "JCol", "JRow"]
+    mesh_dim_names = ["Expert", "DP", "SP", "JSpatial", "JChannel"]
     _mesh = dist.device_mesh.init_device_mesh(
         device_type=device_type,
         mesh_shape=tuple(mesh_dims),
