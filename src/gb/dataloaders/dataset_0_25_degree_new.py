@@ -14,9 +14,7 @@ class ERA5DatasetDistributed(Dataset):
         self,
         config,
         mode,
-        patch_size,
         process_group,
-        forecast_length=1,
         normalize=True,
         dt=None,
     ):
@@ -29,10 +27,6 @@ class ERA5DatasetDistributed(Dataset):
             of value 'training', 'testing', 'validation'
         process_group:
             DP Process group
-        patch_size: Tuple(int, int, Optional[int])
-            Number of pixels in ([vert], lat, lon) dimensions per patch
-        forecast_length: int
-            For training, always 1. For validation, defines the number of autoregressive steps to roll out to.
         """
         self.dt = config["data"]["dt"]
         self.process_group = process_group
@@ -45,9 +39,7 @@ class ERA5DatasetDistributed(Dataset):
         else:
             self.years = None
 
-        self.forecast_length = forecast_length
         self.normalize = normalize
-        self.patch_size = patch_size
         self.batch_size = config["training"]["batch_size"]
 
         self.xlat, self.xlon = config["data"]["xlat"], config["data"]["xlon"]
@@ -164,8 +156,6 @@ def load_constant_mask_2d(folder_path, xlat=721):
     """
     Load the constant masks applied in the patch embedding layer.
 
-    patch_size: Tuple(int, int)
-        Number of pixels in (lat, lon) dimensions per patch
     folder_path: String
         Path to directory containing constant masks
 
