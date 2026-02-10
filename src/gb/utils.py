@@ -4,6 +4,7 @@ import types
 from collections.abc import Sequence
 from typing import Tuple, cast
 
+import pandas as pd
 import torch
 import torch.distributed as dist
 import torch.nn.init as init
@@ -111,8 +112,6 @@ def get_process_group(name: str) -> dist.ProcessGroup:
     if name not in _process_group_dict:
         raise ValueError(f"Process group '{name}' not found.")
     return _process_group_dict[name]
-<<<<<<< HEAD
-=======
 
 
 def download_1_5_degree_data(data_path):

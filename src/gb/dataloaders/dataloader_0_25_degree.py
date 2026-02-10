@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 
-from gb.dataloaders.dataset_0_25_degree import ERA5DatasetDistributed
+from gb.dataloaders.dataset_0_25_degree_new import ERA5DatasetDistributed
 
 
 def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
@@ -15,23 +15,13 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
 
     dataset = ERA5DatasetDistributed(
         config_dict,
-        file_path=config_dict["data"]["train_data_path"],
         mode=mode,
         patch_size=(2, 4, 4),
-        rank=dtp_process_group.rank(),
+        process_group=dtp_process_group,
         forecast_length=1,
         normalize=True,
         dt=dt,
     )
-   # dataset = ERA5DatasetDistributed(
-   #     config_dict,
-   #     mode=mode,
-   #     patch_size=(2, 4, 4),
-   #     rank=dtp_process_group.rank(), # process_group=dtp_process_group,
-   #     forecast_length=1,
-   #     normalize=True,
-   #     dt=dt,
-   # )
     if config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
         dataset = Subset(dataset, subset_indices)

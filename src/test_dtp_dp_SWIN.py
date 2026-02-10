@@ -138,7 +138,9 @@ def training_loop(config_dict):
             )
 
 
-def train_one_epoch(epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group):
+def train_one_epoch(
+    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
+):
     model.train()
     loss_sum = 0.0
 
@@ -150,7 +152,9 @@ def train_one_epoch(epoch, dataloader, model, n_samples, optimizer, loss_fn, dev
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x, samples=n_samples) #Add samples = config_dict["training"]["n_samples"]
+        pred = model(
+            x, samples=n_samples
+        )  # Add samples = config_dict["training"]["n_samples"]
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness
