@@ -56,10 +56,14 @@ git submodule update --remote --recursive
 ```
 
 > [!WARNING]
-> If you authenticate to github using HTTPs with username and password/token, you might get an authentification error. If that is the case, try this command:
+> If you authenticate to github using HTTPs with username and password/token, you might get an authentification error. If that is the case, try this commands:
 >
 > ```console
-> git config --local url."https://github.com/".insteadOf "git@github.com:"
+> sed -i -e "s/git@github.com:/https:\/\/github.com\//g" .gitmodules
+> git submodule deinit --all
+> git submodule init
+> git submodule update --remote --recursive
+> git restore .gitmodules
 > ```
 >
 > Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
