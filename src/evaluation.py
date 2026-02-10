@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from Jigsaw import Dataset
 from Jigsaw.util_fns import plotting_functions as plot_fns
 
 
@@ -26,13 +25,13 @@ def calc_weight(n_lat: int, cossum: float = 458.36551167) -> torch.Tensor:
 
 
 def get_var_names_and_indices(
-    dataset_info, config_dict, rank, parallelism, prepend_variable=["epoch"]
-) -> list[str]:
+    config_dict, rank, parallelism, prepend_variable=["epoch"]
+) -> tuple[list[str], list[int], list[str], list[int]]:
     """Return string representation of variable names."""
     var_names = prepend_variable.copy()
-    var_names.extend(dataset_info["out_surface_variables"])
+    var_names.extend(config_dict["data"]["out_surface_variables"])
 
-    num_surface_vars = len(dataset_info["out_surface_variables"])
+    num_surface_vars = len(config_dict["data"]["out_surface_variables"])
     num_levels = len(config_dict["data"]["out_pressure_levels"])
 
     indices = list(range(num_surface_vars))
@@ -42,7 +41,7 @@ def get_var_names_and_indices(
         for level in config_dict["training"]["eval_pressure_levels"]
     ]
 
-    for i, pvar in enumerate(dataset_info["out_pressure_variables"]):
+    for i, pvar in enumerate(config_dict["data"]["out_pressure_variables"]):
         var_names.extend(
             pvar + "_" + str(pl)
             for pl in config_dict["training"]["eval_pressure_levels"]
@@ -197,23 +196,23 @@ def get_weights(config_dict, parallelism, rank, device):
         .to(device)
     )
 
-    # TODO: variable splitting
-    if parallelism == 1:
-        variable_weights = variable_weights.to(device)
-    elif parallelism == 2:
-        variable_weights = torch.nn.functional.pad(variable_weights, (0, 3))
-        variable_weights = (
-            variable_weights[0, 0, 0, :36]
-            if rank % parallelism == 0
-            else variable_weights[0, 0, 0, 36:]
-        )
-    elif parallelism == 4:
-        variable_weights = torch.nn.functional.pad(variable_weights, (0, 3))
-        variable_weights = (
-            variable_weights[0, 0, 0, :36]
-            if rank % parallelism in [0, 2]
-            else variable_weights[0, 0, 0, 36:]
-        )
+    padding_size = (
+        config_dict["data"]["n_global_variables"] - variable_weights.shape[-1]
+    )
+    splitting_index = config_dict["data"]["n_global_variables"] // 2
+
+    match parallelism:
+        case 1:
+            variable_weights = variable_weights.to(device)
+        case _:
+            variable_weights = torch.nn.functional.pad(
+                variable_weights, (0, padding_size)
+            )
+            variable_weights = (
+                variable_weights[0, 0, 0, :splitting_index]
+                if rank % 2 == 0
+                else variable_weights[0, 0, 0, splitting_index:]
+            )
 
     return area_weights, variable_weights
 
@@ -232,17 +231,21 @@ def load_climatology(config_dict, rank):
     return climatology
 
 
-def load_constant_masks(config_dict, xlat, xlon, rank):
-    land_mask, soil_type, topography = Dataset.load_constant_mask_2d(
-        config_dict["data"]["constant_masks_path"], xlat=xlat
-    )
-    if rank % 4 in [0, 1]:
+def load_constant_masks(parallelism, dataloader, rank):
+    # Access dataset
+    ds = dataloader.dataset
+    # Depending on dataset wrapping, may need have doubled dataset attribute
+    ds = ds.dataset if hasattr(ds, "dataset") else ds
+
+    xlon = ds.xlon
+
+    if rank % parallelism in [0, 1]:
         start, end = 0, xlon // 2
     else:
         start, end = xlon // 2, xlon
-    land_mask = torch.unsqueeze(land_mask[:, start:end], 0)
-    soil_type = torch.unsqueeze(soil_type[:, start:end], 0)
-    topography = torch.unsqueeze(topography[:, start:end], 0)
+    land_mask = ds.land_mask[:, :, start:end]
+    soil_type = ds.soil_type[:, :, start:end]
+    topography = ds.topography[:, :, start:end]
     return [land_mask, soil_type, topography]
 
 
@@ -417,7 +420,6 @@ def validate(
     config_dict: dict,
     model: torch.nn.Module,
     dataloader: torch.utils.data.DataLoader,
-    dataset_info: dict,
     rank: int,
     device: torch.device,
     epoch: int,
@@ -437,9 +439,13 @@ def validate(
     parallelism = config_dict["model_parallel"]["parallelism"]
     rollout_time = config_dict["model"]["latent_rollout"]
     dt = config_dict["data"]["dt"]
+    num_total_variables = len(config_dict["data"]["out_surface_variable"]) + len(
+        config_dict["data"]["out_pressure_levels"]
+    ) * len(
+        config_dict["data"]["out_pressure_variables"]
+    )  # Surface variables + pressure variables
     rollout_time = (np.arange(rollout_time) + 1) * dt
     var_names, indices, global_var_names, global_indices = get_var_names_and_indices(
-        dataset_info,
         config_dict,
         rank=rank,
         parallelism=parallelism,
@@ -460,14 +466,14 @@ def validate(
     # Load climatology
     climatology = load_climatology(config_dict, rank)
 
-    xlat, xlon = config_dict["data"]["xlat"], config_dict["data"]["xlon"]
-    # TODO: allow access to constant masks from dataloader object? perhaps
-    masks = load_constant_masks(config_dict, xlat, xlon, rank)
+    # Load masks, now from dataloader object
+    masks = load_constant_masks(parallelism, dataloader, rank)
 
     mean, std = load_averages(config_dict)
 
+    xlon = config_dict["data"]["xlon"]
+    xlat = config_dict["data"]["xlat"]
     loss_fn = torch.nn.MSELoss()
-    parallelism = config_dict["model_parallel"]["parallelism"]
     if parallelism == 4:
         xlon = xlon // 2
 
@@ -477,6 +483,7 @@ def validate(
     # begin looping through dataloader
     for batch, data in enumerate(dataloader):
         input_data = data[0].to(device, non_blocking=True).detach()
+
         for step, rollout in enumerate(rollout_time):
             # Write epoch
             rmse[rollout][0] = int(epoch)
@@ -565,9 +572,9 @@ def validate(
         # 36 is the number of local output variables
         # 69 is the total number of output variables
         if parallelism == 4 and rank in [0, 2]:
-            iter_loss = iter_loss * (36 / 69) * 0.5
+            iter_loss = iter_loss * (36 / num_total_variables) * 0.5
         elif parallelism == 4 and rank in [1, 3]:
-            iter_loss = iter_loss * (33 / 69) * 0.5
+            iter_loss = iter_loss * (33 / num_total_variables) * 0.5
 
         loss = loss + iter_loss.detach()
 
@@ -581,8 +588,10 @@ def validate(
 
             loss /= total_samples
         else:
+            ds = dataloader.dataset
+            ds = ds.dataset if hasattr(ds, "dataset") else ds
             total_samples = [
-                len(dataloader.dataset)
+                len(ds)
             ]  # TODO: verify consistency with sample parallelism etc
             loss = loss / world_size / total_samples[0]
 
@@ -634,10 +643,14 @@ def load_averages(config):
     static_plevel = np.load(
         f"{config['data']['constant_masks_path']}/pressure_zarr.npy"
     )
-    mean_slevel = torch.tensor(static_slevel[0].reshape(4))
-    std_slevel = torch.tensor(static_slevel[1].reshape(4))
-    mean_plevel = torch.tensor(static_plevel[0].reshape(65))
-    std_plevel = torch.tensor(static_plevel[1].reshape(65))
+    num_surface_variables = len(config["data"]["out_surface_variable"])
+    num_pressure_variables = len(config["data"]["out_pressure_levels"]) * len(
+        config["data"]["out_pressure_variables"]
+    )
+    mean_slevel = torch.tensor(static_slevel[0].reshape(num_surface_variables))
+    std_slevel = torch.tensor(static_slevel[1].reshape(num_surface_variables))
+    mean_plevel = torch.tensor(static_plevel[0].reshape(num_pressure_variables))
+    std_plevel = torch.tensor(static_plevel[1].reshape(num_pressure_variables))
 
     mean = torch.concatenate([mean_slevel, mean_plevel], axis=0)
     std = torch.concatenate([std_slevel, std_plevel], axis=0)
@@ -645,9 +658,12 @@ def load_averages(config):
 
 
 def get_climatology(config):
+    num_pressure_variables = len(config["data"]["out_pressure_levels"]) * len(
+        config["data"]["out_pressure_variables"]
+    )
     climatology_plevel = torch.tensor(
         np.load(f"{config['data']['constant_masks_path']}/pressure_climatology.npy")
-    ).reshape(65, 721, 1440)
+    ).reshape(num_pressure_variables, 721, 1440)
     climatology_slevel = torch.tensor(
         np.load(f"{config['data']['constant_masks_path']}/surface_climatology.npy")
     )
