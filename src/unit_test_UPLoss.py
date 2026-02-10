@@ -80,7 +80,10 @@ def main():
 
     # Create separate tensor of total samples
     total_samples = (
-        torch.tensor(list_of_samples).detach().to(device).requires_grad_(True)
+        torch.tensor(list_of_samples)
+        .detach()
+        .to(device=device, dtype=test_dtype)
+        .requires_grad_(True)
     )
 
     ideal_value_no_prior = (
@@ -105,7 +108,7 @@ def main():
             dim=0,
         )
         .detach()
-        .to(device)
+        .to(device=device, dtype=test_dtype)
         .requires_grad_(True)
     )
 
