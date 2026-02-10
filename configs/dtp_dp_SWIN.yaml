@@ -1,0 +1,46 @@
+data:
+    dt: 6
+    train_data_path: "era5_subset.zarr"
+    valid_data_path: "era5_subset.zarr"
+    constant_masks_path: "constant_masks"
+    preprocessed: False
+    normalization_dir: "data/normalization"
+    train_subset: 50
+    valid_subset: 4
+    train_time_range: ["1990-01-01", "2017-12-31"]
+    valid_time_range: ["2018-01-01", "2018-12-31"]
+    test_time_range: ["2019-01-01", "2019-12-31"]
+    dataset_subsampling: 1
+    target_subsampling: 6
+    prefetch_factor: 2
+    num_workers: 16
+    xlat: 720
+    xlon: 1440
+    n_variables: 69
+    n_masks : 3
+    in_surface_variables: ["msl", "t2m", "u10m", "v10m"]
+    in_pressure_variables: ["z", "q", "t", "u", "v"]
+    in_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+    constant_masks: ["topography", "soil_type", "land_mask"]
+    out_surface_variables: ["msl", "t2m", "u10m", "v10m"]
+    out_pressure_variables: ["z", "q", "t", "u", "v"]
+    out_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+model:
+    n_input_channels: 72
+    embedding_dimension: 192
+    n_output_channels: 72
+    n_attn_heads: 6
+    patch_size: 4
+    window_size_outer: [6, 12]
+    window_size_inner: [6, 6]
+    n_attn_blocks: [3,2,3]
+    latent_rollout: 1
+training:
+    tf32: True
+    n_samples: 10 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_epochs: 10
+    batch_size: 1
+model_parallel:
+    parallelism: 4
+    type: jigsaw
+mesh_dims: [1,2,2,2,2]

@@ -32,9 +32,9 @@ def training_loop(
     # Set up model  groups
     pg_dict = _create_process_mesh_dict(
         config_dict["mesh_dims"],
-        device="cuda",
+        device_type="cuda",
     )
-    model_group, row_subgroup, col_subgroup, ddp_group = (
+    model_group, row_subgroup, col_subgroup, _ = (
         pg_dict["DTP"],
         pg_dict["JRow"],
         pg_dict["JCol"],
@@ -112,7 +112,7 @@ def training_loop(
     # Train for 10 epochs
     torch.cuda.empty_cache()
     for epoch in range(n_epochs):
-        avg_loss = train_one_epoch(
+        _ = train_one_epoch(
             config_dict,
             epoch=epoch,
             dataloader=train_dataloader,

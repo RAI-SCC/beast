@@ -4,7 +4,7 @@
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --time=00:10:00
-#SBATCH --job-name='gb_test_ViT'
+#SBATCH --job-name='gb_test_dtp_SWIN'
 #SBATCH --output='logs/%x_%j.out'
 #SBATCH --constraint=LSDF
 
@@ -33,7 +33,7 @@ master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
 echo "Running cmd:"
-echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dtp_ViT.py --config_file $WORKDIR/configs/ViTFourway.yaml"
+echo "  srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dtp_SWIN.py --config_file $WORKDIR/configs/dtp_SWIN.yaml"
 echo ""
 
-srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dtp_ViT.py --config_file $WORKDIR/configs/ViTFourway.yaml
+srun --cpu-bind=v ${SYSTEM_SLURM_PARAMS[@]} python -u $WORKDIR/src/test_dtp_SWIN.py --config_file $WORKDIR/configs/dtp_SWIN.yaml
