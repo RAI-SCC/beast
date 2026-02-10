@@ -1,8 +1,8 @@
 [submodule "src/libs/torch_blue"]
 	path = src/libs/torch_blue
-	url = https://github.com/RAI-SCC/torch_blue.git
+	url = git@github.com:RAI-SCC/torch_blue.git
 	branch = vi_convert
 [submodule "src/libs/Jigsaw"]
 	path = src/libs/Jigsaw
-	url = https://github.com/RAI-SCC/Jigsaw.git
+	url = git@github.com:RAI-SCC/Jigsaw.git
 	branch = vi
