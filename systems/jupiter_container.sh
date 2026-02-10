@@ -13,6 +13,7 @@ export ALT_MNT="/workspace" # For data and additional stuff (probably just mount
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
 
 export SYSTEM_SLURM_PARAMS=(
+    --mpi=pmix
     apptainer
     exec
     --nv
