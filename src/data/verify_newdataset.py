@@ -5,19 +5,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
+import os
 
-
-def check_variable(variable: str, file_out: Path, start_date: str, end_date: str):
+def check_variable(data_path: Path, file_out: Path, start_date: str, end_date: str):
     invalid_times = []
-    path_to_data = "/hkfs/work/workspace/scratch/xk5289-the_grand_bellbeast/data/era5_hourly_37levels.zarr"
-
-    ds = xr.open_dataset(path_to_data, engine="zarr")
+    dataset_path = os.getenv("DATA_DIR") + data_path
+    ds = xr.open_dataset(dataset_path, engine="zarr")
     start_date, end_date = (
         datetime.datetime.strptime(start_date, "%Y-%m-%d"),
         datetime.datetime.strptime(end_date, "%Y-%m-%d"),
     )
 
-    ds = ds[variable]  # filter by variable
+    ds = ds["fields"]  # filter by variable
     times = pd.to_datetime(ds["time"].values)
     filtered_times = times[(times < end_date) & (times >= start_date)]
     ds = ds.sel(time=filtered_times)
@@ -39,14 +38,13 @@ def check_variable(variable: str, file_out: Path, start_date: str, end_date: str
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--variable")
+    parser.add_argument("--data_path", default="/scratch/project_462001248/data/era5_preprocessed.zarr")
     parser.add_argument("--path_out")
     parser.add_argument("--start_date", default="1979-01-01")
     parser.add_argument("--end_date", default="2023-01-01")
-    # parser.add_argument("--n_threads", default=)
     args = parser.parse_args()
     check_variable(
-        variable=args.variable,
+        data_path=args.data_path,
         file_out=args.path_out,
         start_date=args.start_date,
         end_date=args.end_date,
