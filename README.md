@@ -108,14 +108,16 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 
 0) Source ```systems/lumi_singularity.sh```
 
-1) Create virtual env (shared env in project dir, only run when resetting the env)
+1) Create virtual env
 
 ```console
 module use /appl/local/containers/ai-modules
 module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/lumi_entry.sh pip install -r requirenments.txt
+singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
 singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
+singularity exec $SIF systems/lumi_entry.sh pip install --force-reinstall aiter
+singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
 ```
 
 ### Jupiter
@@ -154,7 +156,7 @@ sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres
 
 On lumi:
 ```console
-sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/lumi_singularity.sh
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 --constraint="" --cpus-per-task=14 --experiments/test_dist.sh systems/lumi_singularity.sh
 ```
 
 ### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
