@@ -178,7 +178,7 @@ sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres
 ### Performance monitoring with Perun
 
 ```console
-sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
+sbatch -A jureap1 -p booster --nodes 2 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
 ```
 ### Current sota model with dtp, sp and dp + torch_blue on SWIN, 0.25 degree
 ```console
