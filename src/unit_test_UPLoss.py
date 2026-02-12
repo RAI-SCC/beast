@@ -142,6 +142,10 @@ def main():
     if rank == 0:
         print(f"Ideal samples grad {total_samples.grad}")
 
+    assert torch.equal(local_value_no_prior, ideal_value_no_prior), (
+        f"Rank {rank}: local and ideal result not bit-wise equal"
+    )
+
     assert torch.allclose(local_samples.grad, ideal_grad), (
         "gradient wrt input data differs from ideal value"
     )
