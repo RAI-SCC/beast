@@ -118,10 +118,10 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 module use /appl/local/containers/ai-modules
 module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
-singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
-singularity exec $SIF systems/lumi_entry.sh pip install --force-reinstall aiter
-singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
+singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
+singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
+singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
+singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
 ```
 
 ### Jupiter
@@ -129,24 +129,28 @@ singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
 Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
 
 > [!WARNING]
-> **Setup (for documentation purposes, don't do this again unless necessary)**
+> Check first if the image already exists, to avoid unnecessary downloads and cache usage. If it does, you can skip this step.
 >
+> If the temp directories don't exist, create them. [Link to the docs](https://apps.fz-juelich.de/jsc/hps/jupiter/container-runtime.html#apptainer-images)
 >
-> 0) Create apptainer cache and tmp dir: At the moment located on ```$PROJECT_jureap1/GBB/images/.tmp```
+> **Step 0)** Pull image to shared location, at the moment -> ```$PROJECT_jureap1/GBB/images/.tmp```
 >
 > ```console
 > export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
 > export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
+> apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
 > ```
->
-> 1) Pull the image ```apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3```
->
-> 2) Create the sandbox image and install dependencies
->
-> ```
-> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install --upgrade pip
-> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install -r requirements.txt
-> ```
+
+1) Create the virtual env for the container
+
+```console
+source systems/jupiter_container.sh
+setup_system
+apptainer exec --nv $SIF python -m venv $VENV_DIR --system-site-packages
+apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade pip
+apptainer exec --nv $SIF systems/venv_entry.sh pip install -r requirements.txt
+apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade h5py
+```
 
 ## Example commands
 
