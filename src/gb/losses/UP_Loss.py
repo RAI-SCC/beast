@@ -6,7 +6,7 @@ from torch_blue.vi.distributions import MeanFieldNormal
 
 
 class UP_AllGaussLoss(nn.Module):
-    def __init__(self, model, dataset_size, process_group, heat=1.0, track=False):
+    def __init__(self, model, loss_weights, dataset_size, process_group, heat=1.0, track=False):
         super().__init__()
 
         self.pg = process_group
@@ -19,7 +19,7 @@ class UP_AllGaussLoss(nn.Module):
             heat=heat,
             track=track,
         )
-
+        self.loss_weights = loss_weights.reshape((1,1,-1,1,1))# (sample, batch, variables, lat, lon)
         self.dataset_size = dataset_size
 
     def data_fitting(self, mean, std, target):
@@ -39,8 +39,8 @@ class UP_AllGaussLoss(nn.Module):
         up_num = self.pg.size()
         total_samples = loc_sample_num * up_num
 
-        local_mean = model_output.mean(dim=0)
-        local_std = model_output.std(dim=0)
+        local_mean = model_output.mean(dim=0) #shape =(batch, variables, lat, lon)
+        local_std = model_output.std(dim=0) #shape =(batch, variables, lat, lon)
 
         mean = local_mean / up_num
         mean = dnn.all_reduce(mean, group=self.pg)
@@ -58,10 +58,13 @@ class UP_AllGaussLoss(nn.Module):
 
     def forward(self, model_output, target):
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
+        expert_output = model_output * self.loss_weights
+        expert_target = target * self.loss_weights
 
-        mean, std = self.aggregate_statistics(model_output)
+        mean, std = self.aggregate_statistics(expert_output) #shape =(batch, variables, lat, lon)
+        std = torch.where(self.loss_weights.is_nonzero(), std, 1.0)
 
-        data_fit = self.data_fitting(mean, std, target)
+        data_fit = self.data_fitting(mean, std, expert_target)
 
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())

@@ -21,7 +21,7 @@ data:
 model:
     n_input_channels: 88
     embedding_dimension: 192
-    n_output_channels: 88
+    n_output_channels: 84
     n_attn_heads: 6
     patch_size: 4
     window_size_outer: [6, 12]

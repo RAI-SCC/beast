@@ -56,12 +56,15 @@ class ERA5DatasetDistributed(Dataset):
         self.total_vars = self.num_vars + self.num_masks
         if self.total_vars % 2 == 1:
             self.total_vars += 1
+        
+        ## todo: include normalization once new values are there (in zarr format) 
         # normalization for pressure levels and standard deviation
         # self.norm_values = np.load(
         #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
         #    allow_pickle=True,
         # )
         # [0].reshape(65, 1, 1)
+
         self.norm_values = {
             "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
             "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
@@ -140,14 +143,15 @@ class ERA5DatasetDistributed(Dataset):
             y - self.norm_values["mean"][self.var_start : self.var_end]
         ) / self.norm_values["std"][self.var_start : self.var_end]
 
-        if (((self.num_vars + self.num_masks) % 2) == 1) and (
-            self.local_rank // 2 == 1
-        ):
-            target = torch.nn.functional.pad(
-                torch.tensor(y), (0, 0, 0, 0, 0, self.num_masks + 1)
-            )
-        else:
-            target = torch.tensor(y)
+        # if (((self.num_vars + self.num_masks) % 2) == 1) and (
+        #     self.local_rank // 2 == 1
+        # ):
+        #     target = torch.nn.functional.pad(
+        #         torch.tensor(y), (0, 0, 0, 0, 0, self.num_masks + 1)
+        #     )
+        # else:
+        #     
+        target = torch.tensor(y)
 
         return input, target
 
