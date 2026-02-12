@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Container configuration and paths
+# =============================================================================
 export PROJECT_DIR="${PROJECT_jureap1}/GBB"
 
 export VENV_DIR="${HOME}/.venvs/gbb"
@@ -6,18 +9,17 @@ export CONTAINER_HOME="${PROJECT_DIR}/images"
 export SIF="${CONTAINER_HOME}/pytorch25.06.sif"
 
 # Container mnt points
-export WORKDIR="/mnt" # For source code
-export LOCAL_WORKDIR="$( pwd )"
-export ALT_MNT="/workspace" # For data and additional stuff (probably just mount $PROJECT_DIR)
+export WORKDIR="$( pwd )" # For source code
 
 #export DATA_DIR="${PROJECT_DIR}/data"
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
 
-# Set environment variables for the container
+# =============================================================================
+# Environment configuration 
+# =============================================================================
+# Locale
 export LC_ALL=C
 export LANG=C
-
-# Prevent user site-packages from interfering
 export PYTHONNOUSERSITE=1
 
 # OpenMPI configuration for UCX transport
@@ -42,12 +44,19 @@ export NCCL_P2P_LEVEL=NVL
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
 
+# =============================================================================
+# Slurm configuration
+# =============================================================================
+# CPU_BIND="cores"
+# MEM_BIND="local"
+
 export SYSTEM_SLURM_PARAMS=(
+    # --cpu-bind "$CPU_BIND"
+    # --mem-bind "$MEM_BIND"
     apptainer
     exec
     --nv
     --bind "$DATA_DIR":"/workspace/"
-    --bind "$LOCAL_WORKDIR":"$WORKDIR"
     $SIF
     systems/venv_entry.sh
 )
@@ -56,4 +65,7 @@ setup_system() {
     echo "Purging modules"
     ml purge
     ml load Stages/2026 GCC/14.3.0 OpenMPI/5.0.8 MPI-settings/CUDA
+    
+    echo "Loaded modules:"
+    module list
 }
