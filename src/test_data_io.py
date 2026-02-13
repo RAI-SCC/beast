@@ -307,15 +307,15 @@ if __name__ == "__main__":
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
 
     process_group = get_process_group("DTP")
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     rank = process_group.rank()
-    device = f"cuda:{slurm_localid}"
+
+    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
     group_size = process_group.size()
     world_size = dist.get_world_size(group=None)
     print(f'Local Rank {rank}, global rank {dist.get_rank(group=None)} \n Local size {group_size}, global size {dist.get_world_size(group=None)}')
     
-    device = torch.device(f'cuda:{slurm_localid}')
-
     dim = config_dict["data"]["dims"]
     if os.getenv("DATA_DIR") is not None:
         data_path = (os.getenv("DATA_DIR") + config_dict["data"]["path"])

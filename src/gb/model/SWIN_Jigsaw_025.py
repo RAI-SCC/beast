@@ -123,6 +123,7 @@ class SWIN(torch.nn.Module):
                     self.dtp_group,
                     self.spatial_group,
                     self.channel_group,
+                    self.bayesian
                 ).to(self.device)
                 for i in torch.arange(
                     2 * (self.n_full_blocks[0])

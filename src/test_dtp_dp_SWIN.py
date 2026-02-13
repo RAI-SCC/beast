@@ -42,7 +42,9 @@ def training_loop(config_dict):
     dp_group = get_process_group("DP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
-    device = f"cuda:{slurm_localid}"
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
+    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -87,8 +89,8 @@ def training_loop(config_dict):
     # Make model data parallel
     model = DistributedDataParallel(
         model,
-        device_ids=[slurm_localid],
-        output_device=slurm_localid,
+        device_ids=[device_id],
+        output_device=device_id,
         process_group=dp_group,
     )
 
