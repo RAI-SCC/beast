@@ -69,3 +69,11 @@ setup_system() {
     echo "Loaded modules:"
     module list
 }
+
+init_system() {
+    setup_system
+    apptainer exec --nv $SIF python -m venv $VENV_DIR --system-site-packages
+    apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade pip
+    apptainer exec --nv $SIF systems/venv_entry.sh pip install -r requirements.txt
+    apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade h5py
+}

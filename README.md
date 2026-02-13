@@ -69,88 +69,35 @@ git submodule update --remote --recursive
 > Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
 
 
-### Horeka & FTP
+### System setup
 
-1) **Get images**
 
-```console
-ml purge
-export CONTAINER_HOME=$HOME/containers
-mkdir $CONTAINER_HOME
-apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
-```
-
-2) **Create a writable (sandbox) container**
+1) Source system image
 
 ```console
-apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
+source systems/<system_file>.sh
 ```
 
-3) **Install dependencies in the container**
+2) Ensure the container image is there. If not, then download it (not for lumi, for now):
 
 ```console
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer pull $SIF docker://nvcr.io/nvidia/pytorch:25.06-py3
 ```
 
-**All-in-one**
+3) Run init script
 
 ```console
-ml purge
-export CONTAINER_HOME=$HOME/containers
-mkdir $CONTAINER_HOME
-apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
-apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+init_system
 ```
 
-### LUMI
+4) Done
 
-Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif```
+#### Troubleshooting 
 
-
-0) Source ```systems/lumi_singularity.sh```
-
-1) Create virtual env
-
-```console
-module use /appl/local/containers/ai-modules
-module load singularity-AI-bindings
-singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
-singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
-singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
-singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
-```
-
-### Jupiter
-
-Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
-
-> [!WARNING]
-> Check first if the image already exists, to avoid unnecessary downloads and cache usage. If it does, you can skip this step.
->
-> If the temp directories don't exist, create them. [Link to the docs](https://apps.fz-juelich.de/jsc/hps/jupiter/container-runtime.html#apptainer-images)
->
-> **Step 0)** Pull image to shared location, at the moment -> ```$PROJECT_jureap1/GBB/images/.tmp```
->
-> ```console
-> export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
-> export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
-> apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
-> ```
-
-1) Create the virtual env for the container
-
-```console
-source systems/jupiter_container.sh
-setup_system
-apptainer exec --nv $SIF python -m venv $VENV_DIR --system-site-packages
-apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade pip
-apptainer exec --nv $SIF systems/venv_entry.sh pip install -r requirements.txt
-apptainer exec --nv $SIF systems/venv_entry.sh pip install --upgrade h5py
-```
+ * Make sure the container image exists
+ * Make sure the virtual environemnt exists (if not, run the init_system function)
+ * Library pointing to the wrong path (should either be a folder inside the container, the virtual environment, or the code repository for editable libraries), either restart the environment (`rm -rf $VENV_DIR`, and run `init_system` again), or install the library manually (`apptainer exec $SIF systems/venv_entry.sh pip installl <library>`)
+ * Anything else, you know where my office is.
 
 ## Example commands
 
