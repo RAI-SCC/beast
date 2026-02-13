@@ -11,6 +11,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
+from Jigsaw import Convolutions
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -248,7 +249,14 @@ def convert_jigsaw_vi(
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
         if class_name.startswith("AVI"):
-            if class_name in ["AVIDistributedXW", "AVIDistributedXTW"]:
+            in_out_switch_list = ["AVIDistributedXW", "AVIDistributedXTW"]
+            weight_sync_list = [
+                "AVIConv2d",
+                "AVIConvTranspose2d",
+                "AVIDistributedXWT_Nice",
+            ]
+
+            if class_name in in_out_switch_list:
                 m._calculate_fan_in = types.MethodType(_calculate_fan_out, m)
             # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
@@ -263,3 +271,8 @@ def convert_jigsaw_vi(
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
+
+            if class_name in weight_sync_list:
+                Convolutions._average_weights(
+                    m, get_process_group("JSpatial"), m.device
+                )
