@@ -51,6 +51,7 @@ export PMIX_MCA_gds="hash"
 # MEM_BIND="local"
 
 export SYSTEM_SLURM_PARAMS=(
+    -c71
     # --cpu-bind "$CPU_BIND"
     # --mem-bind "$MEM_BIND"
     apptainer
