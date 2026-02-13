@@ -44,7 +44,10 @@ def init_distributed() -> tuple[int, int, int]:
 
     # Set CUDA device before init
     if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
+
+        print(f"Local rank: {local_rank}, # devices: {torch.cuda.device_count()}")
+        device = torch.device("cuda", 0)
+        torch.cuda.set_device(device)
 
     # Initialize process group with NCCL backend
     if not dist.is_initialized():
@@ -64,7 +67,7 @@ def test_communication(rank: int, world_size: int, local_rank: int) -> dict:
     dist.barrier()  # Sync before starting tests
     print("All ranks synchronized, starting communication tests...")
 
-    device = torch.device(f"cuda:{local_rank}")
+    device = torch.device("cuda:0")
 
     # Test 1: All-reduce
     try:
@@ -179,7 +182,7 @@ def main():
     dist.barrier()
 
     # Each rank reports its setup
-    gpu_name = torch.cuda.get_device_name(local_rank) if torch.cuda.is_available() else "N/A"
+    gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A"
     print(f"[Rank {rank:2d}] Host: {hostname}, Local rank: {local_rank}, GPU: {gpu_name}")
     sys.stdout.flush()
     dist.barrier()
