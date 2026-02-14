@@ -119,6 +119,7 @@ class SWIN(torch.nn.Module):
                     self.embed_dim,
                     self.embed_dim,
                     self.heads,
+                    1e-3,  # dropout
                     self.local_rank,
                     self.device,
                     2,
@@ -139,14 +140,15 @@ class SWIN(torch.nn.Module):
                     self.embed_dim * 2,
                     self.embed_dim * 2,
                     self.embed_dim * 2,
-                    self.heads,
-                    self.local_rank,
-                    self.device,
-                    2,
-                    self.dtp_group,
-                    self.spatial_group,
-                    self.channel_group,
-                    self.bayesian,
+                    heads=self.heads,
+                    dropout=1e-3,  # dropout
+                    rank=self.local_rank,
+                    device=self.device,
+                    parallelism=2,
+                    model_group=self.dtp_group,
+                    spatial_group=self.spatial_group,
+                    channel_group=self.channel_group,
+                    bayesian=self.bayesian,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[1])
             ]
