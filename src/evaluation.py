@@ -4,10 +4,65 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.distributed as dist
 from Jigsaw.util_fns import plotting_functions as plot_fns
+from torch import Tensor
+
+from gb.losses.UP_Loss import GaussianAggregation
+from gb.utils import get_process_group
 
 
-def calc_weight(n_lat: int, cossum: float = 458.36551167) -> torch.Tensor:
+@torch.no_grad()
+def aggregate_crps(local_samples: Tensor, target: Tensor, up_group):
+    mae_part = (local_samples - target.expand_as(local_samples)).abs().mean(dim=0)
+    dist.all_reduce(mae_part, op=dist.ReduceOp.AVG, group=up_group)
+
+    rank = up_group.rank()
+    size = up_group.size()
+    samples_per_worker = local_samples.shape[0]
+    total_samples = samples_per_worker * size
+
+    spread_part = torch.zeros_like(mae_part)
+    buffer = torch.zeros_like(local_samples)
+    for i in range(size):
+        if rank == i:
+            buffer = local_samples.clone()
+
+        dist.broadcast(buffer, src=i, group=up_group)
+
+        if not rank == i:
+            spread_part += (local_samples - buffer).mean(dim=0) / (
+                2 * total_samples * (total_samples - 1)
+            )
+
+        dist.barrier(group=up_group)
+
+    return mae_part - spread_part
+
+
+class AggregationModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.up_group = get_process_group("SP")
+        self.jchannel_group = get_process_group("JChannel")
+        self.jspatial_group = get_process_group("JSpatial")
+
+        self.mean_std_agg = GaussianAggregation.apply
+
+    def forward(self, samples, target):
+        # TODO this is not averaging over the batch dimension currently; also, this might have to change significantly with the introduction of further Jigsaw stuff
+        with torch.no_grad():
+            mean, std = self.mean_std_agg(samples)
+            crps = aggregate_crps(samples, target, up_group=self.up_group)
+
+            rmse = torch.sqrt((mean - target) ** 2)
+            spread_skill = std / rmse
+
+        return mean, rmse, crps, spread_skill
+
+
+def calc_weight(n_lat: int) -> torch.Tensor:
     """
     Return latitude-weighted values for loss function.
 
@@ -20,6 +75,7 @@ def calc_weight(n_lat: int, cossum: float = 458.36551167) -> torch.Tensor:
         latitude_based weighting factor
     """
     latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
+    cossum = np.sum(np.cos(latitude))
     weight = n_lat * np.cos(latitude) / cossum
     return torch.tensor(weight)
 
