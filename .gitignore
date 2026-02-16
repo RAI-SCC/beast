@@ -210,3 +210,8 @@ __marimo__/
 experiments/**/*.png
 experiments/**/*.csv
 experiments/**/*.pt
+
+# log files
+logs/**/*.out
+results/**/*.txt
+results/**/*.txt

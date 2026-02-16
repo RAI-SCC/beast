@@ -56,10 +56,14 @@ git submodule update --remote --recursive
 ```
 
 > [!WARNING]
-> If you authenticate to github using HTTPs with username and password/token, you might get an authentification error. If that is the case, try this command:
+> If you authenticate to github using HTTPs with username and password/token, you might get an authentification error. If that is the case, try this commands:
 >
 > ```console
-> git config --local url."https://github.com/".insteadOf "git@github.com:"
+> sed -i -e "s/git@github.com:/https:\/\/github.com\//g" .gitmodules
+> git submodule deinit --all
+> git submodule init
+> git submodule update --remote --recursive
+> git restore .gitmodules
 > ```
 >
 > Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
@@ -108,14 +112,16 @@ Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-
 
 0) Source ```systems/lumi_singularity.sh```
 
-1) Create virtual env (shared env in project dir, only run when resetting the env)
+1) Create virtual env
 
 ```console
 module use /appl/local/containers/ai-modules
 module load singularity-AI-bindings
 singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/lumi_entry.sh pip install -r requirenments.txt
+singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
 singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
+singularity exec $SIF systems/lumi_entry.sh pip install --force-reinstall aiter
+singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
 ```
 
 ### Jupiter
@@ -149,26 +155,34 @@ Shared project data and container images for now under ```$PROJECT_jureap1/GBB``
 **Don't forget to adjust the mesh inside the ```src/test_process_mesh.py``` to match the number of nodes and gpus per node.**
 
 ```console
-sbatch -A hk-project-pai00058 -p accelerated --nodes 8 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/hk_acc_ml.sh
+sbatch -A hk-project-pai00058 -p accelerated --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/hk_container.sh src/test_process_mesh.py
 ```
 
 On lumi:
 ```console
-sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 experiments/test_dist.sh systems/lumi_singularity.sh
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/lumi_singularity.sh src/test_process_mesh.py
+```
+
+On jupiter:
+```console
+sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/jupiter_container.sh src/test_process_mesh.py
 ```
 
 ### Testing Bayesian domain-tensor-parallel (DTP) ViT model on HoreKa
 For now, without data parallelism (DDP), so only 4 GPUs in a node:
 
 ```console
-sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/test_dtp_ViT.sh systems/hk_container.sh
+sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres=gpu:4 experiments/run_gb_script.sh systems/hk_container.sh src/test_dtp_ViT.py --config_file configs/ViTFourway.yaml
 ```
 
-### Testing Bayesian SWIN Transformer model (Kangu) on HoreKa
-For now only includes data parallelism (DDP):
+### Performance monitoring with Perun
 
 ```console
-sbatch -A hk-project-pai00071 -p accelerated --nodes 2 --tasks-per-node 4 --gres=gpu:4 experiments/test_dp_SWIN.sh systems/hk_container.sh
+sbatch -A jureap1 -p booster --nodes 2 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
+```
+### Current sota model with dtp, sp and dp + torch_blue on SWIN, 0.25 degree
+```console
+sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=dtp_sp_dp_SWIN experiments/run_gb_script.sh systems/jupiter_container.sh src/test_dtp_dp_SWIN.py --config_file configs/dtp_sp_dp_SWIN_config.yaml
 ```
 
 ## Wiki
