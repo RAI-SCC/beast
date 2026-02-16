@@ -38,30 +38,6 @@ class UP_AllGaussLoss(nn.Module):
 
         return data_fit
 
-    """
-    def aggregate_statistics(self, model_output):
-        loc_sample_num = model_output.shape[0]
-        up_num = self.pg.size()
-        total_samples = loc_sample_num * up_num
-
-        local_mean = model_output.mean(dim=0)
-        local_std = model_output.std(dim=0)
-
-        mean = local_mean / up_num
-        mean = dnn.all_reduce(mean, group=self.pg)
-
-        local_contribution = (loc_sample_num / (total_samples - 1)) * (
-            (mean - local_mean) ** 2
-        )
-        local_contribution = local_contribution + (
-            (loc_sample_num - 1) / (total_samples - 1)
-        ) * (local_std**2)
-        local_contribution = dnn.all_reduce(local_contribution, group=self.pg)
-        std = torch.sqrt(local_contribution)
-
-        return mean, std
-    """
-
     def forward(self, model_output, target):
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
 
