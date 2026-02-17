@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 
-from gb.dataloaders.dataset_0_25_degree_new import ERA5DatasetDistributed
+from gb.dataloaders.dataset_0_25_degree import ERA5DatasetDistributed
 
 
 def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
