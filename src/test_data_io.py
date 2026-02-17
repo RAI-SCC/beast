@@ -12,6 +12,7 @@ import torch
 import torch.distributed as dist
 import xarray as xr
 import yaml
+import zarr
 
 from gb.utils import get_process_group, init_gb_process_group
 
@@ -370,6 +371,9 @@ if __name__ == "__main__":
     mesh_dims = config_dict["mesh_dims"]
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
 
+    num_workers = int(os.getenv("SLURM_CPUS_PER_TASK") or 1)
+    zarr.config.set({"threading.max_workers": (num_workers - 2)})
+
     process_group = get_process_group("DTP")
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     rank = process_group.rank()
@@ -388,8 +392,23 @@ if __name__ == "__main__":
     else:
         data_path = "/lsdf/kit/scc/projects/bellbeast/era5_stackedvars_test.zarr/"
 
-    ############# ACTUAL EXPERIMENTS
-    if group_size == 4:  # For JUPITER
+    ############# ACTUAL EXPERIMENTS#############
+    ####### JUPITER Configuration #######
+    if group_size == 4:
+        # Dry run for warm up
+        t = time.perf_counter()
+        for idx in range(config_dict["data"]["num_items"]):
+            _ = load_data_chunked_4way(
+                data_path,
+                idx,
+                process_group,
+                gpu_direct=True,
+                load_order=[0, 1, 2, 3],
+                dim=[84, 721, 1440],
+            )
+        dist.barrier()
+
+        # Cunked loading (load order [0,1,2,3])
         start_time = time.perf_counter()
         for idx in range(config_dict["data"]["num_items"]):
             _ = load_data_chunked_4way(
@@ -404,10 +423,11 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_chunked_4way = torch.zeros(world_size, dtype=torch.float64, device=device)
-        dist.all_gather_into_tensor(time_chunked_4way, tensor_in)
+        time_chunked_4way = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_chunked_4way, tensor_in, group=process_group)
         dist.barrier()
 
+        # Cunked loading (load order [0,2,1,3])
         start_time = time.perf_counter()
         for idx in range(config_dict["data"]["num_items"]):
             _ = load_data_chunked_4way(
@@ -422,8 +442,8 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_chunked2_4way = torch.zeros(world_size, dtype=torch.float64, device=device)
-        dist.all_gather_into_tensor(time_chunked2_4way, tensor_in)
+        time_chunked2_4way = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_chunked2_4way, tensor_in, group=process_group)
         dist.barrier()
 
         ### Rank 0 is loading
@@ -436,10 +456,8 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_scatter_4way_0 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_4way_0, tensor_in)
+        time_scatter_4way_0 = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_scatter_4way_0, tensor_in, group=process_group)
         dist.barrier()
 
         ### Rank 1 is loading
@@ -452,10 +470,8 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_scatter_4way_1 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_4way_1, tensor_in)
+        time_scatter_4way_1 = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_scatter_4way_1, tensor_in, group=process_group)
         dist.barrier()
 
         ### Rank 2 is loading
@@ -468,10 +484,8 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_scatter_4way_2 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_4way_2, tensor_in)
+        time_scatter_4way_2 = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_scatter_4way_2, tensor_in, group=process_group)
         dist.barrier()
 
         ### Rank 3 is loading
@@ -484,10 +498,8 @@ if __name__ == "__main__":
         tensor_in = torch.tensor(
             [end_time - start_time], dtype=torch.float64, device=device
         )
-        time_scatter_4way_3 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_4way_3, tensor_in)
+        time_scatter_4way_3 = torch.zeros(4, dtype=torch.float64, device=device)
+        dist.all_gather_into_tensor(time_scatter_4way_3, tensor_in, group=process_group)
         dist.barrier()
 
         if rank == 0:
@@ -495,7 +507,8 @@ if __name__ == "__main__":
                 f"RESULTS on rank {dist.get_rank(group=None)} (out of {time_chunked_4way.shape} elements):\n Chunked with load order [0,1,2,3] : Mean {time_chunked_4way.mean().item()}, Max {time_chunked_4way.max().item()}\n Chunked with load order [0,2,1,3] : Mean {time_chunked2_4way.mean().item()}, Max {time_chunked2_4way.max().item()}\n Scatter with loaderID = 0: Mean {time_scatter_4way_0.mean().item()}, Max {time_scatter_4way_0.max().item()}\n Scatter with loaderID = 1: Mean {time_scatter_4way_1.mean().item()}, Max {time_scatter_4way_1.max().item()}\n Scatter with loaderID = 2: Mean {time_scatter_4way_2.mean().item()}, Max {time_scatter_4way_2.max().item()}\n Scatter with loaderID = 3: Mean {time_scatter_4way_3.mean().item()}, Max {time_scatter_4way_3.max().item()}\n"
             )
 
-    elif group_size == 8:  # For LUMI
+    ####### LUMI Configuration #######
+    elif group_size == 8:
         start_time = time.perf_counter()
         for idx in range(config_dict["data"]["num_items"]):
             _ = load_data_chunked_8way(
