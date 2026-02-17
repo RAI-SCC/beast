@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
+import torch_blue
 from Jigsaw.util_fns import plotting_functions as plot_fns
 from torch import Tensor
 
@@ -47,10 +48,11 @@ class AggregationModule(torch.nn.Module):
         self.up_group = get_process_group("SP")
         self.jchannel_group = get_process_group("JChannel")
         self.jspatial_group = get_process_group("JSpatial")
+        self.dtp_group = get_process_group("DTP")
 
         self.mean_std_agg = GaussianAggregation.apply
 
-    def forward(self, samples, target):
+    def forward(self, samples, target, model, dataset_size):
         # TODO this is not averaging over the batch dimension currently; also, this might have to change significantly with the introduction of further Jigsaw stuff
         with torch.no_grad():
             mean, std = self.mean_std_agg(samples)
@@ -59,7 +61,27 @@ class AggregationModule(torch.nn.Module):
             rmse = torch.sqrt((mean - target) ** 2)
             spread_skill = std / rmse
 
-        return mean, rmse, crps, spread_skill
+            kl_loss = torch_blue.vi.AnalyticalKullbackLeiblerLoss(
+                model,
+                torch_blue.vi.distributions.MeanFieldNormal(),
+                divergence_type=torch_blue.vi.NormalNormalDivergence(),
+                dataset_size=dataset_size,
+            )
+
+            data_fit = (
+                -dataset_size
+                * kl_loss.predictive_distribution.log_prob_from_parameters(
+                    target, (mean, std)
+                )
+                .mean(dim=0)
+                .sum()
+            )
+            dist.all_reduce(data_fit, op=dist.ReduceOp.SUM, group=self.dtp_group)
+
+            prior_matching = kl_loss.prior_matching()
+            dist.all_reduce(prior_matching, group=self.dtp_group)
+
+        return data_fit, prior_matching, rmse, crps, spread_skill
 
 
 def calc_weight(n_lat: int) -> torch.Tensor:
