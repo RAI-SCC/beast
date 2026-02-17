@@ -71,11 +71,6 @@ def training_loop(config_dict):
     )
 
     model = model.to(torch.float32).to(device)
-    # Synchronize parameters; ToDO: Check this @deifilia :D
-    for name, param in model.named_parameters():
-        if param is not None:
-            if "bias" in name:
-                dist.all_reduce(param.data, op=dist.ReduceOp.AVG, group=spatial_group)
 
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
