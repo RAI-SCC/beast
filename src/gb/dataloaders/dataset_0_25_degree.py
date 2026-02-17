@@ -155,7 +155,7 @@ class ERA5DatasetDistributed(Dataset):
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
         target = torch.tensor(y)
-        print(f"input.shape {input.shape}, target.shape {target.shape}")
+
         return input, target
 
     def __load_constant_mask_2d(self, folder_path, mask_list):
