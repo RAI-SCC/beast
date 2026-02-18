@@ -40,11 +40,13 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ep_group = get_process_group("Expert")
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    # slurm_localid = int(
+    #     os.getenv("SLURM_LOCALID") or 0
+    # )  # change to torch.cuda.current_device()
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
-    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -69,6 +71,8 @@ def training_loop(config_dict):
         dtp_group=dtp_group,
         spatial_group=spatial_group,
         channel_group=channel_group,
+        ep_group=ep_group,
+        sp_group=up_group,
         bayesian=True,
     )
 
@@ -149,9 +153,11 @@ def train_one_epoch(
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
+
         pred = model(
             x, samples=n_samples
         )  # Add samples = config_dict["training"]["n_samples"]
+        print(f"Rank {dist.get_rank(group=None)} pred = {pred}")
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness
