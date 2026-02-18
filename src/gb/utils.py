@@ -2,7 +2,6 @@ import math
 import os
 import types
 from collections.abc import Sequence
-from typing import Tuple, cast
 
 import pandas as pd
 import torch
@@ -11,7 +10,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
-from Jigsaw import Convolutions
+from Jigsaw import Convolutions, Normalization
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -172,6 +171,7 @@ def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
 
+
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
@@ -182,6 +182,10 @@ def convert_jigsaw_vi(
     return_log_probs=True,
 ):
     torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
+
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
 
     torch_blue.vi.convert_to_vimodule(
         module,
@@ -200,26 +204,24 @@ def convert_jigsaw_vi(
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
         return previous * num_jchannel
 
+    fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
+
+    weight_sync_list = [
+        "AVIConv2d",
+        "AVIConvTranspose2d",
+        "AVIDistributedXWTSync",
+        "AVIDistributedXWT_Nice",
+    ]
+
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
         if class_name.startswith("AVI"):
-            weight_sync_list = [
-                "AVIConv2d",
-                "AVIConvTranspose2d",
-                "AVIDistributedXWTSync",
-                "AVIDistributedXWT_Nice"
-            ]
             # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
-            match class_name:
-                #case "AVIConvTranspose2d":
-                #    m._old_calculate_fan_in = m._calculate_fan_in
-                #    m._calculate_fan_in = types.MethodType(new_cf_col, m)
-                #    m.reset_variational_parameters()
-                case "AVIDistributedXWTSync" | "AVIConvTranspose2d":
-                    m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = types.MethodType(new_cf_channel, m)
-                    m.reset_variational_parameters()
+            if class_name in fan_in_rescale_list:
+                m._old_calculate_fan_in = m._calculate_fan_in
+                m._calculate_fan_in = types.MethodType(new_cf_channel, m)
+                m.reset_variational_parameters()
 
             if class_name in weight_sync_list:
                 Convolutions._average_weights(
