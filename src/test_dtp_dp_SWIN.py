@@ -42,7 +42,9 @@ def training_loop(config_dict):
     dp_group = get_process_group("DP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
-    device = f"cuda:{slurm_localid}"
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
+    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -71,11 +73,6 @@ def training_loop(config_dict):
     )
 
     model = model.to(torch.float32).to(device)
-    # Synchronize parameters; ToDO: Check this @deifilia :D
-    for name, param in model.named_parameters():
-        if param is not None:
-            if "bias" in name:
-                dist.all_reduce(param.data, op=dist.ReduceOp.AVG, group=spatial_group)
 
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
@@ -87,8 +84,8 @@ def training_loop(config_dict):
     # Make model data parallel
     model = DistributedDataParallel(
         model,
-        device_ids=[slurm_localid],
-        output_device=slurm_localid,
+        device_ids=[device_id],
+        output_device=device_id,
         process_group=dp_group,
     )
 

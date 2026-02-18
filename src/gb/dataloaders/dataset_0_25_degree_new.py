@@ -56,8 +56,8 @@ class ERA5DatasetDistributed(Dataset):
         self.total_vars = self.num_vars + self.num_masks
         if self.total_vars % 2 == 1:
             self.total_vars += 1
-        
-        ## todo: include normalization once new values are there (in zarr format) 
+
+        ## todo: include normalization once new values are there (in zarr format)
         # normalization for pressure levels and standard deviation
         # self.norm_values = np.load(
         #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
@@ -150,7 +150,7 @@ class ERA5DatasetDistributed(Dataset):
         #         torch.tensor(y), (0, 0, 0, 0, 0, self.num_masks + 1)
         #     )
         # else:
-        #     
+        #
         target = torch.tensor(y)
 
         return input, target

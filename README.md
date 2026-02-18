@@ -69,84 +69,35 @@ git submodule update --remote --recursive
 > Otherwise, make sure your SSH keys are correctly set up. Or contact @JuanPedroGHM for help.
 
 
-### Horeka & FTP
+### System setup
 
-1) **Get images**
 
-```console
-ml purge
-export CONTAINER_HOME=$HOME/containers
-mkdir $CONTAINER_HOME
-apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
-```
-
-2) **Create a writable (sandbox) container**
+1) Source system image
 
 ```console
-apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
+source systems/<system_file>.sh
 ```
 
-3) **Install dependencies in the container**
+2) Ensure the container image is there. If not, then download it (not for lumi, for now):
 
 ```console
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+apptainer pull $SIF docker://nvcr.io/nvidia/pytorch:25.06-py3
 ```
 
-**All-in-one**
+3) Run init script
 
 ```console
-ml purge
-export CONTAINER_HOME=$HOME/containers
-mkdir $CONTAINER_HOME
-apptainer build $CONTAINER_HOME/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3
-apptainer build --sandbox $CONTAINER_HOME/gb_pytorch25.06/  $CONTAINER_HOME/pytorch25.06.sif
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install --upgrade pip
-apptainer exec --writable --no-home --bind $(pwd):/mnt --cwd /mnt $CONTAINER_HOME/gb_pytorch25.06/ pip install -r requirements.txt
+init_system
 ```
 
-### LUMI
+4) Done
 
-Base image: ```/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif```
+#### Troubleshooting 
 
-
-0) Source ```systems/lumi_singularity.sh```
-
-1) Create virtual env
-
-```console
-module use /appl/local/containers/ai-modules
-module load singularity-AI-bindings
-singularity exec $SIF bash -c '$WITH_CONDA && python -m venv $VENV_DIR --system-site-packages'
-singularity exec $SIF systems/lumi_entry.sh pip install -r requirements.txt
-singularity exec $SIF systems/lumi_entry.sh pip install --upgrade h5py
-singularity exec $SIF systems/lumi_entry.sh pip install --force-reinstall aiter
-singularity exec $SIF systems/lumi_entry.sh python -c 'import aiter'
-```
-
-### Jupiter
-
-Shared project data and container images for now under ```$PROJECT_jureap1/GBB```. The system file should already point to the right locations, so nothing to do.
-
-> [!WARNING]
-> **Setup (for documentation purposes, don't do this again unless necessary)**
->
->
-> 0) Create apptainer cache and tmp dir: At the moment located on ```$PROJECT_jureap1/GBB/images/.tmp```
->
-> ```console
-> export APPTAINER_CACHEDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.bn08sGGPGY"
-> export APPTAINER_TMPDIR="${PROJECT_jureap1}/GBB/images/.tmp/tmp.QhAUf2fZWY"
-> ```
->
-> 1) Pull the image ```apptainer pull $PROJECT_jureap1/GBB/images/pytorch25.06.sif docker://nvcr.io/nvidia/pytorch:25.06-py3```
->
-> 2) Create the sandbox image and install dependencies
->
-> ```
-> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install --upgrade pip
-> apptainer exec --writable --no-home --bind $(pwd):/mnt/ --cwd /mnt $PROJECT_jureap1/GBB/images/gb_pytorch25.06/ pip install -r requirements.txt
-> ```
+ * Make sure the container image exists
+ * Make sure the virtual environemnt exists (if not, run the init_system function)
+ * Library pointing to the wrong path (should either be a folder inside the container, the virtual environment, or the code repository for editable libraries), either restart the environment (`rm -rf $VENV_DIR`, and run `init_system` again), or install the library manually (`apptainer exec $SIF systems/venv_entry.sh pip installl <library>`)
+ * Anything else, you know where my office is.
 
 ## Example commands
 
@@ -178,7 +129,7 @@ sbatch -A hk-project-pai00071 -p accelerated --nodes 1 --tasks-per-node 4 --gres
 ### Performance monitoring with Perun
 
 ```console
-sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
+sbatch -A jureap1 -p booster --nodes 2 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
 ```
 ### Current sota model with dtp, sp and dp + torch_blue on SWIN, 0.25 degree
 ```console
