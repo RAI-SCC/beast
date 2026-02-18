@@ -172,47 +172,6 @@ def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
 
-
-def _calculate_fan_out(self, variable_shapes=None):
-    """
-    calculates fan_out for a Bayesian layer assuming that weight shape is (out_dim, in_dim); if weight shape is
-    (in_dim, out_dim) instead calculates fan_in, which is what it will be used for in this project
-    """
-
-    if variable_shapes is None:
-        loop = self.random_variables
-        checked_dict = self.variational_distribution
-    else:
-        loop = checked_dict = variable_shapes  # type:ignore[assignment]
-
-    if len(loop) == 0:
-        raise torch_blue.vi.utils.errors.NoVariablesError(
-            "All module variables are set to None."
-        )
-
-    for var in cast(Tuple[str, ...], loop):
-        if checked_dict[var] is None:
-            continue
-
-        if variable_shapes is None:
-            weight_name = self.variational_parameter_name(
-                var,
-                self.variational_distribution[var].primary_parameter,
-            )
-            shape_dummy = getattr(self, weight_name)
-        else:
-            shape_dummy = torch.zeros(variable_shapes[var])
-
-        if shape_dummy.dim() < 2:
-            continue
-
-        _, fan_out = init._calculate_fan_in_and_fan_out(shape_dummy)
-        return fan_out
-    else:
-        # TODO raise warning here
-        return 1
-
-
 def convert_jigsaw_vi(
     module,
     variational_distribution=vidist.Normal(),
@@ -235,41 +194,31 @@ def convert_jigsaw_vi(
         keep_weights=False,
     )
 
-    num_jcols = get_process_group("JSpatial")  # get_process_group("JCol").size()
-    num_jrows = get_process_group("JChannel")  # get_process_group("JRow").size()
+    num_jchannel = get_process_group("JChannel")  # get_process_group("JRow").size()
 
-    def new_cf_col(self, variable_shapes=None):
+    def new_cf_channel(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-        return previous * num_jcols
-
-    def new_cf_row(self, variable_shapes=None):
-        previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-        return previous * num_jrows
+        return previous * num_jchannel
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
         if class_name.startswith("AVI"):
-            in_out_switch_list = ["AVIDistributedXW", "AVIDistributedXTW"]
             weight_sync_list = [
                 "AVIConv2d",
                 "AVIConvTranspose2d",
-                "AVIDistributedXWT_Nice",
+                "AVIDistributedXWTSync",
+                "AVIDistributedXWT_Nice"
             ]
-
-            if class_name in in_out_switch_list:
-                m._calculate_fan_in = types.MethodType(_calculate_fan_out, m)
             # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
             match class_name:
-                case (
-                    "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2d"
-                ):
+                #case "AVIConvTranspose2d":
+                #    m._old_calculate_fan_in = m._calculate_fan_in
+                #    m._calculate_fan_in = types.MethodType(new_cf_col, m)
+                #    m.reset_variational_parameters()
+                case "AVIDistributedXWTSync" | "AVIConvTranspose2d":
                     m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = types.MethodType(new_cf_col, m)
-                    m.reset_variational_parameters()
-                case "AVIDistributedXW" | "AVIDistributedXTW":
-                    m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = types.MethodType(new_cf_row, m)
+                    m._calculate_fan_in = types.MethodType(new_cf_channel, m)
                     m.reset_variational_parameters()
 
             if class_name in weight_sync_list:
