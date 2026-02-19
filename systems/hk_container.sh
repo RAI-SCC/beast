@@ -41,8 +41,8 @@ export PMIX_MCA_gds="hash"
 # MEM_BIND="local"
 
 export SYSTEM_SLURM_PARAMS=(
-    # --cpu-bind "$CPU_BIND"
-    # --mem-bind "$MEM_BIND"
+    -c18
+    --cpu-bind=v
     apptainer
     exec
     --nv
@@ -50,7 +50,7 @@ export SYSTEM_SLURM_PARAMS=(
     --bind "$TMP"
     --bind "$DATA_DIR":"$DATA_DIR"
     $SIF
-    systems/venv_entrypoint.sh
+    systems/venv_entry.sh
 )
 
 setup_system() {

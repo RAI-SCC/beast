@@ -59,7 +59,8 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 GPU_BIND="map:4,5,2,3,6,7,0,1"
 
 export SYSTEM_SLURM_PARAMS=(
-    -c7
+    --cpu-bind=v
+    --cpus-per-task=7
     --gpu-bind="${GPU_BIND}"
     --gres-flags=allow-task-sharing
     --mpi=pmi2
@@ -71,7 +72,7 @@ export SYSTEM_SLURM_PARAMS=(
 )
 
 setup_system(){
-    module purge
+#    module purge
     echo "Setting up LUMI-G environment..."
     module use /appl/local/containers/ai-modules
     module load singularity-AI-bindings
