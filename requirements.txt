@@ -2,7 +2,7 @@
 
 torch
 pyyaml
-zarr
+zarr==3.1.5
 xarray
 git+https://github.com/Helmholtz-AI-Energy/perun@feat/new-sysfs-backends
 mpi4py
