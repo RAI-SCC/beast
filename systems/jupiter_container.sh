@@ -15,7 +15,7 @@ export WORKDIR="$( pwd )" # For source code
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
 
 # =============================================================================
-# Environment configuration 
+# Environment configuration
 # =============================================================================
 # Locale
 export LC_ALL=C
@@ -66,7 +66,7 @@ setup_system() {
     echo "Purging modules"
     ml purge
     ml load Stages/2026 GCC/14.3.0 OpenMPI/5.0.8 MPI-settings/CUDA
-    
+
     echo "Loaded modules:"
     module list
 }

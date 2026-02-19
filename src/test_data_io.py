@@ -17,7 +17,6 @@ import zarr
 from gb.utils import get_process_group, init_gb_process_group
 
 
-
 def load_data_chunked_4way(
     data_path,
     idx,
@@ -184,7 +183,6 @@ def load_data_scatter_8way(
     var, xlon, xlat = dim
     scatter_list = None
 
-    local_rank = torch.distributed.get_rank(group_dict["DTP"])
     device_id = torch.cuda.current_device()
 
     if loaderID not in range(torch.distributed.get_world_size(group_dict["DTP"])):
@@ -227,11 +225,12 @@ def load_data_scatter_8way(
 
 
 from mpi4py import MPI
+
 comm = MPI.COMM_WORLD
 mpi_rank = comm.Get_rank()
 mpi_world_size = comm.Get_size()
 
-mpi_cartcomm = comm.Create_cart([4,2], periods=[True]*2, reorder=False)
+mpi_cartcomm = comm.Create_cart([4, 2], periods=[True] * 2, reorder=False)
 
 
 def load_data_scatter_8way_mpi_scatter_dt(
@@ -255,9 +254,7 @@ def load_data_scatter_8way_mpi_scatter_dt(
         Dimensions of the datacube. Can probably be inferred from the zarr file itself...
     """
     var, xlon, xlat = dim
-    scatter_list = None
 
-    local_rank = torch.distributed.get_rank(group_dict["DTP"])
     device_id = torch.cuda.current_device()
 
     if loaderID not in range(torch.distributed.get_world_size(group_dict["DTP"])):
@@ -286,37 +283,37 @@ def load_data_scatter_8way_mpi_scatter_dt(
         )
         dt_extent = (xlat // 4) * MPI.FLOAT.Get_extent()[1]
 
-        subarray_type = MPI.FLOAT.Create_subarray(
-            sizes=dim,
-            subsizes=data_chunk.shape,
-            starts=[0] * len(dim),
-        ).Create_resized(0,dt_extent).Commit()
+        subarray_type = (
+            MPI.FLOAT.Create_subarray(
+                sizes=dim,
+                subsizes=data_chunk.shape,
+                starts=[0] * len(dim),
+            )
+            .Create_resized(0, dt_extent)
+            .Commit()
+        )
         var_jump = 4 * xlon * (var // 2)
         send_buffer = (
-            MPI.buffer.fromaddress(
-                data_item.untyped_storage().data_ptr(),
-                0
+            MPI.buffer.fromaddress(data_item.untyped_storage().data_ptr(), 0),
+            (
+                (1,) * 8,
+                (0, 1, 2, 3, var_jump, var_jump + 1, var_jump + 2, var_jump + 3),
             ),
-            ((1,) * 8, (0, 1, 2, 3, var_jump, var_jump + 1, var_jump+2, var_jump + 3)),
-            subarray_type
+            subarray_type,
         )
 
     recv_buffer = (
-        MPI.buffer.fromaddress(
-            data_chunk.untyped_storage().data_ptr(),
-            0
-        ),
+        MPI.buffer.fromaddress(data_chunk.untyped_storage().data_ptr(), 0),
         data_chunk.numel(),
-        MPI.FLOAT
+        MPI.FLOAT,
     )
 
-
-    comm.Scatterv(
-        send_buffer, recv_buffer, root=0
-    )
+    comm.Scatterv(send_buffer, recv_buffer, root=0)
     if not gpu_direct:
         gpu_data_chunk = data_chunk.to(device)
     torch.cuda.synchronize()
+    return gpu_data_chunk
+
 
 def load_data_scatter_8way_mpi_cont(
     data_path, idx, process_group, loaderID, gpu_direct=False, dim=[84, 721, 1440]
@@ -341,7 +338,6 @@ def load_data_scatter_8way_mpi_cont(
     var, xlon, xlat = dim
     scatter_list = None
 
-    local_rank = torch.distributed.get_rank(group_dict["DTP"])
     device_id = torch.cuda.current_device()
 
     device = f"cuda:{device_id}"
@@ -357,7 +353,6 @@ def load_data_scatter_8way_mpi_cont(
         )
         return
 
-
     # Only Node-local Rank <loaderID> gets to load the data
     if torch.distributed.get_rank(group_dict["DTP"]) == loaderID:
         zarr_data = xr.open_dataset(data_path, engine="zarr")
@@ -368,11 +363,15 @@ def load_data_scatter_8way_mpi_cont(
         scatter_list = [
             data_item[: var // 2, :, : xlat // 4].clone().contiguous(),
             data_item[: var // 2, :, xlat // 4 : 2 * xlat // 4].clone().contiguous(),
-            data_item[: var // 2, :, 2 * xlat // 4 : 3 * xlat // 4].clone().contiguous(),
+            data_item[: var // 2, :, 2 * xlat // 4 : 3 * xlat // 4]
+            .clone()
+            .contiguous(),
             data_item[: var // 2, :, 3 * xlat // 4 :].clone().contiguous(),
             data_item[var // 2 :, :, : xlat // 4].clone().contiguous(),
             data_item[var // 2 :, :, xlat // 4 : 2 * xlat // 4].clone().contiguous(),
-            data_item[var // 2 :, :, 2 * xlat // 4 : 3 * xlat // 4].clone().contiguous(),
+            data_item[var // 2 :, :, 2 * xlat // 4 : 3 * xlat // 4]
+            .clone()
+            .contiguous(),
             data_item[var // 2 :, :, 3 * xlat // 4 :].clone().contiguous(),
         ]
 
@@ -380,6 +379,7 @@ def load_data_scatter_8way_mpi_cont(
     if not gpu_direct:
         gpu_chunk = data_chunk.to(device)
     torch.cuda.synchronize()
+    return gpu_chunk
 
 
 def load_data_chunked_8way(
@@ -420,7 +420,7 @@ def load_data_chunked_8way(
 
     local_rank = torch.distributed.get_rank(group_dict["DTP"])
     device_id = torch.cuda.current_device()
-    zarr_data = xr.open_dataset(data_path, engine="zarr", mode='r')
+    zarr_data = xr.open_dataset(data_path, engine="zarr", mode="r")
 
     var, xlat, xlon = dim
 
@@ -481,7 +481,6 @@ def load_data_scatterchunked_8way(
     channel_group = group_dict["JChannel"]
     local_rank = torch.distributed.get_rank(group_dict["DTP"])
     device_id = torch.cuda.current_device()
-    group_size = torch.distributed.get_world_size(group_dict["DTP"])
 
     if gpu_direct:
         device = f"cuda:{device_id}"
@@ -542,8 +541,10 @@ if __name__ == "__main__":
     device = torch.device("cuda", device_id)
     group_size = process_group.size()
     world_size = dist.get_world_size(group=None)
-    print(f'Local Rank {rank}, global rank {dist.get_rank(group=None)} \n Local size {group_size}, global size {dist.get_world_size(group=None)}')
-    
+    print(
+        f"Local Rank {rank}, global rank {dist.get_rank(group=None)} \n Local size {group_size}, global size {dist.get_world_size(group=None)}"
+    )
+
     dim = config_dict["data"]["dims"]
     if os.getenv("DATA_DIR") is not None:
         data_path = os.getenv("DATA_DIR") + config_dict["data"]["path"]
@@ -686,9 +687,9 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_chunked_8way_loadorder1, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("First")
-                
+
         start_time = time.perf_counter()
         for idx in range(config_dict["data"]["num_items"]):
             _ = load_data_chunked_8way(
@@ -708,7 +709,7 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_chunked_8way_loadorder2, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("Second")
 
         ### Rank 0 is loading
@@ -727,7 +728,7 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_scatter_8way_0, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("Third")
 
         # Scatter mpi dt
@@ -761,7 +762,7 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_scatter_8way_mpi_dt_direct_0, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("Fourth")
 
         # Scatter mpi cont
@@ -795,7 +796,7 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_scatter_8way_mpi_cont_direct_0, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("Fifth")
 
         # Scatter chunked
@@ -813,7 +814,7 @@ if __name__ == "__main__":
         )
         dist.all_gather_into_tensor(time_scatterchunked_8way, tensor_in)
         dist.barrier()
-        if rank == 0: 
+        if rank == 0:
             print("Last")
 
         if rank == 0:

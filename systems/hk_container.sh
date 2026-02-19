@@ -11,7 +11,7 @@ export SIF="$CONTAINER_HOME/pytorch25.06.sif"
 export VENV_DIR="$HOME/.venvs/gbb"
 
 # =============================================================================
-# Environment configuration 
+# Environment configuration
 # =============================================================================
 # Locale
 export LC_ALL=C
