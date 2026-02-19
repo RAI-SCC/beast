@@ -17,9 +17,9 @@ from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.UP_Loss import UP_AllGaussLoss
-from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
 
 # Import model
+from gb.model.SWIN_Jigsaw_025 import SWIN
 from gb.utils import get_process_group, init_gb_process_group
 
 
@@ -49,7 +49,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = NICE_SWIN(
+    model = SWIN(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],

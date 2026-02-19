@@ -2,7 +2,7 @@ import torch
 from Jigsaw import Attention, Convolutions, Linear
 
 
-class SWIN(torch.nn.Module):
+class NICE_SWIN(torch.nn.Module):
     def __init__(
         self,
         xlat,
@@ -15,6 +15,7 @@ class SWIN(torch.nn.Module):
         window_size_outer,
         window_size_inner,
         n_full_blocks,
+        noise_dim,
         dtp_rank,
         device,
         dtp_group,
@@ -43,7 +44,7 @@ class SWIN(torch.nn.Module):
         self.out_channels = out_channels
 
         self.bayesian = bayesian
-        self.noise_dim = 32
+        self.noise_dim = noise_dim
 
         self.patch_embedding = Convolutions.DistributedConv2D(
             self.in_channels,
@@ -245,7 +246,7 @@ class SWIN(torch.nn.Module):
             # noise has shape [B, noise_dim]
             # we want noise to have [B*n_sw]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
-            x = self.transformer[i * 2](x, mask=None, noise=noise_transformer)
+            x = self.transformer[i * 2](x, noise_transformer, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
@@ -255,7 +256,7 @@ class SWIN(torch.nn.Module):
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
-            x = self.transformer[i * 2 + 1](x, mask, noise=noise_transformer)
+            x = self.transformer[i * 2 + 1](x, noise_transformer, mask)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
@@ -276,7 +277,7 @@ class SWIN(torch.nn.Module):
             x = self._get_windows(x, self.window_size_inner)
             n_windows = x.shape[0] // B
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
-            x = self.transformer_down[i * 2](x, mask=None, noise=noise_transformer_down)
+            x = self.transformer_down[i * 2](x, noise_transformer_down, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
@@ -286,7 +287,7 @@ class SWIN(torch.nn.Module):
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
-            x = self.transformer_down[i * 2 + 1](x, mask, noise=noise_transformer_down)
+            x = self.transformer_down[i * 2 + 1](x, noise_transformer_down, mask)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
@@ -302,7 +303,7 @@ class SWIN(torch.nn.Module):
         for i in range(self.n_full_blocks[2]):
             x = self._get_windows(x, self.window_size_outer)
             x = self.transformer[i * 2 + 2 * self.n_full_blocks[0]](
-                x, mask=None, noise=noise_transformer
+                x, noise=noise_transformer, mask=None
             )
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
@@ -315,7 +316,7 @@ class SWIN(torch.nn.Module):
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer[i * 2 + 2 * self.n_full_blocks[0] + 1](
-                x, mask, noise=noise_transformer
+                x, noise_transformer, mask
             )
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
