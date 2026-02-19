@@ -207,7 +207,7 @@ def convert_jigsaw_vi(
     fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
 
     weight_sync_list = [
-        "AVIConv2d",
+        "VIConv2d",
         "AVIConvTranspose2d",
         "AVIDistributedXWTSync",
         "AVIDistributedXWT_Nice",
@@ -215,15 +215,11 @@ def convert_jigsaw_vi(
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
-        if class_name.startswith("AVI"):
-            # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
-            if class_name in fan_in_rescale_list:
-                m._old_calculate_fan_in = m._calculate_fan_in
-                m._calculate_fan_in = types.MethodType(new_cf_channel, m)
-                m.reset_variational_parameters()
+        if class_name in fan_in_rescale_list:
+            m._old_calculate_fan_in = m._calculate_fan_in
+            m._calculate_fan_in = types.MethodType(new_cf_channel, m)
+            m.reset_variational_parameters()
 
-            if class_name in weight_sync_list:
-                Convolutions._average_weights(
-                    m, get_process_group("JSpatial"), m.device
-                )
+        if class_name in weight_sync_list:
+            Convolutions._average_weights(m, get_process_group("JSpatial"), m.device)
