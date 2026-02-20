@@ -141,15 +141,15 @@ sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 -t 30:00 
 ### Distributed Process Groups in GrandBellbeast
 
 Parallel Process Groups keys:
- - JCol: Jigsaw Column Tensor Parallel group (part of DTP)
- - JRow: Jigsaw Row Tensor Parallel group (part of DTP)
+ - JChannel: Jigsaw Row Tensor Parallel group (part of DTP)
+ - JSpatial: Jigsaw Column Tensor Parallel group (part of DTP)
  - DTP: Domain Tensor Parallel group, equal to Column x Row
  - SP: Sample Parallel Group
  - DP: Data Parallel Group
  - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
  - Expert: Top group for Mixture of Experts
 
-Mesh Dimensions: [Expert, DP, SP, JCol, JRow]
+Mesh Dimensions: [Expert, DP, SP, JSpatial, JChannel]
 
 See `src/util.py` for implementation details.
 
