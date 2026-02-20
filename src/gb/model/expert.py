@@ -5,56 +5,100 @@ import torch.distributed as dist
 from torch.nn import init
 
 
+class JLR(torch.autograd.Function):
+    """Autograd function for batched joint latent representation mixing distributed across n processes."""
+
+    @staticmethod
+    def forward(x, w, ep_group, sp_group, device):
+        num_experts = ep_group.size()
+        num_samples = sp_group.size()
+
+        # lr = x.clone().detach()
+        B, channels, xlat, xlon = x.shape
+
+        x /= num_samples
+        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
+
+        expert_x = [
+            torch.empty((B, channels, xlat, xlon), requires_grad=False, device=device)
+            for _ in range(num_experts)
+        ]
+        expert_x = dist.all_gather(expert_x, x, group=sp_group)
+
+        expert_x = torch.cat(expert_x, dim=0)
+
+        # # expert_x is of shape (num_experts, batch, channel, xlat, xlon)
+        expert_x = expert_x.view(num_experts, B, channels, xlat * xlon)
+        # # expert_x is of shape (num_experts, batch, channel, xlat* xlon)
+
+        jlr = expert_x * w
+        # #print(f"#4. Rank {dist.get_rank(group=None)} x.shape={x.shape}")
+
+        jlr = torch.sum(jlr, dim=0)
+        # jlr is of shape (batch, channel, xlat* xlon)
+        jlr = jlr.view(B, channels, xlat, xlon)
+
+        return jlr
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        """
+        ctx: FunctionCtx
+        inputs: tuple(x, w, ep_group, sp_group )
+        output: jlr
+        """
+        x, w, ep_group, sp_group = inputs
+        ctx.save_for_backward(x, w)
+
+    @staticmethod
+    def backward(ctx, grad_jlr):
+        x, w = ctx.saved_tensors
+
+        grad_input = w * grad_jlr
+        grad_weight = x * grad_jlr
+
+        return grad_input, grad_weight, None
+
+    @staticmethod
+    def vmap(info, in_dims, x, w, ep_group, sp_group):
+        lr = x.clone().detach()
+        print(f"Under Vmap, x.shape is {lr.shape}")
+        local_mean = lr.mean(dim=0)
+
+        out = JLR.apply(local_mean, w, ep_group, sp_group)
+
+        # out has vmapped dimension at dim 0
+        return out, 0
+
+
 class ExpertWeightingLayer(torch.nn.Module):
     def __init__(self, shape, ep_group, sp_group, device=None, dtype=torch.float32):
         super().__init__()
         self.ep_group = ep_group
         self.sp_group = sp_group
-        # rank = self.ep_group.rank()
+        self.ep_rank = self.ep_group.rank()
+        self.device = device
         # shape is (experts, batch ,channels, 1 )
         self.weights = torch.nn.parameter.Parameter(
             torch.empty(shape, device=device, dtype=torch.float32)
         )
         init.kaiming_uniform_(self.weights, a=math.sqrt(5))
-        # self.weights[rank,:,:,:] = 1.0
+        print(
+            f"Rank {dist.get_rank(group=None)} expert weights are initialized , {self.weights.shape}"
+        )
+        self.weights.data[self.ep_rank, :, :, :] = 1.0
+
+        self.get_jlr = JLR.apply
 
     def forward(self, x):
         # x is of shape (batch, channel, xlat, xlon)
-        B, channels, xlat, xlon = x.shape
-        experts = self.ep_group.size()
-        up_num = self.sp_group.size()
-        # Average latent representations over all samples
-        lr = x.clone().detach()
-        lr /= self.sp_group.size()
-        local_mean = lr.mean(dim=0)
-        mean_lr = local_mean / up_num
-        dist.all_reduce(mean_lr, op=dist.ReduceOp.SUM, group=self.sp_group)
 
-        print(f"#3. Rank {dist.get_rank(group=None)} lr={mean_lr.shape}")
+        jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)
+        x = x + jlr
 
-        # Gather latent representations across all experts
-        expert_x = [torch.zeros_like(mean_lr) for _ in range(experts)]
-        dist.all_gather(expert_x, lr)
+        print(f"End of expert: Rank {dist.get_rank(group=None)} x.shape={x.shape}")
 
-        print(f"#4. Rank {dist.get_rank(group=None)} lr={expert_x.shape}")
-
-        # Allows differentiability (hopefully), so that the latent representation from the other experts is added to the current LR
-        expert_x[self.ep_group.rank()] = x
-        expert_x = torch.cat(expert_x, dim=0)
-
-        # expert_x is of shape (experts, batch, channel, xlat, xlon)
-        expert_x = expert_x.view(experts, B, channels, xlat * xlon)
-        # expert_x is of shape (experts, batch, channel, xlat* xlon)
-
-        expert_x = expert_x * self.weights
-
-        print(f"#5. Rank {dist.get_rank(group=None)} lr={expert_x.shape}")
-
-        y = torch.sum(expert_x, dim=0)
-        # y is of shape (batch, channel, xlat* xlon)
-        y = y.view(B, channels, xlat, xlon)
-
-        return y
+        return x
 
 
 class Expert(torch.nn.Module):

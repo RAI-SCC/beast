@@ -235,7 +235,6 @@ class SWIN(torch.nn.Module):
         return x
 
     def forward(self, x):
-        print(f"Start model forward: Rank {self.dtp_group.rank()}, x.shape = {x.shape}")
         # x has global shape (B, xlat, xlon, channels)
         x = self.patch_embedding(x)
         x_res = x.clone()
@@ -268,12 +267,11 @@ class SWIN(torch.nn.Module):
         x = x.permute(0, 3, 1, 2).contiguous()
         x = self.downsample(x)
 
-        # here comes the Latent Representation of the experts into ply:
+        # here comes the Latent Representation of the experts into play:
         # x = self.expert_layer(x)
+        # print(f"After experts: Rank {self.dtp_group.rank()}, x.shape = {x.shape}")
 
-        print(f"After Experts: Rank {self.dtp_group.rank()}, x.shape = {x.shape}")
         # downsample
-
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
 

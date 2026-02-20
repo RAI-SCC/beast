@@ -157,7 +157,6 @@ def train_one_epoch(
         pred = model(
             x, samples=n_samples
         )  # Add samples = config_dict["training"]["n_samples"]
-        print(f"Rank {dist.get_rank(group=None)} pred = {pred}")
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness
