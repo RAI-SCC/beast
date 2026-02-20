@@ -21,7 +21,7 @@ export PYTHONNOUSERSITE=1
 # OpenMPI configuration for UCX transport
 export OMPI_MCA_btl="^openib"
 export OMPI_MCA_pml="ucx"
-export OMPI_MCA_osc="ucx" 
+export OMPI_MCA_osc="ucx"
 
 # # NCCL configuration for multi-node GPU communication
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"

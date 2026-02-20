@@ -12,7 +12,6 @@ import torch
 import torch.distributed as dist
 import xarray as xr
 import yaml
-import zarr
 
 from gb.utils import get_process_group, init_gb_process_group
 
