@@ -92,7 +92,7 @@ init_system
 
 4) Done
 
-#### Troubleshooting 
+#### Troubleshooting
 
  * Make sure the container image exists
  * Make sure the virtual environemnt exists (if not, run the init_system function)
