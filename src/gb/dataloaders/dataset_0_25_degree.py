@@ -62,12 +62,6 @@ class ERA5DatasetDistributed(Dataset):
         if self.total_vars % 2 == 1:
             self.total_vars += 1
 
-        # normalization for pressure levels and standard deviation
-        # self.norm_values = np.load(
-        #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
-        #    allow_pickle=True,
-        # )
-        # [0].reshape(65, 1, 1)
         self.norm_values = {
             "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
             "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
@@ -83,15 +77,6 @@ class ERA5DatasetDistributed(Dataset):
             ]
             self.in_out_xlon = [0, self.xlon // 2]
         elif self.local_rank == 1:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon]
-        elif self.local_rank == 2:
             self.in_var = [self.num_vars // 2, self.num_vars]
             self.in_masks = [
                 self.num_masks // 2
@@ -100,6 +85,15 @@ class ERA5DatasetDistributed(Dataset):
                 self.num_masks,
             ]
             self.in_out_xlon = [0, self.xlon // 2]
+        elif self.local_rank == 2:
+            self.in_var = [0, self.num_vars // 2]
+            self.in_masks = [
+                0,
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+            ]
+            self.in_out_xlon = [self.xlon // 2, self.xlon]
         elif self.local_rank == 3:
             self.in_var = [self.num_vars // 2, self.num_vars]
             self.in_masks = [
@@ -139,7 +133,7 @@ class ERA5DatasetDistributed(Dataset):
         input = torch.cat((torch.tensor(x), self.get_constant_masks()), dim=0)
 
         if (((self.num_vars + self.num_masks) % 2) == 1) and (
-            self.local_rank // 2 == 1
+            self.local_rank % 2 == 1 # Ranks [1, 3, 5, 7]
         ):
             input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
 
@@ -189,3 +183,94 @@ class ERA5DatasetDistributed(Dataset):
                 self.in_out_xlon[0] : self.in_out_xlon[1],
             ]
         ).to(torch.float32)
+        
+class ERA5DatasetEightwayDistributed(ERA5DatasetDistributed):
+    def __init__(
+        self,
+        config,
+        mode,
+        process_group,
+        normalize=True,
+        dt=None,
+    ):
+        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+        
+        if self.local_rank == 0:
+            self.in_var = [0, self.num_vars // 2]
+            self.in_masks = [
+                0,
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+            ]
+            self.in_out_xlon = [0, self.xlon // 4]
+        elif self.local_rank == 1:
+            self.in_var = [self.num_vars // 2, self.num_vars]
+            self.in_masks = [
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+                self.num_masks,
+            ]
+            self.in_out_xlon = [self.xlon // 2, self.xlon]
+            self.in_out_xlon = [0, self.xlon // 4]
+        elif self.local_rank == 2:
+            self.in_var = [0, self.num_vars // 2]
+            self.in_masks = [
+                0,
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+            ]
+            self.in_out_xlon = [self.xlon // 4, self.xlon // 2]
+        elif self.local_rank == 3:
+            self.in_var = [self.num_vars // 2, self.num_vars]
+            self.in_masks = [
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+                self.num_masks,
+            ]
+            self.in_out_xlon = [self.xlon // 2, self.xlon]
+            self.in_out_xlon = [self.xlon // 4, self.xlon // 2]
+        elif self.local_rank == 4:
+            self.in_var = [0, self.num_vars // 2]
+            self.in_masks = [
+                0,
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+            ]
+            self.in_out_xlon = [self.xlon // 2, self.xlon * 3 // 4]
+        elif self.local_rank == 5:
+            self.in_var = [self.num_vars // 2, self.num_vars]
+            self.in_masks = [
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+                self.num_masks,
+            ]
+            self.in_out_xlon = [self.xlon // 2, self.xlon * 3 // 4]
+        elif self.local_rank == 6:
+            self.in_var = [0, self.num_vars // 2]
+            self.in_masks = [
+                0,
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+            ]
+            self.in_out_xlon = [self.xlon * 3 // 4, self.xlon]
+        elif self.local_rank == 7:
+            self.in_var = [self.num_vars // 2, self.num_vars]
+            self.in_masks = [
+                self.num_masks // 2
+                if self.num_masks % 2 == 0
+                else self.num_masks // 2 + 1,
+                self.num_masks,
+            ]
+            self.in_out_xlon = [self.xlon * 3 // 4, self.xlon]
+        else:
+            self.in_var = [0, self.num_vars]
+            self.in_masks = [0, self.num_masks]
+            self.in_out_xlon = [0, self.xlon]
+    
