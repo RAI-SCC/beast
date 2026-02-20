@@ -230,8 +230,6 @@ comm = MPI.COMM_WORLD
 mpi_rank = comm.Get_rank()
 mpi_world_size = comm.Get_size()
 
-mpi_cartcomm = comm.Create_cart([4, 2], periods=[True] * 2, reorder=False)
-
 
 def load_data_scatter_8way_mpi_scatter_dt(
     data_path, idx, process_group, loaderID, gpu_direct=False, dim=[84, 721, 1440]
@@ -530,8 +528,8 @@ if __name__ == "__main__":
     mesh_dims = config_dict["mesh_dims"]
     group_dict: dict[str, dist.ProcessGroup] = init_gb_process_group(mesh_dims)
 
-    num_workers = int(os.getenv("SLURM_CPUS_PER_TASK") or 1)
-    zarr.config.set({"threading.max_workers": (num_workers - 2)})
+    # num_workers = int(os.getenv("SLURM_CPUS_PER_TASK") or 1)
+    # zarr.config.set({"threading.max_workers": (num_workers - 2)})
 
     process_group = get_process_group("DTP")
     rank = process_group.rank()
