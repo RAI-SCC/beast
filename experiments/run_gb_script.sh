@@ -66,7 +66,7 @@ source $system_env
 setup_system
 
 export MASTER_PORT=12342
-master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+master_addr=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 
 if [[ $perun == true ]]; then
