@@ -38,7 +38,7 @@ def probabilistic_loss(output, output_surface, target, target_surface, kl_loss):
 def training_loop(
     config: dict,
     device: str,
-    slurm_localid: int,
+    device_id: int,
     rank: int,
     world_size: int,
     wall_time: float,
@@ -47,7 +47,7 @@ def training_loop(
 
     params: Dict
     device: String
-    slurm_localid: int
+    device_id: int
     """
 
     if wall_time > 0:
@@ -114,8 +114,8 @@ def training_loop(
     if dist.is_initialized() and not no_ddp:
         model_ddp = DistributedDataParallel(
             model,
-            device_ids=[slurm_localid],
-            output_device=slurm_localid,
+            device_ids=[device_id],
+            output_device=device_id,
             process_group=get_process_group("DP"),
         )
     else:
@@ -401,9 +401,10 @@ def main():
     init_gb_process_group(mesh_dims)
     # init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
+
     rank = get_process_group("DDP").rank()
-    device = f"cuda:{slurm_localid}"
     world_size = get_process_group("DDP").size()
 
     if os.getenv("DATA_DIR") is not None:
@@ -449,7 +450,7 @@ def main():
     training_loop(
         config_dict,
         device,
-        slurm_localid,
+        device_id,
         rank=rank,
         world_size=world_size,
         wall_time=wall_time,

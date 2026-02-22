@@ -36,8 +36,8 @@ def training_loop(config_dict):
     # up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
-    device = f"cuda:{slurm_localid}"
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
 
     # Define the Model
     set_all_seeds(dtp_group.rank())

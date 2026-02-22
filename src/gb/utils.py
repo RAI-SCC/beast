@@ -25,9 +25,20 @@ def init_gb_process_group(
     slurm_localid = int(os.getenv("SLURM_LOCALID", rank))  # Local GPU ID.
 
     # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
+    # # Initialize GPUs
+    device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
+    if backend == "nccl":
+        device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
+        device = torch.device("cuda", device_id)
+        torch.cuda.set_device(device)
 
     dist.init_process_group(
-        backend=backend, rank=rank, world_size=world_size, init_method="env://"
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+        device_id=device,
+        init_method="env://",
     )
     if dist.is_initialized():
         print(
@@ -38,13 +49,6 @@ def init_gb_process_group(
 
     # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
     # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
-
-    # # Initialize GPUs
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device = torch.device("cuda", slurm_localid)
-        torch.cuda.set_device(device)
 
     return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
@@ -58,8 +62,8 @@ def _create_process_mesh_dict(
     Input: 5D process mesh for (Expert, DP, SP, JCol, JRow)
 
     Parallel Process Groups keys:
-     - JSpatial: Jigsaw Column Tensor Parallel group (part of DTP)
      - JChannel: Jigsaw Row Tensor Parallel group (part of DTP)
+     - JSpatial: Jigsaw Column Tensor Parallel group (part of DTP)
      - DTP: Domain Tensor Parallel group, equal to JSpatial x JChannel
      - SP: Sample Parallel Group
      - DP: Data Parallel Group

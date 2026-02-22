@@ -3,6 +3,7 @@ import os
 import random
 import time
 
+import pandas as pd
 import torch
 import torch.distributed as dist
 
@@ -41,8 +42,12 @@ def training_loop(config_dict):
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
 
+    time_log = []
+
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
-    device = f"cuda:{slurm_localid}"
+    device_id = torch.cuda.current_device()
+    device = torch.device("cuda", device_id)
+    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -83,8 +88,8 @@ def training_loop(config_dict):
     # Make model data parallel
     model = DistributedDataParallel(
         model,
-        device_ids=[slurm_localid],
-        output_device=slurm_localid,
+        device_ids=[device_id],
+        output_device=device_id,
         process_group=dp_group,
     )
 
@@ -116,7 +121,7 @@ def training_loop(config_dict):
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss = train_one_epoch(
+        avg_loss, timings = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -126,24 +131,46 @@ def training_loop(config_dict):
             device=device,
             dtp_group=dtp_group,
         )
+
         end_time = time.perf_counter()
+
+        for t in timings:
+            time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
             )
 
+    time_df = pd.DataFrame(
+        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
+    )
+    time_df.to_csv(
+        os.path.join(
+            os.getenv("WORKDIR"),
+            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+        ),
+        sep=";",
+        index=False,
+    )
+
 
 def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
 ):
+    timings = []
+    # print(f'##Starting Epoch {epoch}: Rank {dist.get_rank(group=None)}, time {time.time_ns()}')
+    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
+
     model.train()
     loss_sum = 0.0
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y) in enumerate(dataloader):
+    for i, (x, y, start, end) in enumerate(dataloader):
+        timings.append((epoch, i, start, end))
+        # print(f'Rank {dist.get_rank(group=None)}, epoch {epoch}, batch {i}, start {start}, end {end}')
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
@@ -168,7 +195,7 @@ def train_one_epoch(
             )
 
     average_loss = loss_sum / max(1, len(dataloader))
-    return average_loss
+    return average_loss, timings
 
 
 def validate_epoch():
