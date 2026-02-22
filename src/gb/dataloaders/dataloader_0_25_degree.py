@@ -1,8 +1,31 @@
+import time
+
 import torch
 from torch.utils.data import DataLoader, Subset
+from torch.utils.data.dataloader import (
+    _BaseDataLoaderIter,
+    _MultiProcessingDataLoaderIter,
+)
 from torch.utils.data.distributed import DistributedSampler
 
-from gb.dataloaders.dataset_0_25_degree import ERA5DatasetDistributed
+from gb.dataloaders.dataset_0_25_degree import (
+    ERA5DatasetDistributed,
+)
+
+
+class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
+    def __next__(self):
+        start = time.time_ns()
+
+        data = super().__next__()
+        end = time.time_ns()
+
+        return *data, start, end
+
+
+class GBDataLoader(DataLoader):
+    def _get_iterator(self) -> _BaseDataLoaderIter:
+        return GBDataLoaderIter(self)
 
 
 def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
@@ -16,6 +39,7 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
         normalize=True,
         dt=dt,
     )
+
     if config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
         dataset = Subset(dataset, subset_indices)
@@ -28,7 +52,7 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
         seed=42,
     )
 
-    dataloader = DataLoader(
+    dataloader = GBDataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=(sampler is None),
@@ -38,4 +62,5 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
         prefetch_factor=config_dict["data"]["prefetch_factor"],
         num_workers=config_dict["data"]["num_workers"],
     )
+
     return dataloader

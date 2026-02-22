@@ -398,7 +398,6 @@ def main():
 
     rank = get_process_group("DDP").rank()
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
