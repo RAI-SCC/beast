@@ -54,10 +54,9 @@ class JLR(torch.autograd.Function):
     def backward(ctx, grad_jlr):
         x, w = ctx.saved_tensors
 
-        grad_input = w * grad_jlr
         grad_weight = x * grad_jlr
 
-        return grad_input, grad_weight, None
+        return None, grad_weight, None, None, None
 
     @staticmethod
     def vmap(info, in_dims, x, w, ep_group, sp_group):

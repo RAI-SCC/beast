@@ -17,7 +17,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
 from gb.model.SWIN_Jigsaw_025 import SWIN
@@ -41,7 +41,6 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
-    ep_group = get_process_group("Expert")
 
     time_log = []
 
@@ -73,8 +72,6 @@ def training_loop(config_dict):
         dtp_group=dtp_group,
         spatial_group=spatial_group,
         channel_group=channel_group,
-        ep_group=ep_group,
-        sp_group=up_group,
         bayesian=True,
     )
 
@@ -110,9 +107,7 @@ def training_loop(config_dict):
     # )
     loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
     n_samples = config_dict["training"]["n_samples"]
-    # loss_fn = vi.KullbackLeiblerLoss(
-    #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
-    #    )
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     utils.setup_precision(
         config_dict["training"]["tf32"]
