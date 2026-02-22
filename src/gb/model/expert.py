@@ -56,10 +56,20 @@ class JLR(torch.autograd.Function):
         process_group = ctx.process_group
         num_experts = process_group.size()
 
+        # todo: needs checking
+        # I think that this is the gradient of line 34, ....
         grad_weight = x * grad_jlr
+
+        # todo: needs checking.
+        # The spatial dimensions vanish, because we apply the weights to all spatial dimensions
+        # (expand dimensions of weight tensor) - So here we average across them;
 
         grad_weight = grad_weight.mean(dim=-1)
         grad_weight = grad_weight.mean(dim=-1, keepdim=True)
+
+        # todo: needs checking.
+        # The sample dimension (expert_goup.size) vanishes, because we sum over them in forward
+        # (Line 37). Not sure if simply copying to all experts is the corret way
         grad_weight = grad_weight.unsqueeze(dim=1).expand(-1, num_experts, -1, -1, -1)
 
         return None, grad_weight, None, None, None
@@ -95,6 +105,7 @@ class ExpertWeightingLayer(torch.nn.Module):
     def forward(self, x):
         # x is of shape (batch, channel, xlat, xlon)
         jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)
+        # Adding JLR like a residual connection. Not optimal, but works for now
         x = x + jlr
 
         return x
