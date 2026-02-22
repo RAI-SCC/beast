@@ -26,10 +26,7 @@ export OMPI_MCA_osc="ucx"
 # # NCCL configuration for multi-node GPU communication
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export NCCL_IB_DISABLE=0
-export NCCL_SOCKET_IFNAME="ib0"
-export NCCL_IB_HCA="mlx5"
-export NCCL_NET_GDR_LEVEL=5
-export NCCL_P2P_LEVEL=NVL
+export NCCL_SOCKET_IFNAME="ibs1"
 
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
@@ -42,7 +39,7 @@ export PMIX_MCA_gds="hash"
 
 export SYSTEM_SLURM_PARAMS=(
     -c18
-    --cpu-bind=v
+    --cpu-bind=v,core
     apptainer
     exec
     --nv
