@@ -269,7 +269,6 @@ class GrandBellbeast(torch.nn.Module):
 
         # here comes the Latent Representation of the experts into play:
         x = self.expert_layer(x)
-        # print(f"After experts: Rank {self.dtp_group.rank()}, x.shape = {x.shape}")
 
         # downsample
         B, channels, xlat, xlon = x.shape
