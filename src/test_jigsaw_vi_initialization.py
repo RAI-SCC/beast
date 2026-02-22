@@ -41,7 +41,6 @@ def main():
     init_gb_process_group(mesh_dims)
     # init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
