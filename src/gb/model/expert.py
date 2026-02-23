@@ -56,12 +56,13 @@ class JLR(torch.autograd.Function):
         # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
 
         # grad_jlr is of shape (samples, batch, channels, xlat, xlon)
-        grad_jlr = grad_jlr.view(
-            *grad_jlr.shape[0:-4],
-            1,
-            *grad_jlr.shape[-4:-2],
-            grad_jlr.shape[-2] * grad_jlr[-1],
+        shape = (
+            tuple(grad_jlr.shape[0:-4])
+            + (1,)
+            + tuple(grad_jlr.shape[-4:-2])
+            + (grad_jlr.shape[-2] * grad_jlr.shape[-1],)
         )
+        grad_jlr = grad_jlr.view(shape)
         # grad_jrl is of shape (samples, 1, batch, channels, xlat * xlon)
 
         grad_weight = expert_x * grad_jlr
