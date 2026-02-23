@@ -77,7 +77,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.upsample = Convolutions.DistributedConvTranspose2D(
+        self.upsample = Convolutions.DistributedConvTranspose2D_8way(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -94,7 +94,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery = Convolutions.DistributedConvTranspose2D(
+        self.patch_recovery = Convolutions.DistributedConvTranspose2D_8way(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
