@@ -130,6 +130,15 @@ class ERA5DatasetDistributed(Dataset):
         target = torch.tensor(y)
         return input, target
 
+    def get_constant_masks(self):
+        return torch.tensor(
+            self.constant_masks[
+                self.in_masks[0] : self.in_masks[1],
+                : self.xlat,
+                self.in_out_xlon[0] : self.in_out_xlon[1],
+            ]
+        ).to(torch.float32)
+
     def __load_constant_mask_2d(self, folder_path, mask_list):
         """
         Load the constant masks applied in the patch embedding layer.
