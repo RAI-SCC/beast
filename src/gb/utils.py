@@ -267,3 +267,15 @@ def convert_jigsaw_vi(
                     m._old_calculate_fan_in = m._calculate_fan_in
                     m._calculate_fan_in = types.MethodType(new_cf_row, m)
                     m.reset_variational_parameters()
+
+
+def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
+    total = 0
+    for module in model.modules():
+        # Skip the top-level model itself if it has the method
+        if module is model:
+            continue
+        if hasattr(module, "get_parameter_count"):
+            total += module.get_parameter_count()
+
+    return total * parallelism
