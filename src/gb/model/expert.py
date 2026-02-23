@@ -23,45 +23,48 @@ class JLR(torch.autograd.Function):
             torch.empty((B, channels, xlat, xlon), requires_grad=False, device=device)
             for _ in range(num_experts)
         ]
-        dist.all_gather(expert_x, x, group=sp_group)
+        dist.all_gather(expert_x, x, group=ep_group)
 
         expert_x = torch.cat(expert_x, dim=0)
 
         # expert_x is of shape (num_experts, batch, channel, xlat, xlon)
-        expert_x = expert_x.view(num_experts, B, channels, xlat * xlon)
-        # expert_x is of shape (num_experts, batch, channel, xlat* xlon)
+        expert_x = expert_x.view(1, num_experts, B, channels, xlat * xlon)
+        # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
 
         jlr = expert_x * w
-        # jlr is of shape (samples, experts, batch, channel, xlat* xlon)
+        # jlr is of shape (samples, experts, batch, channel, xlat * xlon)
 
         jlr = torch.sum(jlr, dim=1)
         jlr = jlr.view(num_loc_samples, B, channels, xlat, xlon)
 
-        return jlr
+        return jlr, expert_x
 
     @staticmethod
-    def setup_context(ctx, inputs, output):
+    def setup_context(ctx, inputs, outputs):
         """
         ctx: FunctionCtx
         inputs: tuple(x, w, ep_group, sp_group )
         output: jlr
         """
-        x, w, ep_group, sp_group, device = inputs
-        ctx.process_group = sp_group
-        ctx.save_for_backward(x, w)
+        _, expert_x = outputs
+        ctx.mark_non_differentiable(expert_x)
+        ctx.save_for_backward(expert_x)
 
     @staticmethod
-    def backward(ctx, grad_jlr):
-        x, w = ctx.saved_tensors
-        process_group = ctx.process_group
-        num_experts = process_group.size()
-
-        grad_weight = x * grad_jlr
-
-        grad_weight = grad_weight.mean(dim=-1)
-        grad_weight = grad_weight.mean(dim=-1, keepdim=True)
-        grad_weight = grad_weight.unsqueeze(dim=1).expand(-1, num_experts, -1, -1, -1)
-
+    def backward(ctx, grad_jlr, grad_expert_x: None):
+        expert_x = ctx.saved_tensors[0]
+        # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
+        
+        # grad_jlr is of shape (samples, batch, channels, xlat, xlon)
+        grad_jlr = grad_jlr.view(*grad_jlr.shape[0:-4], 1, *grad_jlr.shape[-4:-2], grad_jlr.shape[-2] * grad_jrl[-1])
+        # grad_jrl is of shape (samples, 1, batch, channels, xlat * xlon)
+        
+        grad_weight = expert_x * grad_jlr
+        # grad_weight is of shape (samples, num_experts, batch, channel, xlat * xlon)
+        
+        grad_weight = grad_weight.sum(dim=(-1, -3), keepdim=True)
+        # grad_weight is of shape (samples, num_experts, 1, channel, 1)
+        
         return None, grad_weight, None, None, None
 
     @staticmethod
@@ -94,7 +97,7 @@ class ExpertWeightingLayer(torch.nn.Module):
 
     def forward(self, x):
         # x is of shape (batch, channel, xlat, xlon)
-        jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)
+        jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)[0]
         x = x + jlr
 
         return x
