@@ -73,6 +73,7 @@ def training_loop(config_dict):
         spatial_group=spatial_group,
         channel_group=channel_group,
         bayesian=True,
+        parallelism=config_dict["model_parallel"]["parallelism"],
     )
 
     model = model.to(torch.float32).to(device)
