@@ -44,7 +44,7 @@ class SWIN(torch.nn.Module):
 
         self.bayesian = bayesian
 
-        self.patch_embedding = Convolutions.DistributedConv2D_8way(
+        self.patch_embedding = Convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -60,7 +60,7 @@ class SWIN(torch.nn.Module):
             parallelism=8,
             bayesian=self.bayesian,
         )
-        self.downsample = Convolutions.DistributedConv2D_8way(
+        self.downsample = Convolutions.DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -77,7 +77,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.upsample = Convolutions.DistributedConvTranspose2D_8way(
+        self.upsample = Convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -94,7 +94,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery = Convolutions.DistributedConvTranspose2D_8way(
+        self.patch_recovery = Convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -193,6 +193,7 @@ class SWIN(torch.nn.Module):
             parallelism=8,
             spatial_group=self.spatial_group,
         )
+
     def _get_windows(self, x, window_size):
         B, xlat, xlon, channels = x.shape
         x = x.reshape(
@@ -276,7 +277,7 @@ class SWIN(torch.nn.Module):
             )
             x = self.unroll_in(x)  # [B, lat, lon, channels]
         x = x.permute(0, 3, 1, 2).contiguous()
-        
+
         x = self.upsample(x)
         B, channels, xlat, xlon = x.shape
 
