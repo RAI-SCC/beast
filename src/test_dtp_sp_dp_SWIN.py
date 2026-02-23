@@ -236,6 +236,21 @@ def main():
             os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
 
+    # append n_masks for odd number of masks (the dataset does this, too)
+    n_masks = len(config_dict["data"]["constant_masks"])
+    if n_masks % 2 == 1:
+        n_masks += 1
+
+    # default case: load only one timestep
+    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
+        config_dict["data"]["n_in_timesteps"] = 1
+    n_input_vars = (
+        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
+    )
+    # we'll set this automatically, to avoid confusion when defining the config,
+    # as n_input_channels depends on how many timesteps we use as concatenated input
+    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
+
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
             WORKDIR + "/" + config_dict["data"]["normalization_dir"]

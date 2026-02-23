@@ -18,6 +18,7 @@ data:
     xlat: 720
     xlon: 1440
     n_variables: 84
+    n_in_timesteps: 2 #Can be 1 or 2, other not supported atm
 model:
     n_input_channels: 88
     embedding_dimension: 192

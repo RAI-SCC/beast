@@ -386,3 +386,70 @@ class ERA5DatasetScattered(Dataset):
                 in_lon[0] : in_lon[1],
             ]
         ).to(torch.float32)
+
+
+class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
+    def __init__(
+        self,
+        config,
+        mode,
+        process_group,
+        normalize=True,
+        dt=None,
+    ):
+        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+
+    def __len__(self):
+        """Return total number of samples."""
+        return self.n_data_items - 2 * self.dt
+
+    def __getitem__(self, idx):
+        """
+        Return single input, target.
+
+        idx: int
+                global index of item
+        """
+        target_idx = idx + 2 * self.dt
+        x_t1 = self.zarr_data.isel(
+            time=idx,
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        x_t1 = (
+            x_t1 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        x_t2 = self.zarr_data.isel(
+            time=(idx + self.dt),
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        x_t2 = (
+            x_t2 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        input = torch.cat(
+            (torch.tensor(x_t2), torch.tensor(x_t2 - x_t1), self.get_constant_masks()),
+            dim=0,
+        )
+
+        # Odd ranks load second half of variables, so they might have less masks
+        if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
+            input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
+
+        # Output data
+        y = self.zarr_data.isel(
+            time=target_idx,
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        y = (
+            y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        target = torch.tensor(y)
+        return input, target
