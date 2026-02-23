@@ -172,80 +172,23 @@ class ERA5DatasetEightwayDistributed(ERA5DatasetDistributed):
         dt=None,
     ):
         super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
-        if self.local_rank == 0:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
+        if self.process_group.size() > 1:
+            row, col = self.local_rank % 2, self.local_rank // 2
+
+            # rank 0: [0,0], rank 1 = [1,0],
+            # rank 2 = [0,1], rank 3 = [1,1],
+            # rank 4 = [0,2], rank 5 = [1,2],
+            # rank 6 = [0,3], rank 7 = [1,3]
+            n_masks = (
                 self.num_masks // 2
                 if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [0, self.xlon // 4]
-        elif self.local_rank == 1:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon]
-            self.in_out_xlon = [0, self.xlon // 4]
-        elif self.local_rank == 2:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [self.xlon // 4, self.xlon // 2]
-        elif self.local_rank == 3:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon]
-            self.in_out_xlon = [self.xlon // 4, self.xlon // 2]
-        elif self.local_rank == 4:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon * 3 // 4]
-        elif self.local_rank == 5:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon * 3 // 4]
-        elif self.local_rank == 6:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [self.xlon * 3 // 4, self.xlon]
-        elif self.local_rank == 7:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [self.xlon * 3 // 4, self.xlon]
+                else self.num_masks // 2 + 1
+            )
+
+            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
+            self.in_masks = [row * n_masks, (row + 1) * n_masks]
+            self.in_out_xlon = [col * self.xlon // 4, (col + 1) * self.xlon // 4]
+
         else:
             self.in_var = [0, self.num_vars]
             self.in_masks = [0, self.num_masks]
