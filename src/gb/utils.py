@@ -2,7 +2,6 @@ import math
 import os
 import types
 from collections.abc import Sequence
-from typing import Tuple, cast
 
 import pandas as pd
 import torch
@@ -11,6 +10,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
+from Jigsaw import Convolutions, Normalization
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -49,6 +49,14 @@ def init_gb_process_group(
 
     # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
     # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
+
+    # # Initialize GPUs
+    device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
+    if backend == "nccl":
+        device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
+        device = torch.device("cuda", device_id)
+        torch.cuda.set_device(device)
 
     return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
@@ -166,54 +174,9 @@ def download_1_5_degree_data(data_path):
     return full_path
 
 
-def count_parameters(model) -> int:
-    """Count num trainable parameters in the model."""
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
 def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
-
-
-def _calculate_fan_out(self, variable_shapes=None):
-    """
-    calculates fan_out for a Bayesian layer assuming that weight shape is (out_dim, in_dim); if weight shape is
-    (in_dim, out_dim) instead calculates fan_in, which is what it will be used for in this project
-    """
-
-    if variable_shapes is None:
-        loop = self.random_variables
-        checked_dict = self.variational_distribution
-    else:
-        loop = checked_dict = variable_shapes  # type:ignore[assignment]
-
-    if len(loop) == 0:
-        raise torch_blue.vi.utils.errors.NoVariablesError(
-            "All module variables are set to None."
-        )
-
-    for var in cast(Tuple[str, ...], loop):
-        if checked_dict[var] is None:
-            continue
-
-        if variable_shapes is None:
-            weight_name = self.variational_parameter_name(
-                var,
-                self.variational_distribution[var].primary_parameter,
-            )
-            shape_dummy = getattr(self, weight_name)
-        else:
-            shape_dummy = torch.zeros(variable_shapes[var])
-
-        if shape_dummy.dim() < 2:
-            continue
-
-        _, fan_out = init._calculate_fan_in_and_fan_out(shape_dummy)
-        return fan_out
-    else:
-        # TODO raise warning here
-        return 1
 
 
 def convert_jigsaw_vi(
@@ -226,6 +189,10 @@ def convert_jigsaw_vi(
     return_log_probs=True,
 ):
     torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
+    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
 
     torch_blue.vi.convert_to_vimodule(
         module,
@@ -238,35 +205,31 @@ def convert_jigsaw_vi(
         keep_weights=False,
     )
 
-    num_jcols = get_process_group("JSpatial")  # get_process_group("JCol").size()
-    num_jrows = get_process_group("JChannel")  # get_process_group("JRow").size()
+    num_jchannel = get_process_group("JChannel").size()
 
-    def new_cf_col(self, variable_shapes=None):
+    def new_cf_channel(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-        return previous * num_jcols
+        return previous * num_jchannel
 
-    def new_cf_row(self, variable_shapes=None):
-        previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-        return previous * num_jrows
+    fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
+
+    weight_sync_list = [
+        "VIConv2d",
+        "AVIConvTranspose2d",
+        "AVIDistributedXWTSync",
+        "AVIDistributedXWT_Nice",
+    ]
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
-        if class_name.startswith("AVI"):
-            if class_name in ["AVIDistributedXW", "AVIDistributedXTW"]:
-                m._calculate_fan_in = types.MethodType(_calculate_fan_out, m)
-            # switches fan_in and fan_out dimensions for layers with different weight shape initialization
 
-            match class_name:
-                case (
-                    "AVIDistributedXWT" | "AVIDistributedXWTSync" | "AVIConvTranspose2d"
-                ):
-                    m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = types.MethodType(new_cf_col, m)
-                    m.reset_variational_parameters()
-                case "AVIDistributedXW" | "AVIDistributedXTW":
-                    m._old_calculate_fan_in = m._calculate_fan_in
-                    m._calculate_fan_in = types.MethodType(new_cf_row, m)
-                    m.reset_variational_parameters()
+        if class_name in fan_in_rescale_list:
+            m._old_calculate_fan_in = m._calculate_fan_in
+            m._calculate_fan_in = types.MethodType(new_cf_channel, m)
+            m.reset_variational_parameters()
+
+        if class_name in weight_sync_list:
+            Convolutions._average_weights(m, get_process_group("JSpatial"))
 
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
