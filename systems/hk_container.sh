@@ -11,7 +11,7 @@ export SIF="$CONTAINER_HOME/pytorch25.06.sif"
 export VENV_DIR="$HOME/.venvs/gbb"
 
 # =============================================================================
-# Environment configuration 
+# Environment configuration
 # =============================================================================
 # Locale
 export LC_ALL=C
@@ -26,10 +26,7 @@ export OMPI_MCA_osc="ucx"
 # # NCCL configuration for multi-node GPU communication
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export NCCL_IB_DISABLE=0
-export NCCL_SOCKET_IFNAME="ib0"
-export NCCL_IB_HCA="mlx5"
-export NCCL_NET_GDR_LEVEL=5
-export NCCL_P2P_LEVEL=NVL
+export NCCL_SOCKET_IFNAME="ibs1"
 
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
@@ -41,8 +38,8 @@ export PMIX_MCA_gds="hash"
 # MEM_BIND="local"
 
 export SYSTEM_SLURM_PARAMS=(
-    # --cpu-bind "$CPU_BIND"
-    # --mem-bind "$MEM_BIND"
+    -c18
+    --cpu-bind=v,core
     apptainer
     exec
     --nv
@@ -50,7 +47,7 @@ export SYSTEM_SLURM_PARAMS=(
     --bind "$TMP"
     --bind "$DATA_DIR":"$DATA_DIR"
     $SIF
-    systems/venv_entrypoint.sh
+    systems/venv_entry.sh
 )
 
 setup_system() {

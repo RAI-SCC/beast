@@ -14,7 +14,7 @@ export LOCAL_WORKDIR="$( pwd )"
 export DATA_DIR=$SCRATCH_DIR/data/
 
 # =============================================================================
-# Environment configuration 
+# Environment configuration
 # =============================================================================
 # Locale
 export LC_ALL=C
@@ -27,12 +27,12 @@ export MPICH_OFI_NIC_POLICY="GPU"           # Use GPU-mapped NICs
 export MPICH_RANK_REORDER_METHOD=1          # Optimize rank placement
 export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
 
-# RCCL Configuration 
+# RCCL Configuration
 export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
-# export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"  
-# export NCCL_NET_GDR_LEVEL=3                     
+# export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
+# export NCCL_NET_GDR_LEVEL=3
 
-# Libfabric/CXI for Slingshot 
+# Libfabric/CXI for Slingshot
 # export FI_CXI_ATS=0
 # export FI_CXI_DISABLE_CQ_HUGETLB=1
 # export FI_MR_CACHE_MONITOR=userfaultfd
@@ -59,7 +59,8 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 GPU_BIND="map:4,5,2,3,6,7,0,1"
 
 export SYSTEM_SLURM_PARAMS=(
-    -c7
+    --cpu-bind=v
+    --cpus-per-task=7
     --gpu-bind="${GPU_BIND}"
     --gres-flags=allow-task-sharing
     --mpi=pmi2
@@ -71,18 +72,18 @@ export SYSTEM_SLURM_PARAMS=(
 )
 
 setup_system(){
-    module purge
+#    module purge
     echo "Setting up LUMI-G environment..."
     module use /appl/local/containers/ai-modules
     module load singularity-AI-bindings
-    
+
     # Load LUMI software stack
-    module load LUMI/25.03 
-    module load partition/G 
-    module load cpe/25.03 
+    module load LUMI/25.03
+    module load partition/G
+    module load cpe/25.03
     module load amd/6.3.4
-    module load craype 
-    module load rocm/6.3.4 
+    module load craype
+    module load rocm/6.3.4
     module load cray-mpich/8.1.32
 
     echo "Loaded modules:"

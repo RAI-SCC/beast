@@ -17,9 +17,9 @@ from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
 
 # Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
 from gb.utils import get_process_group, init_gb_process_group
 
 
@@ -49,7 +49,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = SWIN(
+    model = NICE_SWIN(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -58,6 +58,7 @@ def training_loop(config_dict):
         heads=config_dict["model"][
             "n_attn_heads"
         ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+        noise_dim=config_dict["model"]["noise_dim"],
         kernel_size=config_dict["model"]["patch_size"],
         window_size_outer=config_dict["model"]["window_size_outer"],
         window_size_inner=config_dict["model"]["window_size_inner"],
@@ -76,6 +77,11 @@ def training_loop(config_dict):
 
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
+
     convert_to_vimodule(model)
     # predictive_distribution = Normal()
 

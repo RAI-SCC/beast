@@ -15,7 +15,7 @@ export WORKDIR="$( pwd )" # For source code
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
 
 # =============================================================================
-# Environment configuration 
+# Environment configuration
 # =============================================================================
 # Locale
 export LC_ALL=C
@@ -26,6 +26,7 @@ export PYTHONNOUSERSITE=1
 export OMPI_MCA_btl="^openib"
 export OMPI_MCA_pml="ucx"
 export OMPI_MCA_osc="ucx"
+export OMPI_MCA_mpi_param_check=0
 
 # UCX configuration for InfiniBand NDR200
 export UCX_TLS="rc,cuda_copy,cuda_ipc"
@@ -37,6 +38,8 @@ export UCX_NET_DEVICES="mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export NCCL_IB_DISABLE=0
 export NCCL_SOCKET_IFNAME="ib0"
+export GLOO_SOCKET_IFNAME="ib0"
+export NCCL_SOCKET_FAMILY="AI_NET"
 export NCCL_IB_HCA="mlx5"
 export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
@@ -47,13 +50,11 @@ export PMIX_MCA_gds="hash"
 # =============================================================================
 # Slurm configuration
 # =============================================================================
-# CPU_BIND="cores"
-# MEM_BIND="local"
 
 export SYSTEM_SLURM_PARAMS=(
     -c71
-    # --cpu-bind "$CPU_BIND"
-    # --mem-bind "$MEM_BIND"
+    --cpu-bind=v
+    --gpu-bind=closest
     apptainer
     exec
     --nv
@@ -66,7 +67,6 @@ setup_system() {
     echo "Purging modules"
     ml purge
     ml load Stages/2026 GCC/14.3.0 OpenMPI/5.0.8 MPI-settings/CUDA
-    
     echo "Loaded modules:"
     module list
 }

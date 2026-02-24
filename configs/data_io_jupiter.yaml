@@ -1,0 +1,5 @@
+mesh_dims: [1, 1, 4, 2, 2]
+data:
+  path: 'era5_stackedvars_test.zarr/'
+  dims: [84, 721, 1440]
+  num_items: 20
