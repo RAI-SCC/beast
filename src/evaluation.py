@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from Jigsaw import Dataset
+from Jigsaw import dataset
 from Jigsaw.util_fns import plotting_functions as plot_fns
 
 
@@ -233,7 +233,7 @@ def load_climatology(config_dict, rank):
 
 
 def load_constant_masks(config_dict, xlat, xlon, rank):
-    land_mask, soil_type, topography = Dataset.load_constant_mask_2d(
+    land_mask, soil_type, topography = dataset.load_constant_mask_2d(
         config_dict["data"]["constant_masks_path"], xlat=xlat
     )
     if rank % 4 in [0, 1]:

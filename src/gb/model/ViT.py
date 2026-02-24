@@ -1,5 +1,5 @@
 import torch
-from Jigsaw import Attention, Linear, PatchEmbedding
+from Jigsaw import attention, linear, patch_embedding
 
 
 class Transformer_Sequential(torch.nn.Module):
@@ -33,7 +33,7 @@ class Transformer_Sequential(torch.nn.Module):
         ) // self.stride + 1
 
         self.dropout = config_dict["model"]["dropout"]
-        self.embedding = PatchEmbedding.PatchEmbedding1D(
+        self.embedding = patch_embedding.PatchEmbedding1D(
             config_dict,
             self.patch_size,
             hidden_dimension,
@@ -46,7 +46,7 @@ class Transformer_Sequential(torch.nn.Module):
         self.n_blocks = config_dict["model"]["n_blocks"]
         self.blocks = torch.nn.ModuleList(
             [
-                Attention.DistributedTransformer(
+                attention.DistributedTransformer(
                     hidden_dimension,
                     transformer_dimension,
                     hidden_dimension,
@@ -69,11 +69,11 @@ class Transformer_Sequential(torch.nn.Module):
         if self.linear_residual:
             self.layer_norm2 = torch.nn.LayerNorm(self.num_variables)
             self.layer_norm3 = torch.nn.LayerNorm(69 * 2)
-            self.linearlayer = torch.nn.Linear(
+            self.linearlayer = torch.nn.linear(
                 self.num_variables * 2, self.num_variables
             )
         if self.concat:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.recovery = patch_embedding.PatchRecovery1D(
                 self.patch_size,
                 hidden_dimension,
                 padding=padding,
@@ -84,7 +84,7 @@ class Transformer_Sequential(torch.nn.Module):
                 xlon=self.xlon,
             )
         else:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.recovery = patch_embedding.PatchRecovery1D(
                 self.patch_size,
                 hidden_dimension,
                 padding=padding,
@@ -185,7 +185,7 @@ class ViT(torch.nn.Module):
         self.stride = config_dict["model"]["stride"]
         self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
 
-        self.embedding = PatchEmbedding.Distributed1DPatchEmbedding(
+        self.embedding = patch_embedding.Distributed1DPatchEmbedding(
             self.xlat,
             self.xlon,
             self.patch_size,
@@ -201,7 +201,7 @@ class ViT(torch.nn.Module):
         self.n_blocks = config_dict["model"]["n_blocks"]
         self.blocks = torch.nn.ModuleList(
             [
-                Attention.TransformerLayer(
+                attention.TransformerLayer(
                     hidden_dimension,
                     transformer_dimension,
                     hidden_dimension,
@@ -230,7 +230,7 @@ class ViT(torch.nn.Module):
             self.layer_norm3 = torch.nn.LayerNorm(
                 self.num_variables * 2 if parallelism == 4 else self.num_variables
             )  # 72 for two, 72 for four
-            self.linearlayer = Linear.DistributedXWT(
+            self.linearlayer = linear.DistributedXWT(
                 self.num_variables * 2 if parallelism == 4 else self.num_variables,
                 self.num_variables,
                 rank,
@@ -240,7 +240,7 @@ class ViT(torch.nn.Module):
                 bias=False,
             )
 
-        self.recovery = PatchEmbedding.Distributed1DPatchRecovery(
+        self.recovery = patch_embedding.Distributed1DPatchRecovery(
             self.patch_size,
             hidden_dimension,
             self.num_variables,
@@ -344,7 +344,7 @@ class Megatron_Transformer(torch.nn.Module):
         self.stride = config_dict["model"]["stride"]
         self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
         padding = (0, 0)
-        self.embedding = PatchEmbedding.PatchEmbedding1D(
+        self.embedding = patch_embedding.PatchEmbedding1D(
             config_dict,
             self.patch_size,
             hidden_dimension,
@@ -357,7 +357,7 @@ class Megatron_Transformer(torch.nn.Module):
         self.n_blocks = config_dict["model"]["n_blocks"]
         self.blocks = torch.nn.ModuleList(
             [
-                Attention.MegatronTransformerLayer(
+                attention.MegatronTransformerLayer(
                     hidden_dimension,
                     transformer_dimension,
                     hidden_dimension,
@@ -381,13 +381,13 @@ class Megatron_Transformer(torch.nn.Module):
         if self.linear_residual:
             self.layer_norm2 = torch.nn.LayerNorm(self.num_variables)
             self.layer_norm3 = torch.nn.LayerNorm(self.num_variables * 2)
-            self.linearlayer = torch.nn.Linear(
+            self.linearlayer = torch.nn.linear(
                 self.num_variables * 2,
                 self.num_variables,
             )
 
         if self.concat:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.recovery = patch_embedding.PatchRecovery1D(
                 self.patch_size,
                 hidden_dimension,
                 padding=padding,
@@ -398,7 +398,7 @@ class Megatron_Transformer(torch.nn.Module):
                 xlon=self.xlon,
             )
         else:
-            self.recovery = PatchEmbedding.PatchRecovery1D(
+            self.recovery = patch_embedding.PatchRecovery1D(
                 self.patch_size,
                 hidden_dimension,
                 padding=padding,
