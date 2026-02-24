@@ -73,6 +73,7 @@ def training_loop(config_dict):
         spatial_group=spatial_group,
         channel_group=channel_group,
         bayesian=True,
+        parallelism=config_dict["model_parallel"]["parallelism"],
     )
 
     model = model.to(torch.float32).to(device)
@@ -80,6 +81,11 @@ def training_loop(config_dict):
         print(f"Parameters: {count_model_parameters(model, 4)}")
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
+
     convert_to_vimodule(model)
     # predictive_distribution = Normal()
 
