@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 import torch_blue
-from Jigsaw.util_fns import plotting_functions as plot_fns
+from Jigsaw import plotting_functions as plot_fns
 from torch import Tensor
 
 from gb.losses.UP_Loss import GaussianAggregation
@@ -706,12 +706,16 @@ def validate(
 
             df_rmse, df_acc = pd.DataFrame([rmse_values]), pd.DataFrame([acc_values])
 
-            df_rmse.to_csv(
-                mse_file_path, mode="a", header=False
-            ) if rmse_file.is_file() else df_rmse.to_csv(mse_file_path)
-            df_acc.to_csv(
-                acc_file_path, mode="a", header=False
-            ) if acc_file.is_file() else df_acc.to_csv(acc_file_path)
+            (
+                df_rmse.to_csv(mse_file_path, mode="a", header=False)
+                if rmse_file.is_file()
+                else df_rmse.to_csv(mse_file_path)
+            )
+            (
+                df_acc.to_csv(acc_file_path, mode="a", header=False)
+                if acc_file.is_file()
+                else df_acc.to_csv(acc_file_path)
+            )
 
     return loss.item()
 
