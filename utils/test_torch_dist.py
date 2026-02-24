@@ -18,7 +18,6 @@ Usage:
 
 import os
 import socket
-import subprocess
 import sys
 from datetime import timedelta
 
@@ -44,7 +43,6 @@ def init_distributed() -> tuple[int, int, int]:
 
     # Set CUDA device before init
     if torch.cuda.is_available():
-
         print(f"Local rank: {local_rank}, # devices: {torch.cuda.device_count()}")
         device = torch.device("cuda", 0)
         torch.cuda.set_device(device)
@@ -84,6 +82,7 @@ def test_communication(rank: int, world_size: int, local_rank: int) -> dict:
         dist.barrier()
 
         import time
+
         start = time.perf_counter()
         for _ in range(10):
             dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
@@ -92,19 +91,25 @@ def test_communication(rank: int, world_size: int, local_rank: int) -> dict:
 
         # Check result: sum of 0,1,2,...,world_size-1 = world_size*(world_size-1)/2
         # After 13 all-reduces (3 warmup + 10 timed), value is complex but should be consistent
-        expected_single = sum(range(world_size))
-        bandwidth_gbps = (tensor.numel() * tensor.element_size() * 10 * 2) / elapsed / 1e9
+        # expected_single = sum(range(world_size))
+        bandwidth_gbps = (
+            (tensor.numel() * tensor.element_size() * 10 * 2) / elapsed / 1e9
+        )
 
         results["tests_passed"] += 1
-        results["details"].append({
-            "test": "all_reduce",
-            "status": "PASSED",
-            "bandwidth_gbps": round(bandwidth_gbps, 2),
-            "time_ms": round(elapsed * 1000 / 10, 2),
-        })
+        results["details"].append(
+            {
+                "test": "all_reduce",
+                "status": "PASSED",
+                "bandwidth_gbps": round(bandwidth_gbps, 2),
+                "time_ms": round(elapsed * 1000 / 10, 2),
+            }
+        )
     except Exception as e:
         results["tests_failed"] += 1
-        results["details"].append({"test": "all_reduce", "status": "FAILED", "error": str(e)})
+        results["details"].append(
+            {"test": "all_reduce", "status": "FAILED", "error": str(e)}
+        )
 
     # Test 2: All-gather (replaces p2p ring - NCCL isend/irecv can deadlock)
     # This tests that each rank can contribute data and all ranks receive it
@@ -132,17 +137,23 @@ def test_communication(rank: int, world_size: int, local_rank: int) -> dict:
                 results["details"].append({"test": "all_gather", "status": "PASSED"})
             else:
                 results["tests_failed"] += 1
-                results["details"].append({
-                    "test": "all_gather",
-                    "status": "FAILED",
-                    "error": "Data mismatch in gathered tensors",
-                })
+                results["details"].append(
+                    {
+                        "test": "all_gather",
+                        "status": "FAILED",
+                        "error": "Data mismatch in gathered tensors",
+                    }
+                )
         else:
-            results["details"].append({"test": "all_gather", "status": "SKIPPED", "reason": "world_size=1"})
+            results["details"].append(
+                {"test": "all_gather", "status": "SKIPPED", "reason": "world_size=1"}
+            )
 
     except Exception as e:
         results["tests_failed"] += 1
-        results["details"].append({"test": "all_gather", "status": "FAILED", "error": str(e)})
+        results["details"].append(
+            {"test": "all_gather", "status": "FAILED", "error": str(e)}
+        )
 
     # Test 3: Broadcast
     try:
@@ -154,10 +165,14 @@ def test_communication(rank: int, world_size: int, local_rank: int) -> dict:
             results["details"].append({"test": "broadcast", "status": "PASSED"})
         else:
             results["tests_failed"] += 1
-            results["details"].append({"test": "broadcast", "status": "FAILED", "error": "Data mismatch"})
+            results["details"].append(
+                {"test": "broadcast", "status": "FAILED", "error": "Data mismatch"}
+            )
     except Exception as e:
         results["tests_failed"] += 1
-        results["details"].append({"test": "broadcast", "status": "FAILED", "error": str(e)})
+        results["details"].append(
+            {"test": "broadcast", "status": "FAILED", "error": str(e)}
+        )
 
     return results
 
@@ -183,7 +198,9 @@ def main():
 
     # Each rank reports its setup
     gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A"
-    print(f"[Rank {rank:2d}] Host: {hostname}, Local rank: {local_rank}, GPU: {gpu_name}")
+    print(
+        f"[Rank {rank:2d}] Host: {hostname}, Local rank: {local_rank}, GPU: {gpu_name}"
+    )
     sys.stdout.flush()
     dist.barrier()
 
@@ -232,7 +249,7 @@ def main():
 
     # Report results (gather to rank 0)
     if rank == 0:
-        print(f"\nResults from Rank 0:")
+        print("\nResults from Rank 0:")
         for detail in results["details"]:
             status = detail["status"]
             test_name = detail["test"]
@@ -251,11 +268,15 @@ def main():
         if results["tests_failed"] == 0:
             print("All tests PASSED! Communication is working correctly.")
             if results["tests_passed"] > 0:
-                bw_test = next((d for d in results["details"] if "bandwidth_gbps" in d), None)
+                bw_test = next(
+                    (d for d in results["details"] if "bandwidth_gbps" in d), None
+                )
                 if bw_test and bw_test["bandwidth_gbps"] > 10:
                     print("Bandwidth suggests InfiniBand is being used.")
                 elif bw_test:
-                    print("Warning: Low bandwidth may indicate TCP fallback instead of IB.")
+                    print(
+                        "Warning: Low bandwidth may indicate TCP fallback instead of IB."
+                    )
         else:
             print(f"FAILED: {results['tests_failed']} test(s) failed")
         print("=" * 70)

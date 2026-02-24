@@ -173,6 +173,7 @@ def download_1_5_degree_data(data_path):
 
     return full_path
 
+
 def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
@@ -229,6 +230,7 @@ def convert_jigsaw_vi(
 
         if class_name in weight_sync_list:
             Convolutions._average_weights(m, get_process_group("JSpatial"))
+
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
     total = 0
