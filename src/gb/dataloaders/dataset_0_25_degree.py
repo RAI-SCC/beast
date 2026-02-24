@@ -398,6 +398,7 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         dt=None,
     ):
         super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+        print("Loading two timeframes as input...")
 
     def __len__(self):
         """Return total number of samples."""

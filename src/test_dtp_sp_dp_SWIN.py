@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import random
 import time
@@ -244,12 +245,18 @@ def main():
     # default case: load only one timestep
     if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
         config_dict["data"]["n_in_timesteps"] = 1
+
     n_input_vars = (
         config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
     )
+
     # we'll set this automatically, to avoid confusion when defining the config,
     # as n_input_channels depends on how many timesteps we use as concatenated input
     config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
+    config_dict["model"]["embedding_dimension"] = math.ceil(
+        config_dict["model"]["embedding_dimension"]
+        * math.sqrt(config_dict["data"]["n_in_timesteps"])
+    )
 
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
