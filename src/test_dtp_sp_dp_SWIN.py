@@ -21,7 +21,7 @@ from gb.losses.UP_Loss import UP_AllGaussLoss
 
 # Import model
 from gb.model.SWIN_Jigsaw_025 import SWIN
-from gb.utils import count_model_parameters, get_process_group, init_gb_process_group
+from gb.utils import count_model_parameters, get_process_group, init_gb_process_group, convert_jigsaw_vi
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -30,8 +30,8 @@ def set_all_seeds(seed_value: int) -> None:
     torch.manual_seed(seed_value)  # pytorch random number generator for CPU
     torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
     torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
+    torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
+    torch.backends.cudnn.benchmark = False  # disable to be deterministic.
     os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
@@ -79,13 +79,14 @@ def training_loop(config_dict):
     if dist.get_rank(group=None) == 0:
         print(f"Parameters: {count_model_parameters(model, 4)}")
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
-    torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
-    )
+    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    # # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(
+    #     Normalization.DistributedNICENorm, ban_mode="submodule"
+    # )
 
-    convert_to_vimodule(model)
+    # convert_to_vimodule(model)
+    convert_jigsaw_vi(model)
     # predictive_distribution = Normal()
 
     model.return_log_probs = False
@@ -120,8 +121,11 @@ def training_loop(config_dict):
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  ##Check if this works with Torch-blue
+    
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
+    
+    print(f"My global rank is {dist.get_rank(group=None)}, up group rank is {up_group.rank()}")
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):

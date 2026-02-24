@@ -173,12 +173,6 @@ def download_1_5_degree_data(data_path):
 
     return full_path
 
-
-def count_parameters(model) -> int:
-    """Count num trainable parameters in the model."""
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
 def _init_uniform_override(self, parameter, fan_in) -> None:
     bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
     init.uniform_(parameter, -bound, bound)
@@ -194,7 +188,7 @@ def convert_jigsaw_vi(
     return_log_probs=True,
 ):
     torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
-
+    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
         Normalization.DistributedNICENorm, ban_mode="submodule"
     )
@@ -210,7 +204,7 @@ def convert_jigsaw_vi(
         keep_weights=False,
     )
 
-    num_jchannel = get_process_group("JChannel")  # get_process_group("JRow").size()
+    num_jchannel = get_process_group("JChannel").size()
 
     def new_cf_channel(self, variable_shapes=None):
         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
@@ -234,4 +228,15 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            Convolutions._average_weights(m, get_process_group("JSpatial"), m.device)
+            Convolutions._average_weights(m, get_process_group("JSpatial"))
+
+def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
+    total = 0
+    for module in model.modules():
+        # Skip the top-level model itself if it has the method
+        if module is model:
+            continue
+        if hasattr(module, "get_parameter_count"):
+            total += module.get_parameter_count()
+
+    return total * parallelism
