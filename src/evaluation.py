@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -17,7 +18,7 @@ def validate(
     dataloader: torch.utils.data.DataLoader,
     device: torch.device,
     epoch: int,
-    results_file_path: str,
+    results_path: str,
     groups: dict,
 ):
     # get group information
@@ -31,18 +32,20 @@ def validate(
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
 
-    # TODO: Possibly include these variable weights if we want an aggregated score for all variables.
-    # variable_weights = get_variable_weights(config_dict, rank, device)
-
     # extract means and std for evaluation
     data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
     data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
 
     # climatology
-    # TODO: This currently doesn't work - seems like the climatology files do not have enough variables?
+    # TODO: Update Climatology Files so this works correctly
     # local_climatology = load_climatology(config_dict, rank, device)
 
-    local_indices, local_names = get_eval_names_and_indicies(config_dict, rank)
+    # Indicies for metrics
+    local_indices, local_names = get_names_and_indices(
+        config_dict, rank, for_plot=False
+    )
+    # Indices for plots
+    plot_indices, plot_names = get_names_and_indices(config_dict, rank, for_plot=True)
 
     # global names for logging
     if dist.get_world_size(group=channel_group) > 1:
@@ -56,6 +59,7 @@ def validate(
 
     epoch_results = {}
     num_batches = 0
+    plot_step = config_dict["training"]["plot_step"]
 
     # loop through dataloader
     for i, (x, y, start, end) in enumerate(dataloader):
@@ -86,6 +90,20 @@ def validate(
             for k, v in val_results.items():
                 epoch_results[k] += v
 
+        # plot only for first batch
+        if epoch % plot_step == 0 and i == 0:
+            generate_distributed_plots(
+                samples,
+                y,
+                data_means,
+                data_std,
+                groups,
+                plot_indices,
+                plot_names,
+                epoch,
+                results_path,
+            )
+
         num_batches += 1
 
     if num_batches > 0:
@@ -109,7 +127,7 @@ def validate(
         print(f"{'=' * 50}\n")
 
         # save to hdf5
-        h5_path = Path(results_file_path) / "evaluation_metrics.h5"
+        h5_path = Path(results_path) / "evaluation_metrics.h5"
         try:
             log_epoch_to_hdf5(epoch_results, global_names, epoch, h5_path)
         except Exception as e:
@@ -245,7 +263,6 @@ def reduce_spatial_mean(tensor_map, weights, spatial_group):
     return local_sum / local_weight_sum
 
 
-# TODO: Debug properly when cliamtology files are updated.
 def calculate_climatology(
     target, mean, data_mean, data_std, climatology, spatial_weights, spatial_group
 ):
@@ -313,17 +330,24 @@ def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
     return mae_part - spread_part
 
 
-def get_eval_names_and_indicies(config_dict, rank):
-    # Check config, if no evaluation present use all variables
-    eval_s_vars = config_dict.get("training", {}).get(
-        "eval_surface_variables", config_dict["data"]["out_surface_variables"]
-    )
-    eval_p_vars = config_dict.get("training", {}).get(
-        "eval_pressure_variables", config_dict["data"]["out_pressure_variables"]
-    )
-    eval_p_levels = config_dict.get("training", {}).get(
-        "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
-    )
+def get_names_and_indices(config_dict, rank, for_plot=False):
+
+    training_dict = config_dict.get("training", {})
+
+    if for_plot:
+        target_s_vars = training_dict.get("plot_surface_variables", [])
+        target_p_vars = training_dict.get("plot_pressure_variables", [])
+        target_p_levels = training_dict.get("plot_pressure_levels", [])
+    else:
+        target_s_vars = training_dict.get(
+            "eval_surface_variables", config_dict["data"]["out_surface_variables"]
+        )
+        target_p_vars = training_dict.get(
+            "eval_pressure_variables", config_dict["data"]["out_pressure_variables"]
+        )
+        target_p_levels = training_dict.get(
+            "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
+        )
 
     # All global variables
     all_s = config_dict["data"]["out_surface_variables"]
@@ -343,7 +367,7 @@ def get_eval_names_and_indicies(config_dict, rank):
     indices, names = [], []
 
     # surface variables
-    for s in eval_s_vars:
+    for s in target_s_vars:
         if s in all_s:
             g_idx = all_s.index(s)
             if local_start <= g_idx < local_end:
@@ -354,10 +378,10 @@ def get_eval_names_and_indicies(config_dict, rank):
     num_s_total = len(all_s)
     num_l_total = len(all_l)
 
-    for pressure_var in eval_p_vars:
+    for pressure_var in target_p_vars:
         if pressure_var in all_p:
             p_v_idx = all_p.index(pressure_var)
-            for level in eval_p_levels:
+            for level in target_p_levels:
                 if level in all_l:
                     l_idx = all_l.index(level)
                     g_idx = num_s_total + (p_v_idx * num_l_total) + l_idx
@@ -458,6 +482,142 @@ def load_climatology(config_dict, rank, device):
     local_climatology = climatology[start_idx:end_idx, :, :]
 
     return local_climatology
+
+
+def gather_spatial_for_plot(gather_tensor, spatial_group):
+    if dist.get_world_size(spatial_group) == 1:
+        return gather_tensor
+
+    gathered = [
+        torch.zeros_like(gather_tensor)
+        for _ in range(dist.get_world_size(spatial_group))
+    ]
+    dist.all_gather(gathered, gather_tensor, group=spatial_group)
+    return torch.cat(gathered, dim=3)
+
+
+def gather_vars_for_plot(gather_tensor, local_names, channel_group):
+    if dist.get_world_size(channel_group) == 1:
+        return gather_tensor, local_names
+
+    # Gather names
+    gathered_names = [None for _ in range(dist.get_world_size(channel_group))]
+    dist.all_gather_object(gathered_names, local_names, group=channel_group)
+
+    # Gather tensors
+    gathered_t_obj = [None for _ in range(dist.get_world_size(channel_group))]
+    dist.all_gather_object(gathered_t_obj, gather_tensor, group=channel_group)
+
+    gathered_t_obj = [tensor.to(gather_tensor.device) for tensor in gathered_t_obj]
+    global_names_flat = [n for sublist in gathered_names for n in sublist]
+
+    return torch.cat(gathered_t_obj, dim=1), global_names_flat
+
+
+@torch.no_grad()
+def generate_distributed_plots(
+    samples,
+    target,
+    data_mean,
+    data_std,
+    groups,
+    plot_indices,
+    plot_names,
+    epoch,
+    file_path,
+):
+
+    up_group = groups["SP"]
+    spatial_group = groups["JSpatial"]
+    channel_group = groups["JChannel"]
+
+    # slice and unnormalize - only indices to be plotted
+    if len(plot_indices) > 0:
+        local_samples = samples[:, :, plot_indices]
+        local_target = target[:, plot_indices]
+
+        mean, _ = GaussianAggregation.apply(local_samples, up_group)
+
+        local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
+        local_std = data_std[plot_indices].view(1, -1, 1, 1)
+
+        pred_unnormalized = (mean * local_std) + local_mean
+        target_unnormalized = (local_target * local_std) + local_mean
+    else:
+        # Dummy tensors so gather does not break
+        target_unnormalized = torch.empty(
+            (target.shape[0], 0, target.shape[2], target.shape[3]), device=target.device
+        )
+        pred_unnormalized = torch.empty_like(target_unnormalized)
+
+    # gather spatially
+    full_lon_pred = gather_spatial_for_plot(pred_unnormalized, spatial_group)
+    full_lon_target = gather_spatial_for_plot(target_unnormalized, spatial_group)
+
+    # gather channels
+    global_pred, global_plot_names = gather_vars_for_plot(
+        full_lon_pred, plot_names, channel_group
+    )
+    global_target, _ = gather_vars_for_plot(full_lon_target, plot_names, channel_group)
+
+    # plot
+    if dist.get_rank() == 0 and len(global_plot_names) > 0:
+        plot_dir = Path(file_path) / "plots" / f"epoch_{epoch}"
+        plot_dir.mkdir(parents=True, exist_ok=True)
+
+        for idx, var_name in enumerate(global_plot_names):
+            out_map = global_pred[0, idx].cpu().numpy()
+            tar_map = global_target[0, idx].cpu().numpy()
+
+            # bias calculation
+            bias_map = tar_map - out_map
+
+            # shared scale for prediction and target
+            state_vmin = min(out_map.min(), tar_map.min())
+            state_vmax = max(out_map.max(), tar_map.max())
+
+            # symmetrical scale for bias
+            bias_vmax = max(np.abs(bias_map.max()), np.abs(bias_map.min()))
+            bias_vmin = -bias_vmax
+
+            # plot
+            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+            # prediction
+            axes[0].set_title(f"Prediction: {var_name}")
+            c0 = axes[0].imshow(
+                out_map,
+                origin="upper",
+                cmap="viridis",
+                vmin=state_vmin,
+                vmax=state_vmax,
+            )
+            fig.colorbar(c0, ax=axes[0], orientation="horizontal", pad=0.08)
+
+            # target
+            axes[1].set_title(f"Target: {var_name}")
+            c1 = axes[1].imshow(
+                tar_map,
+                origin="upper",
+                cmap="viridis",
+                vmin=state_vmin,
+                vmax=state_vmax,
+            )
+            fig.colorbar(c1, ax=axes[1], orientation="horizontal", pad=0.08)
+
+            # bias
+            axes[2].set_title(f"Bias: {var_name}")
+            c2 = axes[2].imshow(
+                bias_map, origin="upper", cmap="RdBu_r", vmin=bias_vmin, vmax=bias_vmax
+            )
+            fig.colorbar(c2, ax=axes[2], orientation="horizontal", pad=0.08)
+
+            plt.tight_layout()
+
+            save_path = plot_dir / f"{var_name}.pdf"
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"Saved plot: {save_path}")
 
 
 def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath):
