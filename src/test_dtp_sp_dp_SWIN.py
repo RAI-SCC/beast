@@ -21,7 +21,7 @@ from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
 from gb.model.SWIN_Jigsaw_025 import SWIN
-from gb.utils import get_process_group, init_gb_process_group
+from gb.utils import count_model_parameters, get_process_group, init_gb_process_group
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -76,9 +76,15 @@ def training_loop(config_dict):
     )
 
     model = model.to(torch.float32).to(device)
-
+    if dist.get_rank(group=None) == 0:
+        print(f"Parameters: {count_model_parameters(model, 4)}")
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
+
     convert_to_vimodule(model)
     # predictive_distribution = Normal()
 

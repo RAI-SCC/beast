@@ -27,7 +27,7 @@ class ERA5DatasetDistributed(Dataset):
         mode: String
             of value 'training', 'testing', 'validation'
         process_group:
-            DP Process group
+            DTP Process group
         """
         self.dt = config["data"]["dt"]
         self.process_group = process_group
@@ -59,10 +59,6 @@ class ERA5DatasetDistributed(Dataset):
         self.constant_masks = self.__load_constant_mask_2d(mask_path, mask_list)
         self.num_masks = self.constant_masks.shape[0]
 
-        self.total_vars = self.num_vars + self.num_masks
-        if self.total_vars % 2 == 1:
-            self.total_vars += 1
-
         # normalization for pressure levels and standard deviation
         # self.norm_values = np.load(
         #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
@@ -74,42 +70,19 @@ class ERA5DatasetDistributed(Dataset):
             "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
         }
 
-        if self.local_rank == 0:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
+        if self.process_group.size() > 1:
+            row, col = self.local_rank % 2, self.local_rank // 2
+            # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
+            n_masks = (
                 self.num_masks // 2
                 if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [0, self.xlon // 2]
-        elif self.local_rank == 1:
-            self.in_var = [0, self.num_vars // 2]
-            self.in_masks = [
-                0,
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon]
-        elif self.local_rank == 2:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [0, self.xlon // 2]
-        elif self.local_rank == 3:
-            self.in_var = [self.num_vars // 2, self.num_vars]
-            self.in_masks = [
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1,
-                self.num_masks,
-            ]
-            self.in_out_xlon = [self.xlon // 2, self.xlon]
+                else self.num_masks // 2 + 1
+            )
+
+            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
+            self.in_masks = [row * n_masks, (row + 1) * n_masks]
+            self.in_out_xlon = [col * self.xlon // 2, (col + 1) * self.xlon // 2]
+
         else:
             self.in_var = [0, self.num_vars]
             self.in_masks = [0, self.num_masks]
@@ -139,9 +112,8 @@ class ERA5DatasetDistributed(Dataset):
 
         input = torch.cat((torch.tensor(x), self.get_constant_masks()), dim=0)
 
-        if (((self.num_vars + self.num_masks) % 2) == 1) and (
-            self.local_rank // 2 == 1
-        ):
+        # Odd ranks load second half of variables, so they might have less masks
+        if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
             input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
 
         # Output data
