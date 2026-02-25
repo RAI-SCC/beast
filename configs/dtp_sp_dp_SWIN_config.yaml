@@ -36,6 +36,10 @@ training:
     n_samples: 4 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 3
     batch_size: 1
+    plot_step: 10 # plot every 10 epochs
+    plot_surface_variables: [t2m] # surface variables to plot
+    plot_pressure_variables: [vertical_velocity] # pressure variables to plot
+    plot_pressure_levels: [1000, 50] # pressure levels for selected pressure variables
 model_parallel:
     parallelism: 4
     type: jigsaw
