@@ -21,8 +21,9 @@ data:
     out_surface_variables: [mslp, u10, v10, t2m, sst, tp]
     out_pressure_variables: [geopotential, specific humidity, temperature, u_component_of_wind, v_component_of_wind, vertical_velocity]
     out_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+    n_in_timesteps: 2 #Can be 1 or 2, other not supported atm
 model:
-    n_input_channels: 88
+    n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 192
     n_output_channels: 84
     n_attn_heads: 6
@@ -43,4 +44,4 @@ training:
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1,1,1,2,2]
+mesh_dims: [1,2,2,2,2]
