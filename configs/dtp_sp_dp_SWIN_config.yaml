@@ -18,6 +18,9 @@ data:
     xlat: 720
     xlon: 1440
     n_variables: 84
+    out_surface_variables: [mslp, u10, v10, t2m, sst, tp]
+    out_pressure_variables: [geopotential, specific humidity, temperature, u_component_of_wind, v_component_of_wind, vertical_velocity]
+    out_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 model:
     n_input_channels: 88
     embedding_dimension: 192
