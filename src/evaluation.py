@@ -280,8 +280,8 @@ def calculate_climatology(
     # reduce accross dtp before calculation
     if dist.get_world_size(spatial_group) > 1:
         dist.all_reduce(local_num, op=dist.ReduceOp.SUM, group=spatial_group)
-        dist.all_reduce(local_den1, op=dist.Op.SUM, group=spatial_group)
-        dist.all_reduce(local_den2, op=dist.Op.SUM, group=spatial_group)
+        dist.all_reduce(local_den1, op=dist.ReduceOp.SUM, group=spatial_group)
+        dist.all_reduce(local_den2, op=dist.ReduceOp.SUM, group=spatial_group)
 
     # final calculation
     acc = local_num / torch.sqrt(local_den1 * local_den2 + 1e-8)
