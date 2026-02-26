@@ -10,6 +10,8 @@
 echo "$0 $@"
 
 perun=false
+nsys=false
+ncu=false
 function print_help() {
     cat <<EOF
 Usage: $0 [OPTIONS] <system_env> <python_script> [ARGS...]
@@ -21,6 +23,8 @@ Arguments:
 
 Options:
   --perun          Enable Perun monitoring
+  --nsys         Enable Nsight Systems profiling
+  --ncu            Enable Nsight Compute profiling
   -h, --help       Display this help message
 
 EOF
@@ -34,6 +38,14 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --perun)
             perun=true
+            shift
+            ;;
+        --nsys)
+            nsys=true
+            shift
+            ;;
+        --ncu)
+            ncu=true
             shift
             ;;
         *)
@@ -68,11 +80,24 @@ setup_system
 export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
+# Validate that only one profiling tool is enabled
+if [[ ($nsys == true && $perun == true) || ($ncu == true && $perun == true) || ($ncu == true && $nsys == true) ]]; then
+    echo "Error: Cannot enable multiple profiling tools at the same time" >&2
+    exit 1
+fi
 
 if [[ $perun == true ]]; then
     PYTHON_CMD="perun --log_file=logs/perun_${SCRIPT_FILE}_${SYSTEM_ENV_FILE}_${SLURM_JOB_ID}.log monitor"
 else
     PYTHON_CMD="python -u"
+fi
+
+if [[ $nsys == true ]]; then
+    PYTHON_CMD="${NSYS_CMD[@]} $PYTHON_CMD"
+fi
+
+if [[ $ncu == true ]]; then
+    PYTHON_CMD="${NCU_CMD[@]} $PYTHON_CMD"
 fi
 
 echo "Running cmd:"

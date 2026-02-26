@@ -48,13 +48,37 @@ export NCCL_P2P_LEVEL=NVL
 export PMIX_MCA_gds="hash"
 
 # =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${WORKDIR}/results/nsys_profiles"
+
+export NSYS_CMD=(
+    nsys profile
+    --output "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
+    --trace=cuda,cudnn,cublas,osrt,nvtx
+    --cudabacktrace=all
+    --python-backtrace=cuda
+    --python-sampling=true
+    --delay=60
+)
+
+export NCU_CMD=(
+    ncu
+    --set roofline
+    --nvtx
+    --target-processes all
+    --export "${PROFILE_DIR}/ncu_report_${SLURM_JOB_ID}_${SLURM_NODEID}_${SLURM_PROCID}.ncu-rep"
+)
+
+# =============================================================================
 # Slurm configuration
 # =============================================================================
 
 export SYSTEM_SLURM_PARAMS=(
     -c71
     --cpu-bind=v
-    --gpu-bind=closest
+    # --gpu-bind=closest
     apptainer
     exec
     --nv
