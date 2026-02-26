@@ -23,6 +23,8 @@ def validate(
 ):
     # get group information
     channel_group = groups["JChannel"]
+    dp_group = groups["DP"]
+    ep_group = groups["Expert"]
 
     rank = dist.get_rank()
 
@@ -109,6 +111,24 @@ def validate(
     if num_batches > 0:
         for k in epoch_results.keys():
             epoch_results[k] /= num_batches
+            if not isinstance(epoch_results[k], torch.Tensor):
+                epoch_results[k] = torch.tensor(epoch_results[k], device=device)
+
+            if dp_group.size() > 1:
+                dist.all_reduce(epoch_results[k], op=dist.ReduceOp.AVG, group=dp_group)
+
+            if ep_group.size() > 1:
+                dist.all_gather(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+
+        if "mse" in epoch_results.keys():
+            epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
+            epoch_results.pop("mse")
+
+        if "avg_var" in epoch_results.keys() and "rmse" in epoch_results.keys():
+            epoch_results["spread_skill"] = (
+                torch.sqrt(epoch_results["avg_var"]) / epoch_results["rmse"]
+            )
+            epoch_results.pop("avg_var")
 
     # save results
     if dist.get_rank() == 0:
@@ -189,17 +209,19 @@ def calculate_aggregate_metrics(
 
     # calculate rmse
     rmse_sq_map = (mean - target) ** 2
-    rmse = torch.sqrt(reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group))
+    rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
+    # rmse = torch.sqrt(rmse_sq)
 
     # calculate crps
     crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
     crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
 
     # calculate spread-skill ratio
-    avg_std = torch.sqrt(reduce_spatial_mean(std**2, spatial_weights, spatial_group))
-    spread_skill = avg_std / rmse
+    avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
+    # avg_std = torch.sqrt(avg_var)
+    # spread_skill = avg_std / rmse
 
-    # likeliehood and KL
+    # likelihood and KL
     kl_loss = torch_blue.vi.AnalyticalKullbackLeiblerLoss(
         model,
         torch_blue.vi.distributions.MeanFieldNormal(),
@@ -216,15 +238,17 @@ def calculate_aggregate_metrics(
         dist.all_reduce(data_fit, op=dist.ReduceOp.SUM, group=dtp_group)
 
     prior_matching = kl_loss.prior_matching()
-    if dist.get_world_size(dtp_group) > 1:
-        dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=dtp_group)
+    if dist.get_world_size(channel_group) > 1:
+        dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=channel_group)
 
     local_results = {
         "data_fit": data_fit,
         "prior_matching": prior_matching,
-        "rmse": rmse,
-        "crps": crps,
-        "spread_skill": spread_skill,
+        # "rmse": rmse,
+        "mse": rmse_sq * (data_std**2),
+        "crps": crps * data_std,
+        "avg_var": avg_var * (data_std**2),
+        # "spread_skill": spread_skill,
     }
 
     if acc is not None:
@@ -559,6 +583,8 @@ def generate_distributed_plots(
         full_lon_pred, plot_names, channel_group
     )
     global_target, _ = gather_vars_for_plot(full_lon_target, plot_names, channel_group)
+
+    # TODO maybe there needs to be an expert aggregation here (unsure)
 
     # plot
     if dist.get_rank() == 0 and len(global_plot_names) > 0:
