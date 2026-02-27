@@ -81,7 +81,11 @@ class ERA5DatasetDistributed(Dataset):
 
             self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
             self.in_masks = [row * n_masks, (row + 1) * n_masks]
-            self.in_out_xlon = [col * self.xlon // 2, (col + 1) * self.xlon // 2]
+            # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
+            self.in_out_xlon = [
+                col * self.xlon // (process_group.size() // 2),
+                (col + 1) * self.xlon // (process_group.size() // 2),
+            ]
 
         else:
             self.in_var = [0, self.num_vars]
@@ -160,39 +164,6 @@ class ERA5DatasetDistributed(Dataset):
             data.append(np.load(os.path.join(folder_path, file)))
         masks = np.stack(data, axis=0)
         return masks
-
-
-class ERA5DatasetEightwayDistributed(ERA5DatasetDistributed):
-    def __init__(
-        self,
-        config,
-        mode,
-        process_group,
-        normalize=True,
-        dt=None,
-    ):
-        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
-        if self.process_group.size() > 1:
-            row, col = self.local_rank % 2, self.local_rank // 2
-
-            # rank 0: [0,0], rank 1 = [1,0],
-            # rank 2 = [0,1], rank 3 = [1,1],
-            # rank 4 = [0,2], rank 5 = [1,2],
-            # rank 6 = [0,3], rank 7 = [1,3]
-            n_masks = (
-                self.num_masks // 2
-                if self.num_masks % 2 == 0
-                else self.num_masks // 2 + 1
-            )
-
-            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
-            self.in_masks = [row * n_masks, (row + 1) * n_masks]
-            self.in_out_xlon = [col * self.xlon // 4, (col + 1) * self.xlon // 4]
-
-        else:
-            self.in_var = [0, self.num_vars]
-            self.in_masks = [0, self.num_masks]
-            self.in_out_xlon = [0, self.xlon]
 
 
 ## Note: this doesn't work so far due to backend trouble between cpu and gpu; it will act as boilerplate if needed for data io optimization
@@ -417,3 +388,71 @@ class ERA5DatasetScattered(Dataset):
                 in_lon[0] : in_lon[1],
             ]
         ).to(torch.float32)
+
+
+class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
+    def __init__(
+        self,
+        config,
+        mode,
+        process_group,
+        normalize=True,
+        dt=None,
+    ):
+        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+        print("Loading two timeframes as input...")
+
+    def __len__(self):
+        """Return total number of samples."""
+        return self.n_data_items - 2 * self.dt
+
+    def __getitem__(self, idx):
+        """
+        Return single input, target.
+
+        idx: int
+                global index of item
+        """
+        target_idx = idx + 2 * self.dt
+        x_t1 = self.zarr_data.isel(
+            time=idx,
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        x_t1 = (
+            x_t1 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        x_t2 = self.zarr_data.isel(
+            time=(idx + self.dt),
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        x_t2 = (
+            x_t2 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        input = torch.cat(
+            (torch.tensor(x_t2), torch.tensor(x_t2 - x_t1), self.get_constant_masks()),
+            dim=0,
+        )
+
+        # Odd ranks load second half of variables, so they might have less masks
+        if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
+            input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
+
+        # Output data
+        y = self.zarr_data.isel(
+            time=target_idx,
+            feature=range(self.in_var[0], self.in_var[1]),
+            latitude=range(0, self.xlat),
+            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+        )["fields"].values
+        y = (
+            y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
+        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+
+        target = torch.tensor(y)
+        return input, target
