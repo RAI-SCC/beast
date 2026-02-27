@@ -6,7 +6,8 @@ export PROJECT_DIR=/projappl/project_462001248
 export SCRATCH_DIR=/scratch/project_462001248
 
 export VENV_DIR=$HOME/.venvs/gbb
-export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
+# export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
+export SIF="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260216_093549/lumi-multitorch-full-u24r64f21m43t29-20260216_093549.sif"
 
 export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
@@ -39,6 +40,16 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 
 # ROCm / HIP Settings
 # export ROCM_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"  # 8 GCDs per node
+#
+# =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${WORKDIR}/results/lumi/profiles"
+
+export PROFSYS=
+
+export PROFCU=
 
 # =============================================================================
 # Slurm configuration
@@ -91,8 +102,9 @@ setup_system(){
 }
 
 init_system(){
-    module use /appl/local/containers/ai-modules
-	module load singularity-AI-bindings
+    module purge
+    module use /appl/local/laifs/modules
+	module load lumi-aif-singularity-bindings
 	singularity exec $SIF python -m venv $VENV_DIR --system-site-packages
 	singularity exec $SIF systems/venv_entry.sh pip install --upgrade pip
 	singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt

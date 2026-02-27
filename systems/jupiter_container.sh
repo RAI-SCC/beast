@@ -51,9 +51,9 @@ export PMIX_MCA_gds="hash"
 # Profiling configuration
 # =============================================================================
 
-export PROFILE_DIR="${WORKDIR}/results/nsys_profiles"
+export PROFILE_DIR="${WORKDIR}/results/jupiter/profiles"
 
-export NSYS_CMD=(
+export PROFSYS_CMD=(
     nsys profile
     --output "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
     --trace=cuda,cudnn,cublas,osrt,nvtx
@@ -63,7 +63,7 @@ export NSYS_CMD=(
     --delay=60
 )
 
-export NCU_CMD=(
+export PROFCU_CMD=(
     ncu
     --set roofline
     --nvtx
