@@ -40,6 +40,7 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
@@ -92,7 +93,7 @@ def training_loop(config_dict):
         model,
         device_ids=[device_id],
         output_device=device_id,
-        process_group=dp_group,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
