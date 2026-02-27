@@ -230,11 +230,13 @@ mpi_rank = comm.Get_rank()
 mpi_world_size = comm.Get_size()
 
 dt_extent = (1440 // 4) * MPI.FLOAT.Get_extent()[1]
-subarray_type = MPI.FLOAT.Create_subarray(
-            sizes=[84, 721, 1440],
-            subsizes=[84//2, 721, 1440//4],
-            starts=[0] * 3
-        ).Create_resized(0, dt_extent).Commit()
+subarray_type = (
+    MPI.FLOAT.Create_subarray(
+        sizes=[84, 721, 1440], subsizes=[84 // 2, 721, 1440 // 4], starts=[0] * 3
+    )
+    .Create_resized(0, dt_extent)
+    .Commit()
+)
 
 
 def load_data_scatter_8way_mpi_scatter_dt(
