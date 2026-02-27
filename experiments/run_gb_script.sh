@@ -10,8 +10,8 @@
 echo "$0 $@"
 
 perun=false
-nsys=false
-ncu=false
+profsys=false
+profcu=false
 function print_help() {
     cat <<EOF
 Usage: $0 [OPTIONS] <system_env> <python_script> [ARGS...]
@@ -23,8 +23,8 @@ Arguments:
 
 Options:
   --perun          Enable Perun monitoring
-  --nsys         Enable Nsight Systems profiling
-  --ncu            Enable Nsight Compute profiling
+  --profsys        Enable Nsight Systems profiling/rocprof-systems
+  --profcu         Enable Nsight Compute profiling/rocprof-compute
   -h, --help       Display this help message
 
 EOF
@@ -93,11 +93,11 @@ else
 fi
 
 if [[ $nsys == true ]]; then
-    PYTHON_CMD="${NSYS_CMD[@]} $PYTHON_CMD"
+    PYTHON_CMD="${PROFSYS_CMD[@]} $PYTHON_CMD"
 fi
 
 if [[ $ncu == true ]]; then
-    PYTHON_CMD="${NCU_CMD[@]} $PYTHON_CMD"
+    PYTHON_CMD="${PROFCU_CMD[@]} $PYTHON_CMD"
 fi
 
 echo "Running cmd:"
