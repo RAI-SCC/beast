@@ -229,6 +229,13 @@ comm = MPI.COMM_WORLD
 mpi_rank = comm.Get_rank()
 mpi_world_size = comm.Get_size()
 
+dt_extent = (1440 // 4) * MPI.FLOAT.Get_extent()[1]
+subarray_type = MPI.FLOAT.Create_subarray(
+            sizes=[84, 721, 1440],
+            subsizes=[84//2, 721, 1440//4],
+            starts=[0] * 3
+        ).Create_resized(0, dt_extent).Commit()
+
 
 def load_data_scatter_8way_mpi_scatter_dt(
     data_path, idx, process_group, loaderID, gpu_direct=False, dim=[84, 721, 1440]
@@ -278,17 +285,6 @@ def load_data_scatter_8way_mpi_scatter_dt(
         data_item = torch.tensor(
             zarr_data.isel(time=idx)["fields"].values, device=start_device
         )
-        dt_extent = (xlat // 4) * MPI.FLOAT.Get_extent()[1]
-
-        subarray_type = (
-            MPI.FLOAT.Create_subarray(
-                sizes=dim,
-                subsizes=data_chunk.shape,
-                starts=[0] * len(dim),
-            )
-            .Create_resized(0, dt_extent)
-            .Commit()
-        )
         var_jump = 4 * xlon * (var // 2)
         send_buffer = (
             MPI.buffer.fromaddress(data_item.untyped_storage().data_ptr(), 0),
@@ -307,9 +303,10 @@ def load_data_scatter_8way_mpi_scatter_dt(
 
     comm.Scatterv(send_buffer, recv_buffer, root=0)
     if not gpu_direct:
-        gpu_data_chunk = data_chunk.to(device)
+        data_chunk = data_chunk.to(device)
+
     torch.cuda.synchronize()
-    return gpu_data_chunk
+    return data_chunk
 
 
 def load_data_scatter_8way_mpi_cont(
@@ -374,9 +371,9 @@ def load_data_scatter_8way_mpi_cont(
 
     data_chunk = comm.scatter(scatter_list, root=0)
     if not gpu_direct:
-        gpu_chunk = data_chunk.to(device)
+        data_chunk = data_chunk.to(device)
     torch.cuda.synchronize()
-    return gpu_chunk
+    return data_chunk
 
 
 def load_data_chunked_8way(
