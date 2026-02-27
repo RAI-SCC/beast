@@ -47,10 +47,10 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 # CPU mask for optimal GPU-CPU affinity on LUMI-G
 
 # Each MI250X has 2 GCDs. The CPU-GPU mapping on LUMI-G is:
-#   GCD 4,5 -> NUMA 0 (cores 0-15)  -> CCD 0,1
-#   GCD 2,3 -> NUMA 1 (cores 16-31) -> CCD 2,3
-#   GCD 6,7 -> NUMA 2 (cores 32-47) -> CCD 4,5
-#   GCD 0,1 -> NUMA 3 (cores 48-63) -> CCD 6,7
+#   GCD 4,5 -> NUMA 0 (cores 0-15)  -> GCD 0,1
+#   GCD 2,3 -> NUMA 1 (cores 16-31) -> GCD 2,3
+#   GCD 6,7 -> NUMA 2 (cores 32-47) -> GCD 4,5
+#   GCD 0,1 -> NUMA 3 (cores 48-63) -> GCD 6,7
 #
 # For 8 tasks (one per GCD), bind each task to 7 cores (mask 0xfe = 11111110)
 # Leaving core 0 of each group for system tasks
