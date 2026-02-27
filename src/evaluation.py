@@ -24,7 +24,7 @@ def validate(
     # get group information
     channel_group = groups["JChannel"]
     dp_group = groups["DP"]
-    ep_group = groups["Expert"]
+    ep_group = groups.get("Expert")
 
     rank = dist.get_rank()
 
@@ -117,7 +117,7 @@ def validate(
             if dp_group.size() > 1:
                 dist.all_reduce(epoch_results[k], op=dist.ReduceOp.AVG, group=dp_group)
 
-            if ep_group.size() > 1:
+            if ep_group is not None and dist.get_world_size(ep_group) > 1:
                 dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
 
         if "mse" in epoch_results.keys():
@@ -238,12 +238,16 @@ def calculate_aggregate_metrics(
     if dist.get_world_size(channel_group) > 1:
         dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=channel_group)
 
+    # flatten for calculation
+    std_1d = data_std.flatten()
+
+    # return unnormalized metrics
     local_results = {
         "data_fit": data_fit,
         "prior_matching": prior_matching,
-        "mse": rmse_sq * (data_std**2),
-        "crps": crps * data_std,
-        "avg_var": avg_var * (data_std**2),
+        "mse": rmse_sq * (std_1d**2),
+        "crps": crps * std_1d,
+        "avg_var": avg_var * (std_1d**2),
     }
 
     if acc is not None:
@@ -326,24 +330,41 @@ def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
     )
     spread_part = local_diffs / denominator
 
+    # communication via merry-go-round
     if size > 1:
-        gather_list = [torch.zeros_like(local_samples) for _ in range(size)]
-
-        dist.all_gather(gather_list, local_samples, group=up_group)
-
         my_group_rank = dist.get_rank(group=up_group)
 
-        for i, remote_samples in enumerate(gather_list):
-            if i != my_group_rank:
-                # Compare our local samples to the samples gathered from GPU i
-                cross_diffs = (
-                    (local_samples.unsqueeze(0) - remote_samples.unsqueeze(1))
-                    .abs()
-                    .sum(dim=(0, 1))
-                )
-                spread_part += cross_diffs / denominator
+        # neighbors (deal with start and end ring)
+        next_rank = (my_group_rank + 1) % size
+        prev_rank = (my_group_rank - 1 + size) % size
 
-        # Final sync for the spread part
+        # MGR buffers
+        send_buffer = local_samples.clone()
+        recv_buffer = torch.zeros_like(local_samples)
+
+        # loop through all processes
+        for step in range(1, size):
+            # swap buffers
+            ops = [
+                dist.P2POp(dist.isend, send_buffer, next_rank, group=up_group),
+                dist.P2POp(dist.irecv, recv_buffer, prev_rank, group=up_group),
+            ]
+            reqs = dist.batch_isend_irecv(ops)
+            for req in reqs:
+                req.wait()
+
+            # calculate cross diffs
+            cross_diffs = (
+                (local_samples.unsqueeze(0) - recv_buffer.unsqueeze(1))
+                .abs()
+                .sum(dim=(0, 1))
+            )
+            spread_part += cross_diffs / denominator
+
+            # adjust buffers for next loop
+            send_buffer.copy_(recv_buffer)
+
+        # final sync
         dist.all_reduce(spread_part, op=dist.ReduceOp.SUM, group=up_group)
 
     return mae_part - spread_part
