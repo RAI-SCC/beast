@@ -12,7 +12,7 @@ import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import Normalization, utils
+from Jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
@@ -47,10 +47,10 @@ def training_loop(config_dict):
 
     time_log = []
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    # slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
-    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
+    # print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -88,9 +88,9 @@ def training_loop(config_dict):
     expert_loss_weighting = model.get_loss_weights()
 
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
+        normalization.DistributedNICENorm, ban_mode="submodule"
     )
     convert_to_vimodule(model)
     # predictive_distribution = Normal()

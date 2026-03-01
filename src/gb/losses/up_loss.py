@@ -59,24 +59,20 @@ class UP_AllGaussLoss(nn.Module):
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
         expert_output = model_output * self.loss_weights
         expert_target = target * self.loss_weights
-        print(
-            f"Expert Rank {self.ep_group.rank()}, DP Rank {self.dp_group.rank()}, UP Rank {self.up_group.rank()}, DTP Rank {self.dtp_group.rank()}: expert_output = {expert_output.sum()}, expert_target = {expert_target.sum()}"
-        )
 
-        mean, std = self.aggregate_statistics(expert_output, self.up_group)
-        # Here be expert implementation
-        replace_val = self.loss_weights == 0.0
-        replace_val = replace_val.squeeze(dim=0)
-        replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-        std = torch.where(replace_val, 1.0, std)
-        print(
-            f"Expert Rank {self.ep_group.rank()}, DP Rank {self.dp_group.rank()}, UP Rank {self.up_group.rank()}, DTP Rank {self.dtp_group.rank()}: mean = {mean.sum()}, std = {std.sum()}"
+        mean, std = self.aggregate_statistics(
+            expert_output, self.up_group, self.loss_weights
         )
+        # Here be expert implementation
+        # replace_val = self.loss_weights == 0.0
+        # replace_val = replace_val.squeeze(dim=0)
+        # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+        # std = torch.where(replace_val, 1.0, std)
+        # print(
+        #     f"Expert Rank {self.ep_group.rank()}, DP Rank {self.dp_group.rank()}, UP Rank {self.up_group.rank()}, DTP Rank {self.dtp_group.rank()}: mean = {mean.sum()}, std = {std.sum()}"
+        # )
 
         data_fit = self.data_fitting(mean, std, expert_target)
-        print(
-            f"Expert Rank {self.ep_group.rank()}, DP Rank {self.dp_group.rank()}, UP Rank {self.up_group.rank()}, DTP Rank {self.dtp_group.rank()}: data_fit = {data_fit.sum()}"
-        )
 
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
@@ -91,7 +87,7 @@ class UP_AllGaussLoss(nn.Module):
 
 class GaussianAggregation(torch.autograd.Function):
     @staticmethod
-    def forward(samples, up_process_group):
+    def forward(samples, up_process_group, loss_weights):
         loc_sample_num = samples.shape[0]
         up_num = up_process_group.size()
         total_samples = loc_sample_num * up_num
@@ -116,13 +112,19 @@ class GaussianAggregation(torch.autograd.Function):
         var = local_sum_sq - (mean**2) * (total_samples / (total_samples - 1))
         std = torch.sqrt(var)
 
+        replace_val = loss_weights == 0.0
+        replace_val = replace_val.squeeze(dim=0)
+        replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+        std = torch.where(replace_val, 1.0, std)
+
         return mean, std
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> Any:
-        samples, up_process_group = inputs
+        samples, up_process_group, loss_weights = inputs
         mean, std = output
 
+        # do we need to save the loss-weights as well???
         ctx.up_process_group = up_process_group
         ctx.save_for_backward(samples, mean, std)
 
@@ -130,11 +132,12 @@ class GaussianAggregation(torch.autograd.Function):
     def backward(ctx: Any, grad_mean, grad_std) -> Any:
         up_process_group = ctx.up_process_group
         samples, mean, std = ctx.saved_tensors
-        print(f"Rank {dist.get_rank(group=None)} samples = {samples.sum()}, ")
+        # print(f"Rank {dist.get_rank(group=None)} samples = {samples.sum()}, mean = {mean.sum()}, std = {std.sum()}")
 
         N_loc = samples.shape[0]
         N_glob = N_loc * up_process_group.size()
 
+        # do we need to account for the fact, that we replaced the std elements with loss-weight = 0 with 1?
         mean = mean.unsqueeze(dim=0)
         std = std.unsqueeze(dim=0)
         grad_mean = grad_mean.unsqueeze(dim=0)
@@ -144,4 +147,4 @@ class GaussianAggregation(torch.autograd.Function):
             samples - mean
         ) / std
 
-        return grad_samples, None
+        return grad_samples, None, None
