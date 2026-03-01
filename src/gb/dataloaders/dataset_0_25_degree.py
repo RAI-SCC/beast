@@ -1,5 +1,6 @@
 import os
 
+import netCDF4
 import numpy as np
 import pandas as pd
 import torch
@@ -60,15 +61,16 @@ class ERA5DatasetDistributed(Dataset):
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
-        # self.norm_values = np.load(
-        #    f"{config['data']['normalization_dir']}/normalization_zarr.npy",
-        #    allow_pickle=True,
-        # )
-        # [0].reshape(65, 1, 1)
+        self.norm = netCDF4.Dataset(f"{config['data']['normalization_dir']}/norms.nc")
         self.norm_values = {
-            "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
-            "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
+            "mean": np.array(self.norm["mean"]).reshape(self.num_vars, 1, 1),
+            "std": np.array(self.norm["std"]).reshape(self.num_vars, 1, 1),
         }
+        # dummy norm values for code testing
+        # self.norm_values = {
+        #     "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
+        #     "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
+        # }
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
