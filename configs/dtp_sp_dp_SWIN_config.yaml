@@ -21,7 +21,7 @@ data:
     out_surface_variables: [mslp, u10, v10, t2m, sst, tp]
     out_pressure_variables: [geopotential, specific humidity, temperature, u_component_of_wind, v_component_of_wind, vertical_velocity]
     out_pressure_levels: [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
-    n_in_timesteps: 2 #Can be 1 or 2, other not supported atm
+    n_in_timesteps: 1 #Can be 1 or 2, other not supported atm
 model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 192
@@ -32,6 +32,7 @@ model:
     window_size_inner: [6, 6]
     n_attn_blocks: [3,2,3]
     latent_rollout: 1
+    noise_dim: 32
 training:
     tf32: True
     n_samples: 4 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
