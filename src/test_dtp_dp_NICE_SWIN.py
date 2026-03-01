@@ -11,7 +11,7 @@ import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import Normalization, utils
+from Jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
@@ -77,10 +77,10 @@ def training_loop(config_dict):
     model = model.to(torch.float32).to(device)
 
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(normalization.DistributedNoParamLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
+        normalization.DistributedNICENorm, ban_mode="submodule"
     )
 
     convert_to_vimodule(model)
@@ -151,7 +151,7 @@ def train_one_epoch(
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y) in enumerate(dataloader):
+    for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
@@ -220,7 +220,7 @@ def main():
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+        print(f"normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict)
 
