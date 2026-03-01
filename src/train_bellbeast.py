@@ -15,7 +15,7 @@ from Jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
 from gb.model.model_gb import Bellbeast

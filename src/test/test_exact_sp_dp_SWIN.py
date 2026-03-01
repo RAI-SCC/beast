@@ -13,7 +13,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.losses.up_loss import UP_AllGaussLoss
 from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
 
 

@@ -9,7 +9,6 @@ import torch.distributed as dist
 # torch blue imports
 import torch_blue
 import yaml
-from gb.losses.UP_Loss import UP_AllGaussLoss
 from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
 
 # Jigsaw imports
@@ -18,6 +17,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
 from gb.utils import get_process_group, init_gb_process_group
