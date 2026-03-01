@@ -27,6 +27,7 @@ model:
     window_size_outer: [6, 12]
     window_size_inner: [6, 6]
     n_attn_blocks: [3,2,3]
+    noise_dim: 32
     latent_rollout: 1
 training:
     tf32: True
@@ -36,4 +37,4 @@ training:
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [2,1,2,2,2]
+mesh_dims: [4,1,2,2,2]

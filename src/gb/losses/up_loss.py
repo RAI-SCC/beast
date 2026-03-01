@@ -8,7 +8,9 @@ from torch_blue.vi.distributions import MeanFieldNormal
 
 
 class UP_AllGaussLoss(nn.Module):
-    def __init__(self, model, dataset_size, process_group, heat=1.0, track=False):
+    def __init__(
+        self, model, loss_weights, dataset_size, process_group, heat=1.0, track=False
+    ):
         super().__init__()
 
         self.pg = process_group
@@ -22,6 +24,9 @@ class UP_AllGaussLoss(nn.Module):
             track=track,
         )
 
+        self.loss_weights = loss_weights.reshape(
+            (1, 1, -1, 1, 1)
+        )  # (batch, variables, lat, lon)
         self.dataset_size = dataset_size
 
         self.aggregate_statistics = GaussianAggregation.apply
@@ -40,12 +45,17 @@ class UP_AllGaussLoss(nn.Module):
 
     def forward(self, model_output, target):
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
+        expert_output = model_output * self.loss_weights
+        expert_target = target * self.loss_weights
 
-        mean, std = self.aggregate_statistics(model_output, self.pg)
+        mean, std = self.aggregate_statistics(expert_output, self.pg)
         # Here be expert implementation
-        # std = torch.where(self.loss_weights.is_nonzero(), std, 1.0)
+        replace_val = self.loss_weights == 0.0
+        replace_val = replace_val.squeeze(dim=0)
+        replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+        std = torch.where(replace_val, 1.0, std)
 
-        data_fit = self.data_fitting(mean, std, target)
+        data_fit = self.data_fitting(mean, std, expert_target)
 
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
@@ -94,6 +104,7 @@ class GaussianAggregation(torch.autograd.Function):
     def backward(ctx: Any, grad_mean, grad_std) -> Any:
         process_group = ctx.process_group
         samples, mean, std = ctx.saved_tensors
+        print(f"Rank {dist.get_rank(group=None)} samples = {samples.sum()}, ")
 
         N_loc = samples.shape[0]
         N_glob = N_loc * process_group.size()

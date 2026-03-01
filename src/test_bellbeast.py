@@ -63,6 +63,7 @@ def training_loop(config_dict):
         heads=config_dict["model"][
             "n_attn_heads"
         ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+        noise_dim=config_dict["model"]["noise_dim"],
         kernel_size=config_dict["model"]["patch_size"],
         window_size_outer=config_dict["model"]["window_size_outer"],
         window_size_inner=config_dict["model"]["window_size_inner"],
@@ -75,7 +76,7 @@ def training_loop(config_dict):
         spatial_group=spatial_group,
         channel_group=channel_group,
         ep_group=ep_group,
-        sp_group=up_group,
+        up_group=up_group,
         bayesian=True,
     )
 
@@ -83,9 +84,13 @@ def training_loop(config_dict):
 
     # make experts
     model = Expert(model, ep_group)
+    expert_loss_weighting = model.get_loss_weights()
 
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        Normalization.DistributedNICENorm, ban_mode="submodule"
+    )
     convert_to_vimodule(model)
     # predictive_distribution = Normal()
 
@@ -112,7 +117,9 @@ def training_loop(config_dict):
     #        dp_process_group=dp_group,
     #     mode="validation"
     # )
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+    loss_fn = UP_AllGaussLoss(
+        model, expert_loss_weighting, len(train_dataloader.dataset), up_group
+    )
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
