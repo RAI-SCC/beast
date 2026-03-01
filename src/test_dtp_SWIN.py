@@ -10,7 +10,7 @@ import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import Normalization, utils
+from Jigsaw import normalization, utils
 from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
@@ -76,7 +76,7 @@ def training_loop(config_dict):
     )  # Check if needed, or which PG needs the same seeds here?!?! Should maybe be UP?
 
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     convert_to_vimodule(model)
     predictive_distribution = Normal()
     loss_fn = vi.KullbackLeiblerLoss(
@@ -195,7 +195,7 @@ def main():
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+        print(f"normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict)
 

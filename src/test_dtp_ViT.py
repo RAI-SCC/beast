@@ -8,7 +8,7 @@ import torch.optim as optim
 import yaml
 
 # Jigsaw imports
-from Jigsaw import utils
+from jigsaw import utils
 
 # torch blue imports
 from torch_blue import vi
