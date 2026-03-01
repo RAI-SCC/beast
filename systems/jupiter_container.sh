@@ -67,7 +67,6 @@ setup_system() {
     echo "Purging modules"
     ml purge
     ml load Stages/2026 GCC/14.3.0 OpenMPI/5.0.8 MPI-settings/CUDA
-
     echo "Loaded modules:"
     module list
 }

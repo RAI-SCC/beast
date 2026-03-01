@@ -42,6 +42,7 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
 
     time_log = []
@@ -101,7 +102,7 @@ def training_loop(config_dict):
         model,
         device_ids=[device_id],
         output_device=device_id,
-        process_group=dp_group,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
@@ -118,7 +119,13 @@ def training_loop(config_dict):
     #     mode="validation"
     # )
     loss_fn = UP_AllGaussLoss(
-        model, expert_loss_weighting, len(train_dataloader.dataset), up_group
+        model,
+        expert_loss_weighting,
+        len(train_dataloader.dataset),
+        dtp_group,
+        up_group,
+        dp_group,
+        ep_group,
     )
     n_samples = config_dict["training"]["n_samples"]
 

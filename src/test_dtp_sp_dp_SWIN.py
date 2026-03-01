@@ -8,20 +8,23 @@ import torch
 import torch.distributed as dist
 
 # torch blue imports
-import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import Normalization, utils
+from Jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
-from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
 from gb.model.SWIN_Jigsaw_025 import SWIN
-from gb.utils import count_model_parameters, get_process_group, init_gb_process_group
+from gb.utils import (
+    convert_jigsaw_vi,
+    count_model_parameters,
+    get_process_group,
+    init_gb_process_group,
+)
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -41,13 +44,12 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
 
     time_log = []
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
-    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
@@ -79,13 +81,14 @@ def training_loop(config_dict):
     if dist.get_rank(group=None) == 0:
         print(f"Parameters: {count_model_parameters(model, 4)}")
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
-    torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
-    )
+    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    # # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(
+    #     Normalization.DistributedNICENorm, ban_mode="submodule"
+    # )
 
-    convert_to_vimodule(model)
+    # convert_to_vimodule(model)
+    convert_jigsaw_vi(model)
     # predictive_distribution = Normal()
 
     model.return_log_probs = False
@@ -95,7 +98,7 @@ def training_loop(config_dict):
         model,
         device_ids=[device_id],
         output_device=device_id,
-        process_group=dp_group,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
@@ -118,8 +121,13 @@ def training_loop(config_dict):
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  ##Check if this works with Torch-blue
+
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
+
+    print(
+        f"My global rank is {dist.get_rank(group=None)}, up group rank is {up_group.rank()}"
+    )
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
@@ -234,6 +242,27 @@ def main():
         config_dict["data"]["constant_masks_path"] = (
             os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
+
+    # append n_masks for odd number of masks (the dataset does this, too)
+    n_masks = len(config_dict["data"]["constant_masks"])
+    if n_masks % 2 == 1:
+        n_masks += 1
+
+    # default case: load only one timestep
+    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
+        config_dict["data"]["n_in_timesteps"] = 1
+
+    n_input_vars = (
+        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
+    )
+
+    # we'll set this automatically, to avoid confusion when defining the config,
+    # as n_input_channels depends on how many timesteps we use as concatenated input
+    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
+    config_dict["model"]["embedding_dimension"] = (
+        config_dict["model"]["embedding_dimension"]
+        * config_dict["data"]["n_in_timesteps"]
+    )
 
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (

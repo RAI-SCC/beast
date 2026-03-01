@@ -398,6 +398,8 @@ def main():
 
     rank = get_process_group("DDP").rank()
 
+    rank = get_process_group("DDP").rank()
+
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
