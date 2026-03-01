@@ -6,7 +6,7 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import yaml
-from gb.model.nice_SWIN import NiceBNNNoEmbeddingModel
+from gb.model.nice_swin import NiceBNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel

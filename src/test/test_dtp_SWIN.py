@@ -10,7 +10,7 @@ import torch_blue
 import yaml
 
 # Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
+from gb.model.swin_jigsaw_025 import SWIN
 
 # Jigsaw imports
 from Jigsaw import normalization, utils

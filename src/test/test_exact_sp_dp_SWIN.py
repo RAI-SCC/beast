@@ -6,7 +6,7 @@ import time
 import torch
 import torch.distributed as dist
 import yaml
-from gb.model.downsampled_SWIN import BNNNoEmbeddingModel
+from gb.model.downsampled_swin import BNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel

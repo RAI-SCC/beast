@@ -9,18 +9,18 @@ import torch.distributed as dist
 # torch blue imports
 import torch_blue
 import yaml
-from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
 
 # Jigsaw imports
 from Jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.up_loss import UP_AllGaussLoss
+from ..gb.dataloaders import dataloader_0_25_degree
+from ..gb.losses import up_loss
+from ..gb.model.test_models import nice_swin_jigsaw_025
 
 # Import model
-from gb.utils import get_process_group, init_gb_process_group
+from ..gb.utils import get_process_group, init_gb_process_group
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -50,7 +50,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = NICE_SWIN(
+    model = nice_swin_jigsaw_025.NICE_SWIN(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -97,7 +97,7 @@ def training_loop(config_dict):
     )
 
     # Get the data loaders
-    train_dataloader = get_dataloader(
+    train_dataloader = dataloader_0_25_degree.get_dataloader(
         config_dict,
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
@@ -109,7 +109,7 @@ def training_loop(config_dict):
     #        dp_process_group=dp_group,
     #     mode="validation"
     # )
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+    loss_fn = up_loss.UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
     n_samples = config_dict["training"]["n_samples"]
     # loss_fn = vi.KullbackLeiblerLoss(
     #        predictive_distribution, dataset_size=len(train_dataloader.dataset)

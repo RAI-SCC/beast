@@ -16,8 +16,8 @@ from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
 # Import model
-from gb.model import Model_GB as Model
-from gb.model import ViT
+from gb.model.test_models.vit import ViT
+from gb.model.test_models.weather_mixer import WeatherMixer
 from gb.utils import _create_process_mesh_dict
 
 
@@ -45,7 +45,7 @@ def training_loop(
     # Define model and load model
     if config_dict["model"]["type"] == "Mixer":
         model = (
-            Model.WeatherMixer(
+            WeatherMixer(
                 config_dict, rank, device, parallelism, model_group, col_subgroup
             )
             .to(torch.float32)
