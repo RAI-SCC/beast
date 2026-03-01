@@ -151,7 +151,7 @@ def train_one_epoch(
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y) in enumerate(dataloader):
+    for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
