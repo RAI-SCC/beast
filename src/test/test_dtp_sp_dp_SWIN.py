@@ -10,15 +10,15 @@ import torch.distributed as dist
 # torch blue imports
 import yaml
 
+# Import model
+from gb.model.SWIN_Jigsaw_025 import SWIN
+
 # Jigsaw imports
 from Jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.UP_Loss import UP_AllGaussLoss
-
-# Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,

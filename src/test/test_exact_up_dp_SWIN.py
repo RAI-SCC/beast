@@ -6,6 +6,7 @@ import time
 import torch
 import torch.distributed as dist
 import yaml
+from gb.model.nice_SWIN import NiceBNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
@@ -13,7 +14,6 @@ from torch.utils.data import DistributedSampler
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
 from gb.losses.UP_Loss import UP_AllGaussLoss
-from gb.model.downsampled_SWIN import BNNNoEmbeddingModel
 from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
 
 
@@ -80,7 +80,7 @@ def training_loop(
     train_data_loader, train_info = get_test_dataloader(config, get_process_group("DP"))
 
     print(f"Rank {rank} using device {device}")
-    model = BNNNoEmbeddingModel(config=config, device=device)
+    model = NiceBNNNoEmbeddingModel(config=config, device=device)
 
     if use_fl16:
         model = model.to(torch.float16).to(device)
