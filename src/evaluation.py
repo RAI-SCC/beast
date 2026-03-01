@@ -6,6 +6,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch_blue
+from Jigsaw import dataset
+from Jigsaw.util_fns import plotting_functions as plot_fns
 
 from gb.losses.UP_Loss import GaussianAggregation
 

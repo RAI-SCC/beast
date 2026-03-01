@@ -11,7 +11,7 @@ import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import Normalization, utils
+from Jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
@@ -40,6 +40,7 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
@@ -76,10 +77,10 @@ def training_loop(config_dict):
     model = model.to(torch.float32).to(device)
 
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(normalization.DistributedNoParamLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
+        normalization.DistributedNICENorm, ban_mode="submodule"
     )
 
     convert_to_vimodule(model)
@@ -92,7 +93,7 @@ def training_loop(config_dict):
         model,
         device_ids=[device_id],
         output_device=device_id,
-        process_group=dp_group,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
@@ -219,7 +220,7 @@ def main():
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+        print(f"normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict)
 

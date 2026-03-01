@@ -63,20 +63,22 @@ class GaussianAggregation(torch.autograd.Function):
         up_num = process_group.size()
         total_samples = loc_sample_num * up_num
 
-        local_mean = samples.mean(dim=0)
-        local_std = samples.std(dim=0)
-
-        mean = local_mean / up_num
-        dist.all_reduce(mean, op=dist.ReduceOp.SUM, group=process_group)
-
-        local_contribution = (loc_sample_num / (total_samples - 1)) * (
-            (mean - local_mean) ** 2
+        local_sum_scaled = (samples.sum(dim=0) / total_samples).contiguous()
+        mu_handle = dist.all_reduce(
+            local_sum_scaled, op=dist.ReduceOp.SUM, group=process_group, async_op=True
         )
-        local_contribution = local_contribution + (
-            (loc_sample_num - 1) / (total_samples - 1)
-        ) * (local_std**2)
-        dist.all_reduce(local_contribution, op=dist.ReduceOp.SUM, group=process_group)
-        std = torch.sqrt(local_contribution)
+
+        local_sum_sq = ((samples**2).sum(dim=0) / (total_samples - 1)).contiguous()
+        var_handle = dist.all_reduce(
+            local_sum_sq, op=dist.ReduceOp.SUM, group=process_group, async_op=True
+        )
+
+        mu_handle.wait()
+        mean = local_sum_scaled
+
+        var_handle.wait()
+        var = local_sum_sq - (mean**2) * (total_samples / (total_samples - 1))
+        std = torch.sqrt(var)
 
         return mean, std
 
