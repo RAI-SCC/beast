@@ -36,7 +36,7 @@ class UP_AllGaussLoss(nn.Module):
             track=track,
         )
 
-        self.loss_weights = loss_weights.reshape(
+        self.loss_weights_mask = (loss_weights > 0.5).reshape(
             (1, 1, -1, 1, 1)
         )  # (batch, variables, lat, lon)
         self.dataset_size = dataset_size
@@ -57,12 +57,18 @@ class UP_AllGaussLoss(nn.Module):
 
     def forward(self, model_output, target):
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
-        expert_output = model_output * self.loss_weights
-        expert_target = target * self.loss_weights
 
-        mean, std = self.aggregate_statistics(
-            expert_output, self.up_group, self.loss_weights
+        bool_mask_output = self.loss_weights_mask.unsqueeze(dim=0).expand_as(
+            model_output
         )
+        bool_mask_target = self.loss_weights_mask.expand_as(target)
+        expert_output = model_output[bool_mask_output]
+        expert_target = target[bool_mask_target]
+
+        # expert_output = model_output * self.loss_weights
+        # expert_target = target * self.loss_weights
+
+        mean, std = self.aggregate_statistics(expert_output, self.up_group)
         # Here be expert implementation
         # replace_val = self.loss_weights == 0.0
         # replace_val = replace_val.squeeze(dim=0)
@@ -87,7 +93,7 @@ class UP_AllGaussLoss(nn.Module):
 
 class GaussianAggregation(torch.autograd.Function):
     @staticmethod
-    def forward(samples, up_process_group, loss_weights):
+    def forward(samples, up_process_group):
         loc_sample_num = samples.shape[0]
         up_num = up_process_group.size()
         total_samples = loc_sample_num * up_num
@@ -113,16 +119,11 @@ class GaussianAggregation(torch.autograd.Function):
         var = torch.abs(var) + 1e-10
         std = torch.sqrt(var)
 
-        replace_val = loss_weights == 0.0
-        replace_val = replace_val.squeeze(dim=0)
-        replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-        std = torch.where(replace_val, 1.0, std)
-
         return mean, std
 
     @staticmethod
     def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> Any:
-        samples, up_process_group, loss_weights = inputs
+        samples, up_process_group = inputs
         mean, std = output
 
         # do we need to save the loss-weights as well???
@@ -148,4 +149,4 @@ class GaussianAggregation(torch.autograd.Function):
             samples - mean
         ) / std
 
-        return grad_samples, None, None
+        return grad_samples, None
