@@ -9,7 +9,7 @@ import torch_blue
 from Jigsaw import plotting_functions as plot_fns
 from torch import Tensor
 
-from gb.losses.UP_Loss import GaussianAggregation
+from gb.losses.up_loss import GaussianAggregation
 from gb.utils import get_process_group
 
 

@@ -4,7 +4,7 @@ from Jigsaw import attention, convolutions, linear
 from gb.model.expert import ExpertWeightingLayer
 
 
-class GrandBellbeast(torch.nn.Module):
+class Bellbeast(torch.nn.Module):
     def __init__(
         self,
         xlat,

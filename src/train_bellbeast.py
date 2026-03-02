@@ -11,14 +11,15 @@ import torch.distributed as dist
 import yaml
 
 # Jigsaw imports
-from jigsaw import utils
+from Jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
+from gb.model.expert import Expert
 
 # Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
+from gb.model.model_gb import Bellbeast
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,
@@ -33,8 +34,6 @@ def set_all_seeds(seed_value: int) -> None:
     torch.manual_seed(seed_value)  # pytorch random number generator for CPU
     torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
     torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
     os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
@@ -45,6 +44,7 @@ def training_loop(config_dict):
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
+    ep_group = get_process_group("Expert")
 
     time_log = []
 
@@ -54,7 +54,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = SWIN(
+    model = Bellbeast(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -63,6 +63,7 @@ def training_loop(config_dict):
         heads=config_dict["model"][
             "n_attn_heads"
         ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+        noise_dim=config_dict["model"]["noise_dim"],
         kernel_size=config_dict["model"]["patch_size"],
         window_size_outer=config_dict["model"]["window_size_outer"],
         window_size_inner=config_dict["model"]["window_size_inner"],
@@ -74,23 +75,22 @@ def training_loop(config_dict):
         dtp_group=dtp_group,
         spatial_group=spatial_group,
         channel_group=channel_group,
+        ep_group=ep_group,
+        up_group=up_group,
         bayesian=True,
     )
 
     model = model.to(torch.float32).to(device)
+
+    # Make model expert
+    model = Expert(model, ep_group)
+    expert_loss_weighting = model.get_loss_weights()
+
     if dist.get_rank(group=None) == 0:
         print(f"Parameters: {count_model_parameters(model, 4)}")
+
     # Make model Bayesian
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(
-    #     Normalization.DistributedNICENorm, ban_mode="submodule"
-    # )
-
-    # convert_to_vimodule(model)
     convert_jigsaw_vi(model)
-    # predictive_distribution = Normal()
-
     model.return_log_probs = False
 
     # Make model data parallel
@@ -108,13 +108,16 @@ def training_loop(config_dict):
         dp_process_group=dp_group,
         mode="train",
     )
-    # valid_dataloader = get_dataloader(
-    #     config_dict,
-    #       dtp_process_group = dtp_group,
-    #        dp_process_group=dp_group,
-    #     mode="validation"
-    # )
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+
+    loss_fn = UP_AllGaussLoss(
+        model,
+        expert_loss_weighting,
+        len(train_dataloader.dataset),
+        dtp_group,
+        up_group,
+        dp_group,
+        ep_group,
+    )
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -124,10 +127,6 @@ def training_loop(config_dict):
 
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
-
-    print(
-        f"My global rank is {dist.get_rank(group=None)}, up group rank is {up_group.rank()}"
-    )
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
@@ -170,7 +169,6 @@ def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
 ):
     timings = []
-    # print(f'##Starting Epoch {epoch}: Rank {dist.get_rank(group=None)}, time {time.time_ns()}')
     timings.append((epoch, -1, time.time_ns(), time.time_ns()))
 
     model.train()
@@ -181,15 +179,12 @@ def train_one_epoch(
 
     for i, (x, y, start, end) in enumerate(dataloader):
         timings.append((epoch, i, start, end))
-        # print(f'Rank {dist.get_rank(group=None)}, epoch {epoch}, batch {i}, start {start}, end {end}')
+
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-
-        pred = model(
-            x, samples=n_samples
-        )  # Add samples = config_dict["training"]["n_samples"]
+        pred = model(x, samples=n_samples)
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness
@@ -208,10 +203,6 @@ def train_one_epoch(
 
     average_loss = loss_sum / max(1, len(dataloader))
     return average_loss, timings
-
-
-def validate_epoch():
-    pass
 
 
 def main():

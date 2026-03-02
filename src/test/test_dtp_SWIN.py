@@ -9,6 +9,9 @@ import torch.distributed as dist
 import torch_blue
 import yaml
 
+# Import model
+from gb.model.swin_jigsaw_025 import SWIN
+
 # Jigsaw imports
 from Jigsaw import normalization, utils
 from torch_blue import vi
@@ -16,9 +19,6 @@ from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-
-# Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
 from gb.utils import get_process_group, init_gb_process_group
 
 
