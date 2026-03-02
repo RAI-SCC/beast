@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
 import random
@@ -10,15 +14,15 @@ import torch.distributed as dist
 # torch blue imports
 import yaml
 
-# Import model
-from gb.model.swin_jigsaw_025 import SWIN
-
-# Jigsaw imports
+# jigsaw imports
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
+
+# Import model
+from gb.model.test_models.swin_jigsaw_025 import SWIN
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,

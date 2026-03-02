@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import math
 import os

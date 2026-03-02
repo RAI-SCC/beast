@@ -4,6 +4,10 @@ Test script for PyTorch distributed process group initialization.
 Tests NCCL backend, GPU access, and all-to-all communication.
 """
 
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import torch.distributed as dist
 
 from gb.utils import init_gb_process_group

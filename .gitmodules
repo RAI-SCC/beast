@@ -1,8 +1,8 @@
-[submodule "src/libs/torch_blue"]
+[submodule "jigsaw"]
+	path = src/libs/jigsaw
+	url = git@github.com:RAI-SCC/jigsaw.git
+	branch = vi
+[submodule "torch_blue"]
 	path = src/libs/torch_blue
 	url = git@github.com:RAI-SCC/torch_blue.git
 	branch = vi_convert2
-[submodule "src/libs/Jigsaw"]
-	path = src/libs/Jigsaw
-	url = git@github.com:RAI-SCC/Jigsaw.git
-	branch = vi

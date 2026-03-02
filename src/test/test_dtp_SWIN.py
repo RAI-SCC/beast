@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
 import time
@@ -12,8 +16,8 @@ import yaml
 # Import model
 from gb.model.swin_jigsaw_025 import SWIN
 
-# Jigsaw imports
-from Jigsaw import normalization, utils
+# jigsaw imports
+from jigsaw import normalization, utils
 from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal

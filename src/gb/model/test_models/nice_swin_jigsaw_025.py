@@ -1,5 +1,5 @@
 import torch
-from Jigsaw import attention, convolutions, linear
+from jigsaw import attention, convolutions, linear
 
 
 class NICE_SWIN(torch.nn.Module):

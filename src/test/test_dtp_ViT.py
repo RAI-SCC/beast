@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
 import time
@@ -7,7 +11,7 @@ import torch.distributed as dist
 import torch.optim as optim
 import yaml
 
-# Jigsaw imports
+# jigsaw imports
 from jigsaw import utils
 
 # torch blue imports
