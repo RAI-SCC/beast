@@ -110,6 +110,7 @@ class GaussianAggregation(torch.autograd.Function):
 
         var_handle.wait()
         var = local_sum_sq - (mean**2) * (total_samples / (total_samples - 1))
+        var = torch.abs(var) + 1e-10
         std = torch.sqrt(var)
 
         replace_val = loss_weights == 0.0
