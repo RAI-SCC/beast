@@ -37,7 +37,7 @@ class UP_AllGaussLoss(nn.Module):
         )
 
         self.loss_weights_mask = (loss_weights > 0.5).reshape(
-            (1, 1, -1, 1, 1)
+            (1, -1, 1, 1)
         )  # (batch, variables, lat, lon)
         self.dataset_size = dataset_size
 
