@@ -170,21 +170,23 @@ def train_one_epoch(
         pred = model(x, samples=n_samples)
         loss = loss_fn(pred, y)
 
-        # # Average loss over all four processes for exactness
-        dist.all_reduce(loss, group=dtp_group)
-
         # Backpropagation
         loss.backward()
 
         optimizer.step()
 
         loss_sum = loss_sum + float(loss.detach())
-        if dist.get_rank(group=None) == 0:
-            print(
-                f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
-            )
 
-    average_loss = loss_sum / max(1, len(dataloader))
+        if i % 100 == 0:
+            # # Average loss over all four processes for exactness
+            dist.all_reduce(loss, group=dtp_group)
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
+                )
+    loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
+    dist.all_reduce(loss_sum_all, group=dtp_group)
+    average_loss = loss_sum_all.item() / max(1, len(dataloader))
     return average_loss, timings
 
 
