@@ -10,8 +10,8 @@ import torch.distributed as dist
 # torch blue imports
 import yaml
 
-# Jigsaw imports
-from Jigsaw import utils
+# jigsaw imports
+from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader

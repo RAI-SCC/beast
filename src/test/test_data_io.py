@@ -6,7 +6,7 @@ Purpose is to test different loading strategies, depending on the system archite
 
 import sys
 
-sys.path.append("./src/")  # for utils import
+sys.path.append("./src/")
 
 import argparse
 import os

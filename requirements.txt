@@ -9,4 +9,4 @@ mpi4py
 netCDF4
 
 -e ./src/libs/torch_blue
--e ./src/libs/Jigsaw
+-e ./src/libs/jigsaw

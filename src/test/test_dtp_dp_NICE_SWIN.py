@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")
+
 import argparse
 import os
 import random
@@ -10,8 +14,8 @@ import torch.distributed as dist
 import torch_blue
 import yaml
 
-# Jigsaw imports
-from Jigsaw import normalization, utils
+# jigsaw imports
+from jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 

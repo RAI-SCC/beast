@@ -14,7 +14,7 @@ import torch.distributed as dist
 # torch blue imports
 import yaml
 
-# Jigsaw imports
+# jigsaw imports
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 

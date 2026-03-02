@@ -1,4 +1,4 @@
-import Jigsaw.normalization as norm
+import jigsaw.normalization as norm
 import torch
 from jigsaw import dataset, linear, patch_embedding
 from jigsaw.mixer import MixerBlock
