@@ -1,5 +1,5 @@
 import torch
-from Jigsaw import attention, convolutions, linear
+from jigsaw import attention, convolutions, linear
 
 from gb.model.expert import ExpertWeightingLayer
 
