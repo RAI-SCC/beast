@@ -23,14 +23,7 @@ from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.utils import get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    # os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from gb.utils import get_process_group, init_gb_process_group, set_all_seeds
 
 
 def training_loop(config_dict):

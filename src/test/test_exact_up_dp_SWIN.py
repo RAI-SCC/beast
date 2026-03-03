@@ -18,14 +18,12 @@ from torch.utils.data import DistributedSampler
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
-from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from gb.utils import (
+    download_1_5_degree_data,
+    get_process_group,
+    init_gb_process_group,
+    set_all_seeds,
+)
 
 
 def count_parameters(model) -> int:
