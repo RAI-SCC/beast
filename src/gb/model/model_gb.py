@@ -26,7 +26,7 @@ class Bellbeast(torch.nn.Module):
         ep_group,
         up_group,
         bayesian,
-        parallelism
+        parallelism,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon

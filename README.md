@@ -9,7 +9,7 @@
     - ``constant_masks/`` : constant masks for 1.5degree data
     - ``normalization/`` : variable normalization values
         - ``norms.nc`` : normalization values for Bellbeast dataset with 84 variables
-- ``experiments/`` : bash scripts (srun/sbatch, data download, ...) 
+- ``experiments/`` : bash scripts (srun/sbatch, data download, ...)
     - ``run_gb_script.sh`` : your main bash script to launch jobs (system independent)
 - ``logs/``: Slurm output logs, debugging logs, training logs, timings; Good for debugging, sanity check, etc.; Can be large, consider cleaning up periodically
 - ``results/`` : pkl files, checkpoints, anything plotable; mlflow
@@ -24,9 +24,9 @@
             - ``dataset_0_25_degree.py`` : torch.Dataset for high-resolution data
             - ``dataset_1_5_degree.py`` : torch.Dataset for low-resolution data
             - ``dataloader_0_25_degree.py`` : custom GB torch.dataloader and utility function
-        - ``losses/`` : lossfunctions 
+        - ``losses/`` : lossfunctions
             - ``up_loss.py:`` Bellbeast loss function (uncertainty parallel and experts included)
-        - ``models/`` : torch.nn.modeule definictions 
+        - ``models/`` : torch.nn.modeule definictions
             - ``test_models/`` : test models of various stages and sub-developments
             - ``expert.py`` : model wrapper for Ensemble of Experts
             - ``model_gb.py`` : **The torch.nn Bellbeast model definition**
@@ -128,8 +128,8 @@ To run training, configure in ``configs/bellbeast_config.yaml``
     * How big the model should be: **``embedding_dimension``**, ``n_attn_heads``, ``patch_size``, etc.
     * How many epochs to train (``n_epochs``)
     * How many Bayesian samples per SP process (``n_samples``)
- 
-### On Jupiter 
+
+### On Jupiter
 ```console
 sbatch -A jureap1 -p booster --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 -t 00:06:00 --job-name=train_bellbeast experiments/run_gb_script.sh systems/jupiter_container.sh src/train_besllbeast.py --config_file configs/bellbeast_config.yaml
 ```
