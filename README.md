@@ -131,12 +131,12 @@ To run training, configure in ``configs/bellbeast_config.yaml``
  
 ### On Jupiter 
 ```console
-sbatch -A jureap1 -p booster --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 -t 00:06:00 --job-name=train_bellbeast experiments/run_gb_script.sh systems/jupiter_container.sh src/train_besllbeast.py --config_file configs/bellbeast_config.yaml
+sbatch -A jureap1 -p booster --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 -t 00:06:00 --job-name=train_bellbeast experiments/run_gb_script.sh systems/jupiter_container.sh src/train_bellbeast.py --config_file configs/bellbeast_config.yaml
 ```
 
 ### On LUMI: (8 tasks per node is work in progress)
 ```console
-sbatch -A project_462001248 -p standard-g --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 --job-name=train_bellbeast experiments/run_gb_script.sh systems/lumi_singularity.sh src/train_besllbeast.py --config_file configs/bellbeast_config.yaml
+sbatch -A project_462001248 -p standard-g --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 --job-name=train_bellbeast experiments/run_gb_script.sh systems/lumi_singularity.sh src/train_bellbeast.py --config_file configs/bellbeast_config.yaml
 ```
 Go grab a cup of coffe and stare at loss values
 
