@@ -4,6 +4,7 @@ import netCDF4
 import numpy as np
 import pandas as pd
 import torch
+import torch.distributed as dist
 import xarray as xr
 from torch.utils.data import Dataset
 
@@ -177,7 +178,8 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         dt=None,
     ):
         super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
-        print("Loading two timeframes as input...")
+        if dist.get_rank(group=None) == 0:
+            print("Loading two timeframes as input...")
 
     def __len__(self):
         """Return total number of samples."""

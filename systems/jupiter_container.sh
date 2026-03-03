@@ -53,7 +53,7 @@ export PMIX_MCA_gds="hash"
 
 export SYSTEM_SLURM_PARAMS=(
     -c71
-    --cpu-bind=v
+    #--cpu-bind=v
     --gpu-bind=closest
     apptainer
     exec

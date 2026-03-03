@@ -4,7 +4,6 @@ sys.path.append("./src/")
 
 import argparse
 import os
-import random
 import time
 
 import torch
@@ -24,18 +23,7 @@ from ..gb.losses import up_loss
 from ..gb.model.test_models import nice_swin_jigsaw_025
 
 # Import model
-from ..gb.utils import get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
+from ..gb.utils import get_process_group, init_gb_process_group, set_all_seeds
 
 
 def training_loop(config_dict):

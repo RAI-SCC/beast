@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import time
 
 import pandas as pd
@@ -16,6 +15,7 @@ from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
+from gb.model.expert import Expert
 
 # Import model
 from gb.model.model_gb import Bellbeast
@@ -24,16 +24,8 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    set_all_seeds,
 )
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
 def training_loop(config_dict):
@@ -43,6 +35,7 @@ def training_loop(config_dict):
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
+    ep_group = get_process_group("Expert")
 
     time_log = []
 
@@ -73,10 +66,17 @@ def training_loop(config_dict):
         dtp_group=dtp_group,
         spatial_group=spatial_group,
         channel_group=channel_group,
+        ep_group=ep_group,
+        up_group=up_group,
         bayesian=True,
     )
 
     model = model.to(torch.float32).to(device)
+
+    # Make model expert
+    model = Expert(model, ep_group)
+    expert_loss_weighting = model.get_loss_weights()
+
     if dist.get_rank(group=None) == 0:
         print(f"Parameters: {count_model_parameters(model, 4)}")
 
@@ -100,7 +100,15 @@ def training_loop(config_dict):
         mode="train",
     )
 
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+    loss_fn = UP_AllGaussLoss(
+        model,
+        expert_loss_weighting,
+        len(train_dataloader.dataset),
+        dtp_group,
+        up_group,
+        dp_group,
+        ep_group,
+    )
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -170,21 +178,23 @@ def train_one_epoch(
         pred = model(x, samples=n_samples)
         loss = loss_fn(pred, y)
 
-        # # Average loss over all four processes for exactness
-        dist.all_reduce(loss, group=dtp_group)
-
         # Backpropagation
         loss.backward()
 
         optimizer.step()
 
         loss_sum = loss_sum + float(loss.detach())
-        if dist.get_rank(group=None) == 0:
-            print(
-                f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
-            )
 
-    average_loss = loss_sum / max(1, len(dataloader))
+        if i % 100 == 0:
+            # # Average loss over all four processes for exactness
+            dist.all_reduce(loss, group=dtp_group)
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
+                )
+    loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
+    dist.all_reduce(loss_sum_all, group=dtp_group)
+    average_loss = loss_sum_all.item() / max(1, len(dataloader))
     return average_loss, timings
 
 
