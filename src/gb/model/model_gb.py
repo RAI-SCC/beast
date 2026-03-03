@@ -1,8 +1,10 @@
 import torch
-from Jigsaw import attention, convolutions, linear
+from jigsaw import attention, convolutions, linear
+
+from gb.model.expert import ExpertWeightingLayer
 
 
-class NICE_SWIN(torch.nn.Module):
+class Bellbeast(torch.nn.Module):
     def __init__(
         self,
         xlat,
@@ -21,6 +23,8 @@ class NICE_SWIN(torch.nn.Module):
         dtp_group,
         spatial_group,
         channel_group,
+        ep_group,
+        up_group,
         bayesian,
     ):
         super().__init__()
@@ -35,6 +39,8 @@ class NICE_SWIN(torch.nn.Module):
         self.local_rank = dtp_rank
         self.device = device
         self.parallelism = 4
+        self.ep_group = ep_group
+        self.up_group = up_group
         self.dtp_group = dtp_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
@@ -77,6 +83,13 @@ class NICE_SWIN(torch.nn.Module):
             parallelism=4,
             bias=True,
             bayesian=self.bayesian,
+        )
+
+        self.expert_layer = ExpertWeightingLayer(
+            (self.ep_group.size(), 1, self.embed_dim, 1),
+            self.ep_group,
+            self.up_group,
+            device=self.device,
         )
 
         self.upsample = convolutions.DistributedConvTranspose2D(
@@ -269,6 +282,9 @@ class NICE_SWIN(torch.nn.Module):
         # TODO: GELU
 
         # downsample
+
+        # here comes the Latent Representation of the experts into play:
+        x = self.expert_layer(x)
 
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()

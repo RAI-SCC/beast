@@ -1,16 +1,14 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import os
 
 import torch
 import torch_blue
 
-from gb.losses.UP_Loss import UP_AllGaussLoss
-from gb.utils import get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from gb.losses.up_loss import UP_AllGaussLoss
+from gb.utils import get_process_group, init_gb_process_group, set_all_seeds
 
 
 class DummyModule(torch_blue.vi.VIModule):

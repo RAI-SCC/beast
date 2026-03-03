@@ -1,4 +1,9 @@
+import sys
+
+sys.path.append("./src/")
+
 import argparse
+import math
 import os
 import time
 
@@ -6,6 +11,7 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import yaml
+from gb.model.downsampled_swin import BNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
@@ -15,15 +21,12 @@ from torch_blue.vi.distributions import (
 )
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
-from gb.model.nice_SWIN import NiceBNNNoEmbeddingModel
-from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from gb.utils import (
+    download_1_5_degree_data,
+    get_process_group,
+    init_gb_process_group,
+    set_all_seeds,
+)
 
 
 def count_parameters(model) -> int:
@@ -82,7 +85,7 @@ def training_loop(
     train_data_loader, train_info = get_test_dataloader(config, get_process_group("DP"))
 
     print(f"Rank {rank} using device {device}")
-    model = NiceBNNNoEmbeddingModel(config=config, device=device)
+    model = BNNNoEmbeddingModel(config=config, device=device)
 
     if use_fl16:
         model = model.to(torch.float16).to(device)
@@ -204,6 +207,10 @@ def training_loop(
         start_up_time = time.perf_counter() - start_up_time
         wall_time -= start_up_time
 
+    seed = 42  # put in config?
+    set_all_seeds(seed + get_process_group("SP").rank())
+    sample_num = math.ceil(sample_num / get_process_group("SP").size())
+
     for epoch in range(start_epoch, num_epochs):
         scheduler.step(epoch)
         lr = optimizer.param_groups[0]["lr"]  # write to variable so that we can print
@@ -263,7 +270,17 @@ def training_loop(
 
             if correct_dtype == torch.float32 and not no_scaler:
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    assert (
+                        model_ddp.module._input_layer.conv_surface.weight.dtype
+                        == correct_dtype
+                    )
+
                     optimizer.zero_grad()
+
+                    assert (
+                        model_ddp.module._input_layer.conv_surface.weight.dtype
+                        == correct_dtype
+                    )
 
                     # Call the model
                     output = model_ddp(
@@ -283,7 +300,17 @@ def training_loop(
                         output_pressure, output_surface, target, target_surface
                     )
             else:
+                assert (
+                    model_ddp.module._input_layer.conv_surface.weight.dtype
+                    == correct_dtype
+                )
+
                 optimizer.zero_grad()
+
+                assert (
+                    model_ddp.module._input_layer.conv_surface.weight.dtype
+                    == correct_dtype
+                )
 
                 # Call the model
                 output = model_ddp(
@@ -395,14 +422,11 @@ def main():
 
     mesh_dims = config_dict["mesh_dims"]  # [1, 4, 1, 1, 1]
     init_gb_process_group(mesh_dims)
+    # init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
     rank = get_process_group("DDP").rank()
-
-    rank = get_process_group("DDP").rank()
-
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
-
     world_size = get_process_group("DDP").size()
 
     if os.getenv("DATA_DIR") is not None:

@@ -1,5 +1,5 @@
 import torch
-from Jigsaw import attention, linear, patch_embedding
+from jigsaw import attention, linear, patch_embedding
 
 
 class Transformer_Sequential(torch.nn.Module):

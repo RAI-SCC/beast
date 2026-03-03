@@ -1,5 +1,6 @@
 import math
 import os
+import random
 import types
 from collections.abc import Sequence
 
@@ -10,7 +11,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
-from Jigsaw import convolutions, normalization
+from jigsaw import normalization, utils_init
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -40,11 +41,7 @@ def init_gb_process_group(
         device_id=device,
         init_method="env://",
     )
-    if dist.is_initialized():
-        print(
-            f"Rank {rank}/{world_size}: Process group initialized with torch rank {dist.get_rank()} and torch world size {dist.get_world_size()}."
-        )
-    else:
+    if not dist.is_initialized():
         raise RuntimeError("Process group initialization failed.")
 
     # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
@@ -229,7 +226,7 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            convolutions._average_weights(m, get_process_group("JSpatial"))
+            utils_init.average_weights(m, get_process_group("JSpatial"))
 
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
@@ -242,3 +239,14 @@ def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
             total += module.get_parameter_count()
 
     return total * parallelism
+
+
+def set_all_seeds(seed_value: int) -> None:
+    """Set random seeds."""
+    random.seed(seed_value)  # Python random module
+    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
+    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
+    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
+    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
+    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
+    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.

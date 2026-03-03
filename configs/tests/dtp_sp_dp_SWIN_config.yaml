@@ -31,12 +31,12 @@ model:
     window_size_outer: [6, 12]
     window_size_inner: [6, 6]
     n_attn_blocks: [3,2,3]
-    latent_rollout: 1
     noise_dim: 32
+    latent_rollout: 1
 training:
     tf32: True
     n_samples: 4 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
-    n_epochs: 3
+    n_epochs: 1
     batch_size: 1
     plot_step: 10 # plot every 10 epochs
     plot_surface_variables: [t2m] # surface variables to plot
@@ -45,4 +45,4 @@ training:
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1,2,2,2,2]
+mesh_dims: [2,2,2,2,2]

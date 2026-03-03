@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")
+
 import argparse
 import os
 import time
@@ -9,40 +13,36 @@ import torch.distributed as dist
 import torch_blue
 import yaml
 
-# Jigsaw imports
-from Jigsaw import normalization, utils
-from torch_blue import vi
+# jigsaw imports
+from jigsaw import normalization, utils
+from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
-from torch_blue.vi.distributions import Normal
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+from ..gb.dataloaders import dataloader_0_25_degree
+from ..gb.losses import up_loss
+from ..gb.model.test_models import nice_swin_jigsaw_025
 
 # Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
-from gb.utils import get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    # os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from ..gb.utils import get_process_group, init_gb_process_group, set_all_seeds
 
 
 def training_loop(config_dict):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
-    # up_group = get_process_group("SP")
+    up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
 
+    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
+    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = SWIN(
+    model = nice_swin_jigsaw_025.NICE_SWIN(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -51,6 +51,7 @@ def training_loop(config_dict):
         heads=config_dict["model"][
             "n_attn_heads"
         ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+        noise_dim=config_dict["model"]["noise_dim"],
         kernel_size=config_dict["model"]["patch_size"],
         window_size_outer=config_dict["model"]["window_size_outer"],
         window_size_inner=config_dict["model"]["window_size_inner"],
@@ -66,39 +67,51 @@ def training_loop(config_dict):
     )
 
     model = model.to(torch.float32).to(device)
-    # Synchronize parameters; ToDO: Check this @deifilia :D
-    for name, param in model.named_parameters():
-        if param is not None:
-            if "bias" in name:
-                dist.all_reduce(param.data, op=dist.ReduceOp.AVG, group=spatial_group)
-    set_all_seeds(
-        dp_group.rank()
-    )  # Check if needed, or which PG needs the same seeds here?!?! Should maybe be UP?
 
     # Make model Bayesian
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(
+        normalization.DistributedNICENorm, ban_mode="submodule"
+    )
+
     convert_to_vimodule(model)
-    predictive_distribution = Normal()
-    loss_fn = vi.KullbackLeiblerLoss(
-        predictive_distribution, dataset_size=config_dict["data"]["train_subset"]
+    # predictive_distribution = Normal()
+
+    model.return_log_probs = False
+
+    # Make model data parallel
+    model = DistributedDataParallel(
+        model,
+        device_ids=[device_id],
+        output_device=device_id,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
-    train_dataloader = get_dataloader(
+    train_dataloader = dataloader_0_25_degree.get_dataloader(
         config_dict,
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
         mode="train",
     )
     # valid_dataloader = get_dataloader(
-    #    config_dict, process_group=dp_group, mode="validation"
+    #     config_dict,
+    #       dtp_process_group = dtp_group,
+    #        dp_process_group=dp_group,
+    #     mode="validation"
     # )
-
+    loss_fn = up_loss.UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+    n_samples = config_dict["training"]["n_samples"]
+    # loss_fn = vi.KullbackLeiblerLoss(
+    #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
+    #    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  ##Check if this works with Torch-blue
     torch.cuda.empty_cache()
+    set_all_seeds(42 + up_group.rank())
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
@@ -107,6 +120,7 @@ def training_loop(config_dict):
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
+            n_samples=n_samples,
             optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
@@ -120,20 +134,23 @@ def training_loop(config_dict):
             )
 
 
-def train_one_epoch(epoch, dataloader, model, optimizer, loss_fn, device, dtp_group):
+def train_one_epoch(
+    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
+):
     model.train()
     loss_sum = 0.0
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y) in enumerate(dataloader):
+    for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
-        y = y[0].to(device)
+        y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x)
-
+        pred = model(
+            x, samples=n_samples
+        )  # Add samples = config_dict["training"]["n_samples"]
         loss = loss_fn(pred, y)
 
         # # Average loss over all four processes for exactness

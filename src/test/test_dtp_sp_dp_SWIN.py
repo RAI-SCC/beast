@@ -1,6 +1,9 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
-import random
 import time
 
 import pandas as pd
@@ -10,32 +13,22 @@ import torch.distributed as dist
 # torch blue imports
 import yaml
 
-# Jigsaw imports
+# jigsaw imports
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
-from gb.model.SWIN_Jigsaw_025 import SWIN
+from gb.model.test_models.swin_jigsaw_025 import SWIN
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    set_all_seeds,
 )
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
 def training_loop(config_dict):
@@ -116,9 +109,7 @@ def training_loop(config_dict):
     # )
     loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
     n_samples = config_dict["training"]["n_samples"]
-    # loss_fn = vi.KullbackLeiblerLoss(
-    #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
-    #    )
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     utils.setup_precision(
         config_dict["training"]["tf32"]
@@ -188,6 +179,7 @@ def train_one_epoch(
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
+
         pred = model(
             x, samples=n_samples
         )  # Add samples = config_dict["training"]["n_samples"]
