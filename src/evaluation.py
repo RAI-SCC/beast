@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import h5py
@@ -6,27 +7,31 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch_blue
+from torch import nn
 
 from gb.losses.up_loss import GaussianAggregation
+from gb.utils import get_process_group
 
 
 @torch.no_grad()
 def validate(
     config_dict: dict,
     model: torch.nn.Module,
+    expert_weights: torch.Tensor,
     n_samples: int,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device,
     epoch: int,
     results_path: str,
-    groups: dict,
 ):
     # get group information
-    channel_group = groups["JChannel"]
-    dp_group = groups["DP"]
-    ep_group = groups.get("Expert")
+    channel_group = get_process_group("JChannel")
+    dp_group = get_process_group("DP")
+    ep_group = get_process_group("Expert")
 
     rank = dist.get_rank()
+
+    exp_agg = ExpertAggregation(ep_group, expert_weights)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
@@ -66,19 +71,22 @@ def validate(
     # loop through dataloader
     for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
+        y_unmasked = y.to(device, non_blocking=True)
 
         # prediction
         samples = model(x, samples=n_samples)
+
+        y = y_unmasked * expert_weights.reshape(1, -1, 1, 1)
+        samples = samples * expert_weights.reshape(1, 1, -1, 1, 1)
 
         val_results = calculate_aggregate_metrics(
             samples,
             y,
             model,
+            expert_weights,
             len(dataloader.dataset),
             data_means,
             data_std,
-            groups,
             spatial_weights,
             local_indices,
             climatology=None,
@@ -96,10 +104,11 @@ def validate(
         if epoch % plot_step == 0 and i == 0:
             generate_distributed_plots(
                 samples,
-                y,
+                y_unmasked,
                 data_means,
                 data_std,
-                groups,
+                exp_agg,
+                expert_weights,
                 plot_indices,
                 plot_names,
                 epoch,
@@ -118,7 +127,8 @@ def validate(
                 dist.all_reduce(epoch_results[k], op=dist.ReduceOp.AVG, group=dp_group)
 
             if ep_group is not None and dist.get_world_size(ep_group) > 1:
-                dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+                # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+                epoch_results[k] = exp_agg(epoch_results[k])
 
         if "mse" in epoch_results.keys():
             epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
@@ -149,7 +159,13 @@ def validate(
         # save to hdf5
         h5_path = Path(results_path) / "evaluation_metrics.h5"
         try:
-            log_epoch_to_hdf5(epoch_results, global_names, epoch, h5_path)
+            log_epoch_to_hdf5(
+                epoch_results,
+                global_names,
+                epoch,
+                h5_path,
+                config_dict=(config_dict if epoch == 0 else None),
+            )
         except Exception as e:
             print(f"WARNING: HDF5 Logging failed! Error: {e}")
             print("Metrics are still preserved in this Slurm log above.")
@@ -170,18 +186,18 @@ def calculate_aggregate_metrics(
     samples,
     target,
     model,
+    expert_weights,
     dataset_size,
     data_mean,
     data_std,
-    groups,
     spatial_weights,
     indices,
     climatology=None,
 ):
-    up_group = groups["SP"]
-    dtp_group = groups["DTP"]
-    spatial_group = groups["JSpatial"]
-    channel_group = groups["JChannel"]
+    up_group = get_process_group("SP")
+    dtp_group = get_process_group("DTP")
+    spatial_group = get_process_group("JSpatial")
+    channel_group = get_process_group("JChannel")
 
     target = target[:, indices]
     samples = samples[:, :, indices]
@@ -193,7 +209,8 @@ def calculate_aggregate_metrics(
         climatology = climatology[indices]
 
     # calculate mean and std
-    mean, std = GaussianAggregation.apply(samples, up_group)
+    mean, std = GaussianAggregation.apply(samples, up_group, expert_weights)
+    std = std * expert_weights.reshape(1, -1, 1, 1)
 
     acc = None
     if climatology is not None:
@@ -560,23 +577,24 @@ def generate_distributed_plots(
     target,
     data_mean,
     data_std,
-    groups,
+    expert_agg,
+    expert_weights,
     plot_indices,
     plot_names,
     epoch,
     file_path,
 ):
 
-    up_group = groups["SP"]
-    spatial_group = groups["JSpatial"]
-    channel_group = groups["JChannel"]
+    up_group = get_process_group("SP")
+    spatial_group = get_process_group("JSpatial")
+    channel_group = get_process_group("JChannel")
 
     # slice and unnormalize - only indices to be plotted
     if len(plot_indices) > 0:
         local_samples = samples[:, :, plot_indices]
         local_target = target[:, plot_indices]
 
-        mean, _ = GaussianAggregation.apply(local_samples, up_group)
+        mean, _ = GaussianAggregation.apply(local_samples, up_group, expert_weights)
 
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
@@ -600,7 +618,8 @@ def generate_distributed_plots(
     )
     global_target, _ = gather_vars_for_plot(full_lon_target, plot_names, channel_group)
 
-    # TODO maybe there needs to be an expert aggregation here (unsure)
+    # aggregation over all the experts (not needed for targets)
+    global_pred = expert_agg(global_pred)
 
     # plot
     if dist.get_rank() == 0 and len(global_plot_names) > 0:
@@ -662,11 +681,17 @@ def generate_distributed_plots(
             print(f"Saved plot: {save_path}")
 
 
-def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath):
+def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath, config_dict=None):
     filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(filepath, "a") as f:
+        if config_dict is not None:
+            conf_grp = f.require_group("config")
+            conf_grp.create_dataset(
+                "json", dtype=h5py.string_dtype(), data=json.dumps(config_dict)
+            )
+
         # results grouped by epoch
         epoch_grp = f.require_group(f"epoch_{epoch}")
 
@@ -687,3 +712,32 @@ def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath):
                 epoch_grp.create_dataset(metric_name, data=val)
 
     print(f"Epoch {epoch} validation metrics saved successfully to {filepath}")
+
+
+class ExpertAggregation(nn.Module):
+    def __init__(self, ep_group, expert_weights):
+        super().__init__()
+
+        self.ep_group = ep_group
+
+        if ep_group.size() > 1:
+            temp_expert_weights = expert_weights.clone().detach().contiguous()
+            dist.all_reduce(temp_expert_weights, op=dist.ReduceOp.SUM, group=ep_group)
+
+            self.ep_normalizations = temp_expert_weights.reshape(1, -1, 1, 1)
+            # (batch, channel, lat, lon)
+
+    def forward(self, x):
+        if self.ep_group.size() <= 1:
+            return x
+
+        if len(x.shape) > 4:
+            normalization = self.ep_normalizations.reshape(1, 1, -1, 1, 1)
+        else:
+            normalization = self.ep_normalizations
+
+        y = x.clone()
+        dist.all_reduce(y, op=dist.ReduceOp.SUM, group=self.ep_group)
+        y = y / normalization
+
+        return y

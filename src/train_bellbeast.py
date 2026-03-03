@@ -13,6 +13,8 @@ import yaml
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
+# Import evaluation
+from evaluation import validate
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
@@ -103,6 +105,20 @@ def training_loop(config_dict):
         mode="train",
     )
 
+    valid_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="valid",
+    )
+
+    validation_results_path = os.path.join(
+        os.getenv("WORKDIR"),
+        "results",
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID"),
+    )
+
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
@@ -134,6 +150,17 @@ def training_loop(config_dict):
             loss_fn=loss_fn,
             device=device,
             dtp_group=dtp_group,
+        )
+
+        validate(
+            config_dict=config_dict,
+            model=model,
+            expert_weights=expert_loss_weighting,
+            n_samples=n_samples,
+            dataloader=valid_dataloader,
+            device=device,
+            epoch=epoch,
+            results_path=validation_results_path,
         )
 
         end_time = time.perf_counter()
