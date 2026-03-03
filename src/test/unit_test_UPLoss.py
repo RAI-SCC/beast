@@ -1,9 +1,13 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import os
 
 import torch
 import torch_blue
 
-from gb.losses.UP_Loss import UP_AllGaussLoss
+from gb.losses.up_loss import UP_AllGaussLoss
 from gb.utils import get_process_group, init_gb_process_group
 
 

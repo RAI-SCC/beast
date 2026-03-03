@@ -1,21 +1,23 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
+import math
 import os
 import time
 
 import torch
 import torch.distributed as dist
-import torch_blue.vi as vi
 import yaml
+from gb.model.nice_SWIN import NiceBNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DistributedSampler
-from torch_blue.vi.distributions import (
-    MeanFieldNormal as MeanFieldNormalPredictiveDistribution,
-)
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
-from gb.model.nice_SWIN import NiceBNNNoEmbeddingModel
+from gb.losses.up_loss import UP_AllGaussLoss
 from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
 
 
@@ -96,13 +98,14 @@ def training_loop(
     # DistributedDataParallel wrapper
 
     # loss_type = config["training"].get("loss_type", "kl")
-    predictive_dist = MeanFieldNormalPredictiveDistribution()
-    kl_loss = vi.AnalyticalKullbackLeiblerLoss(
-        model,
-        predictive_dist,
-        train_info["size"],
-        divergence_type=vi.NormalNormalDivergence(),
-    )
+    # predictive_dist = MeanFieldNormalPredictiveDistribution()
+    # kl_loss = vi.AnalyticalKullbackLeiblerLoss(
+    #     model,
+    #     predictive_dist,
+    #     train_info["size"],
+    #     divergence_type=vi.NormalNormalDivergence(),
+    # )
+    kl_loss = UP_AllGaussLoss(model, train_info["size"], get_process_group("SP"))
 
     # area_weights_sqrt = torch.sqrt(area_weights)
     def loss_fn(output, output_surface, target, target_surface):
@@ -117,7 +120,7 @@ def training_loop(
             model,
             device_ids=[device_id],
             output_device=device_id,
-            process_group=get_process_group("DDP"),
+            process_group=get_process_group("DP"),
         )
     else:
         model_ddp = model
@@ -203,6 +206,10 @@ def training_loop(
         max_epoch_time = 120.0
         start_up_time = time.perf_counter() - start_up_time
         wall_time -= start_up_time
+
+    seed = 42  # put in config?
+    set_all_seeds(seed + get_process_group("SP").rank())
+    sample_num = math.ceil(sample_num / get_process_group("SP").size())
 
     for epoch in range(start_epoch, num_epochs):
         scheduler.step(epoch)
@@ -394,15 +401,14 @@ def main():
     set_all_seeds(2)
 
     mesh_dims = config_dict["mesh_dims"]  # [1, 4, 1, 1, 1]
+    # group_dict: dict[str, dist.ProcessGroup] =
     init_gb_process_group(mesh_dims)
-
-    rank = get_process_group("DDP").rank()
-
-    rank = get_process_group("DDP").rank()
+    # init_gb_process_group([1, 4, 1, 1, 1])  # ["Expert", "DP", "SP", "JCol", "JRow"]
 
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
+    rank = get_process_group("DDP").rank()
     world_size = get_process_group("DDP").size()
 
     if os.getenv("DATA_DIR") is not None:

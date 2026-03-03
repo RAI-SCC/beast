@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-echo "Setting up container venv..."
-echo "VENV_DIR: $VENV_DIR"
-echo "DATA_DIR: $DATA_DIR"
 source $VENV_DIR/bin/activate
-echo "Runnning cmd: $@"
+if [ "$SLURM_PROCID" -eq 0 ]; then
+    echo "VENV_DIR: $VENV_DIR"
+    echo "DATA_DIR: $DATA_DIR"
+    echo "Runnning cmd: $@"
+fi
 exec "$@"

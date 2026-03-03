@@ -1,5 +1,5 @@
 import torch
-from Jigsaw import Attention, Convolutions, Linear
+from jigsaw import attention, convolutions, linear
 
 
 class SWIN(torch.nn.Module):
@@ -45,7 +45,7 @@ class SWIN(torch.nn.Module):
 
         self.bayesian = bayesian
 
-        self.patch_embedding = Convolutions.DistributedConv2D(
+        self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -61,7 +61,7 @@ class SWIN(torch.nn.Module):
             parallelism=self.parallelism,
             bayesian=self.bayesian,
         )
-        self.downsample = Convolutions.DistributedConv2D(
+        self.downsample = convolutions.DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -78,7 +78,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.upsample = Convolutions.DistributedConvTranspose2D(
+        self.upsample = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -95,7 +95,7 @@ class SWIN(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery = Convolutions.DistributedConvTranspose2D(
+        self.patch_recovery = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -115,7 +115,7 @@ class SWIN(torch.nn.Module):
         self.n_full_blocks = n_full_blocks
         self.transformer = torch.nn.ModuleList(
             [
-                Attention.DistributedWindowedTransformer(
+                attention.DistributedWindowedTransformer(
                     x_features=self.embed_dim,
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
@@ -137,7 +137,7 @@ class SWIN(torch.nn.Module):
 
         self.transformer_down = torch.nn.ModuleList(
             [
-                Attention.DistributedWindowedTransformer(
+                attention.DistributedWindowedTransformer(
                     self.embed_dim * 2,
                     self.embed_dim * 2,
                     self.embed_dim * 2,
@@ -160,7 +160,7 @@ class SWIN(torch.nn.Module):
         assert window_size_inner[0] % 2 == 0, "window[0] size must be divisible by 2"
         assert window_size_inner[1] % 2 == 0, "window[1] size must be divisible by 2"
 
-        self.roll_out = Linear.DistributedRoll(
+        self.roll_out = linear.DistributedRoll(
             shifts=(window_size_outer[0] // 2, window_size_outer[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
@@ -169,7 +169,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
         )
 
-        self.unroll_out = Linear.DistributedRoll(
+        self.unroll_out = linear.DistributedRoll(
             shifts=(-window_size_outer[0] // 2, -window_size_outer[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
@@ -177,7 +177,7 @@ class SWIN(torch.nn.Module):
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
-        self.roll_in = Linear.DistributedRoll(
+        self.roll_in = linear.DistributedRoll(
             shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
@@ -186,7 +186,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
         )
 
-        self.unroll_in = Linear.DistributedRoll(
+        self.unroll_in = linear.DistributedRoll(
             shifts=(-window_size_inner[0] // 2, -window_size_inner[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
