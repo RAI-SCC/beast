@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 import torch_blue
-from Jigsaw import plotting_functions as plot_fns
+from jigsaw import plotting_functions as plot_fns
 from torch import Tensor
 
 from gb.losses.up_loss import GaussianAggregation
@@ -53,7 +53,7 @@ class AggregationModule(torch.nn.Module):
         self.mean_std_agg = GaussianAggregation.apply
 
     def forward(self, samples, target, model, dataset_size):
-        # TODO this is not averaging over the batch dimension currently; also, this might have to change significantly with the introduction of further Jigsaw stuff
+        # TODO this is not averaging over the batch dimension currently; also, this might have to change significantly with the introduction of further jigsaw stuff
         with torch.no_grad():
             mean, std = self.mean_std_agg(samples)
             crps = aggregate_crps(samples, target, up_group=self.up_group)

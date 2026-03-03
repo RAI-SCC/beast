@@ -195,7 +195,7 @@ def train_one_epoch(
         )  # Add samples = config_dict["training"]["n_samples"]
         loss = loss_fn(pred, y)
 
-        # # Average loss over all four processes for exactness
+        # Average loss over all four processes for exactness
         dist.all_reduce(loss, group=dtp_group)
 
         # Backpropagation

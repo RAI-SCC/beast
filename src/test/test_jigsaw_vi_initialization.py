@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
 
@@ -72,7 +76,7 @@ def conversion_test(device):
     local_dtp_row = dtp_row_group.rank()
     total_dtp_cols = dtp_col_group.size()
 
-    # mlp = Jigsaw.MLP.DistributedMLP(
+    # mlp = jigsaw.MLP.DistributedMLP(
     #     in_dim=16,
     #     hidden_dim=32,
     #     out_dim=16,
