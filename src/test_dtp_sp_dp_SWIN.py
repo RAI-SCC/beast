@@ -158,6 +158,8 @@ def training_loop(config_dict):
     time_df = pd.DataFrame(
         time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
     )
+
+    os.makedirs("logs/timings", exist_ok=True)
     time_df.to_csv(
         os.path.join(
             os.getenv("WORKDIR"),

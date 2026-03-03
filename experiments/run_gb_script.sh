@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
-#SBATCH --time=30:00
+#SBATCH --time=00:30:00
 #SBATCH --job-name='gb_run'
 #SBATCH --output='logs/%x_%j.out'
 
@@ -40,12 +40,12 @@ while [[ $# -gt 0 ]]; do
             perun=true
             shift
             ;;
-        --nsys)
-            nsys=true
+        --profsys)
+            profsys=true
             shift
             ;;
-        --ncu)
-            ncu=true
+        --profcu)
+            profcu=true
             shift
             ;;
         *)
@@ -81,7 +81,7 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 # Validate that only one profiling tool is enabled
-if [[ ($nsys == true && $perun == true) || ($ncu == true && $perun == true) || ($ncu == true && $nsys == true) ]]; then
+if [[ ($profsys == true && $perun == true) || ($profcu == true && $perun == true) || ($profcu == true && $profsys == true) ]]; then
     echo "Error: Cannot enable multiple profiling tools at the same time" >&2
     exit 1
 fi
@@ -92,13 +92,15 @@ else
     PYTHON_CMD="python -u"
 fi
 
-if [[ $nsys == true ]]; then
+if [[ $profsys == true ]]; then
     PYTHON_CMD="${PROFSYS_CMD[@]} $PYTHON_CMD"
 fi
 
-if [[ $ncu == true ]]; then
+if [[ $profcu == true ]]; then
     PYTHON_CMD="${PROFCU_CMD[@]} $PYTHON_CMD"
 fi
+
+mkdir -p results/lumi/profiles
 
 echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"

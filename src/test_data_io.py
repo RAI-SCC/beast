@@ -727,73 +727,73 @@ if __name__ == "__main__":
         if rank == 0:
             print("Third")
 
-        # Scatter mpi dt
-        start_time = time.perf_counter()
-        for idx in range(config_dict["data"]["num_items"]):
-            load_data_scatter_8way_mpi_scatter_dt(
-                data_path, idx, process_group, 0, dim=[84, 721, 1440]
-            )
-        end_time = time.perf_counter()
-        tensor_in = torch.tensor(
-            [end_time - start_time], dtype=torch.float64, device=device
-        )
-        time_scatter_8way_mpi_dt_0 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_8way_mpi_dt_0, tensor_in)
-        dist.barrier()
+        # # Scatter mpi dt
+        # start_time = time.perf_counter()
+        # for idx in range(config_dict["data"]["num_items"]):
+        #     load_data_scatter_8way_mpi_scatter_dt(
+        #         data_path, idx, process_group, 0, dim=[84, 721, 1440]
+        #     )
+        # end_time = time.perf_counter()
+        # tensor_in = torch.tensor(
+        #     [end_time - start_time], dtype=torch.float64, device=device
+        # )
+        # time_scatter_8way_mpi_dt_0 = torch.zeros(
+        #     world_size, dtype=torch.float64, device=device
+        # )
+        # dist.all_gather_into_tensor(time_scatter_8way_mpi_dt_0, tensor_in)
+        # dist.barrier()
 
-        # Scatter mpi dt direct
-        start_time = time.perf_counter()
-        for idx in range(config_dict["data"]["num_items"]):
-            load_data_scatter_8way_mpi_scatter_dt(
-                data_path, idx, process_group, 0, True, dim=[84, 721, 1440]
-            )
-        end_time = time.perf_counter()
-        tensor_in = torch.tensor(
-            [end_time - start_time], dtype=torch.float64, device=device
-        )
-        time_scatter_8way_mpi_dt_direct_0 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_8way_mpi_dt_direct_0, tensor_in)
-        dist.barrier()
-        if rank == 0:
-            print("Fourth")
+        # # Scatter mpi dt direct
+        # start_time = time.perf_counter()
+        # for idx in range(config_dict["data"]["num_items"]):
+        #     load_data_scatter_8way_mpi_scatter_dt(
+        #         data_path, idx, process_group, 0, True, dim=[84, 721, 1440]
+        #     )
+        # end_time = time.perf_counter()
+        # tensor_in = torch.tensor(
+        #     [end_time - start_time], dtype=torch.float64, device=device
+        # )
+        # time_scatter_8way_mpi_dt_direct_0 = torch.zeros(
+        #     world_size, dtype=torch.float64, device=device
+        # )
+        # dist.all_gather_into_tensor(time_scatter_8way_mpi_dt_direct_0, tensor_in)
+        # dist.barrier()
+        # if rank == 0:
+        #     print("Fourth")
 
-        # Scatter mpi cont
-        start_time = time.perf_counter()
-        for idx in range(config_dict["data"]["num_items"]):
-            load_data_scatter_8way_mpi_cont(
-                data_path, idx, process_group, 0, dim=[84, 721, 1440]
-            )
-        end_time = time.perf_counter()
-        tensor_in = torch.tensor(
-            [end_time - start_time], dtype=torch.float64, device=device
-        )
-        time_scatter_8way_mpi_cont_0 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_8way_mpi_cont_0, tensor_in)
-        dist.barrier()
+        # # Scatter mpi cont
+        # start_time = time.perf_counter()
+        # for idx in range(config_dict["data"]["num_items"]):
+        #     load_data_scatter_8way_mpi_cont(
+        #         data_path, idx, process_group, 0, dim=[84, 721, 1440]
+        #     )
+        # end_time = time.perf_counter()
+        # tensor_in = torch.tensor(
+        #     [end_time - start_time], dtype=torch.float64, device=device
+        # )
+        # time_scatter_8way_mpi_cont_0 = torch.zeros(
+        #     world_size, dtype=torch.float64, device=device
+        # )
+        # dist.all_gather_into_tensor(time_scatter_8way_mpi_cont_0, tensor_in)
+        # dist.barrier()
 
-        # Scatter mpi cont direct
-        start_time = time.perf_counter()
-        for idx in range(config_dict["data"]["num_items"]):
-            load_data_scatter_8way_mpi_cont(
-                data_path, idx, process_group, 0, True, dim=[84, 721, 1440]
-            )
-        end_time = time.perf_counter()
-        tensor_in = torch.tensor(
-            [end_time - start_time], dtype=torch.float64, device=device
-        )
-        time_scatter_8way_mpi_cont_direct_0 = torch.zeros(
-            world_size, dtype=torch.float64, device=device
-        )
-        dist.all_gather_into_tensor(time_scatter_8way_mpi_cont_direct_0, tensor_in)
-        dist.barrier()
-        if rank == 0:
-            print("Fifth")
+        # # Scatter mpi cont direct
+        # start_time = time.perf_counter()
+        # for idx in range(config_dict["data"]["num_items"]):
+        #     load_data_scatter_8way_mpi_cont(
+        #         data_path, idx, process_group, 0, True, dim=[84, 721, 1440]
+        #     )
+        # end_time = time.perf_counter()
+        # tensor_in = torch.tensor(
+        #     [end_time - start_time], dtype=torch.float64, device=device
+        # )
+        # time_scatter_8way_mpi_cont_direct_0 = torch.zeros(
+        #     world_size, dtype=torch.float64, device=device
+        # )
+        # dist.all_gather_into_tensor(time_scatter_8way_mpi_cont_direct_0, tensor_in)
+        # dist.barrier()
+        # if rank == 0:
+        #     print("Fifth")
 
         # Scatter chunked
         start_time = time.perf_counter()
@@ -818,12 +818,12 @@ if __name__ == "__main__":
                 f"""RESULTS:
                 Chunked with load order [0,1,2,3,4,5,6,7] : Mean {time_chunked_8way_loadorder1.mean().item()}, Max {time_chunked_8way_loadorder1.max().item()}
                 Chunked with load order [0,2,4,6,1,3,5,7] : Mean {time_chunked_8way_loadorder2.mean().item()}, Max {time_chunked_8way_loadorder2.max().item()}
-                Scatter with loaderID = 0                 : Mean {time_scatter_8way_0.mean().item()}, Max {time_scatter_8way_0.max().item()}
-                Scatter mpi dt with loaderID = 0          : Mean {time_scatter_8way_mpi_dt_0.mean().item()}, Max {time_scatter_8way_mpi_dt_0.max().item()}
-                Scatter mpi dt direct with loaderID = 0   : Mean {time_scatter_8way_mpi_dt_direct_0.mean().item()}, Max {time_scatter_8way_mpi_dt_direct_0.max().item()}
-                Scatter mpi cont with loaderID = 0        : Mean {time_scatter_8way_mpi_cont_0.mean().item()}, Max {time_scatter_8way_mpi_cont_0.max().item()}
-                Scatter mpi cont direct with loaderID = 0 : Mean {time_scatter_8way_mpi_cont_direct_0.mean().item()}, Max {time_scatter_8way_mpi_cont_direct_0.max().item()}
-                Scatter-chunked                           : Mean {time_scatterchunked_8way.mean().item()}, Max {time_scatterchunked_8way.max().item()}
+                Scatter with loaderID = 0                 : Mean {time_scatter_8way_0.mean().item()}, Max {time_scatter_8way_0.max().item()}"""
+                # Scatter mpi dt with loaderID = 0          : Mean {time_scatter_8way_mpi_dt_0.mean().item()}, Max {time_scatter_8way_mpi_dt_0.max().item()}
+                # Scatter mpi dt direct with loaderID = 0   : Mean {time_scatter_8way_mpi_dt_direct_0.mean().item()}, Max {time_scatter_8way_mpi_dt_direct_0.max().item()}
+                # Scatter mpi cont with loaderID = 0        : Mean {time_scatter_8way_mpi_cont_0.mean().item()}, Max {time_scatter_8way_mpi_cont_0.max().item()}
+                # Scatter mpi cont direct with loaderID = 0 : Mean {time_scatter_8way_mpi_cont_direct_0.mean().item()}, Max {time_scatter_8way_mpi_cont_direct_0.max().item()}
+                f"""Scatter-chunked                           : Mean {time_scatterchunked_8way.mean().item()}, Max {time_scatterchunked_8way.max().item()}
                 """
             )
     else:
