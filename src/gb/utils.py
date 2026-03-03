@@ -10,7 +10,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
-from jigsaw import convolutions, normalization
+from jigsaw import normalization, utils_init
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -225,7 +225,7 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            convolutions._average_weights(m, get_process_group("JSpatial"))
+            utils_init.average_weights(m, get_process_group("JSpatial"))
 
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
