@@ -107,14 +107,14 @@ init_system
 
 ## Training the Bellbeast
 Current model is ``Bellbeast`` in ``model_gb.py`` and includes :
-- 4-way domain- and tensor-parallelism (DTP) (via Jigsaw); 8-way (for LUMI) is wip
-- Uncertainty parallelism (UP), i.e. sample parallelsim (for variational inference) and noise injection conditioning for ensembles (NICE, for diffusion)
-- Data parallelism (DP) via torch DDP
-- Up to 4 Experts (EP) with different loss weightings
+ * 4-way domain- and tensor-parallelism (DTP) (via Jigsaw); 8-way (for LUMI) is wip
+ * Uncertainty parallelism (UP), i.e. sample parallelsim (for variational inference) and noise injection conditioning for ensembles (NICE, for diffusion)
+ * Data parallelism (DP) via torch DDP
+ * Up to 4 Experts (EP) with different loss weightings
 
-- Training on hourly subsampled 0.25 degree ERA5 data (chunked stored) with 84 variables and 3 constant masks
-    - Either one or two timesteps can serve as input (concatenated along variable dimension) to predict the next (6h) timestep
-    - Normalization values are in ``data/normalization/norms.nc``
+ * Training on hourly subsampled 0.25 degree ERA5 data (chunked stored) with 84 variables and 3 constant masks
+     * Either one or two timesteps can serve as input (concatenated along variable dimension) to predict the next (6h) timestep
+     * Normalization values are in ``data/normalization/norms.nc``
 
 To run training, configure in ``configs/bellbeast_config.yaml``
 * Adjust the process mesh (``mesh_dims``) to match your number of GPUs/Nodes
