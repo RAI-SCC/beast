@@ -106,9 +106,8 @@ class ExpertWeightingLayer(torch.nn.Module):
         jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)[
             0
         ]
-        x = x + jlr
 
-        return x
+        return x + jlr
 
 
 class Expert(torch.nn.Module):
@@ -148,7 +147,7 @@ class Expert(torch.nn.Module):
 
             case _:
                 # universal expert, all variables; default
-                self.weights = self.ones_like(self.weights)
+                self.weights = torch.ones_like(self.weights)
 
         return self.weights
 

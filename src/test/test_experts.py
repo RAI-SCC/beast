@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import time
 
 import pandas as pd
@@ -24,18 +23,8 @@ from gb.utils import (
     convert_jigsaw_vi,
     get_process_group,
     init_gb_process_group,
+    set_all_seeds,
 )
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
 def training_loop(config_dict):
@@ -108,12 +97,7 @@ def training_loop(config_dict):
         dp_process_group=dp_group,
         mode="train",
     )
-    # valid_dataloader = get_dataloader(
-    #     config_dict,
-    #       dtp_process_group = dtp_group,
-    #        dp_process_group=dp_group,
-    #     mode="validation"
-    # )
+
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
@@ -173,7 +157,6 @@ def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
 ):
     timings = []
-    # print(f'##Starting Epoch {epoch}: Rank {dist.get_rank(group=None)}, time {time.time_ns()}')
     timings.append((epoch, -1, time.time_ns(), time.time_ns()))
 
     model.train()

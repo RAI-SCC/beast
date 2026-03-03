@@ -38,4 +38,4 @@ training:
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [2,1,2,2,2] # [1,64,4,2,2]
+mesh_dims: [4,16,4,2,2] # [2,1,2,2,2] #

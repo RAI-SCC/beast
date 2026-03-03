@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import time
 
 import pandas as pd
@@ -25,16 +24,8 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    set_all_seeds,
 )
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
 def training_loop(config_dict):
