@@ -33,7 +33,6 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
 
-    
     if config_dict["data"]["n_in_timesteps"] == 2:
         dataset = ERA5TwoTimestepsDatasetDistributed(
             config_dict,

@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
-#SBATCH --time=48:00:00
+#SBATCH --time=30:00
 #SBATCH --job-name='gb_run'
 #SBATCH --output='logs/%x_%j.out'
 

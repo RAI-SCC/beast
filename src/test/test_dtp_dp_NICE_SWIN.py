@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")
+
 import argparse
 import os
 import random
@@ -10,17 +14,17 @@ import torch.distributed as dist
 import torch_blue
 import yaml
 
-# Jigsaw imports
-from Jigsaw import Normalization, utils
+# jigsaw imports
+from jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
-from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
+from ..gb.dataloaders import dataloader_0_25_degree
+from ..gb.losses import up_loss
+from ..gb.model.test_models import nice_swin_jigsaw_025
 
 # Import model
-from gb.utils import get_process_group, init_gb_process_group
+from ..gb.utils import get_process_group, init_gb_process_group
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -40,6 +44,7 @@ def training_loop(config_dict):
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
+    ddp_group = get_process_group("DDP")
 
     slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
@@ -49,7 +54,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = NICE_SWIN(
+    model = nice_swin_jigsaw_025.NICE_SWIN(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -76,10 +81,10 @@ def training_loop(config_dict):
     model = model.to(torch.float32).to(device)
 
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedNoParamLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    # torch_blue.vi.utils.convert.ban_convert(normalization.DistributedNoParamLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
+        normalization.DistributedNICENorm, ban_mode="submodule"
     )
 
     convert_to_vimodule(model)
@@ -92,11 +97,11 @@ def training_loop(config_dict):
         model,
         device_ids=[device_id],
         output_device=device_id,
-        process_group=dp_group,
+        process_group=ddp_group,
     )
 
     # Get the data loaders
-    train_dataloader = get_dataloader(
+    train_dataloader = dataloader_0_25_degree.get_dataloader(
         config_dict,
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
@@ -108,7 +113,7 @@ def training_loop(config_dict):
     #        dp_process_group=dp_group,
     #     mode="validation"
     # )
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+    loss_fn = up_loss.UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
     n_samples = config_dict["training"]["n_samples"]
     # loss_fn = vi.KullbackLeiblerLoss(
     #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
@@ -150,7 +155,7 @@ def train_one_epoch(
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y) in enumerate(dataloader):
+    for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
@@ -219,7 +224,7 @@ def main():
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
+        print(f"normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict)
 

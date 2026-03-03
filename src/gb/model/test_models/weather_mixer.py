@@ -1,0 +1,282 @@
+import jigsaw.normalization as norm
+import torch
+from jigsaw import dataset, linear, patch_embedding
+from jigsaw.mixer import MixerBlock
+from jigsaw.util_fns import flop_comm_estimation
+
+
+class WeatherMixer(torch.nn.Module):
+    def __init__(
+        self, config_dict, rank, device, parallelism, model_group, col_subgroup
+    ):
+        super().__init__()
+        self.rank = rank
+        self.device = device
+        self.parallelism = parallelism
+        self.model_group = model_group
+        self.column_subgroup = col_subgroup
+        hidden_dimension = config_dict["model"]["hidden_dim"]
+        self.xlat, self.xlon = config_dict["data"]["xlat"], config_dict["data"]["xlon"]
+
+        self.patch_size = config_dict["model"]["patch_size"]
+        self.stride = config_dict["model"]["stride"]
+        self.n_lat, self.n_lon = self.xlat, self.xlon // self.patch_size
+        self.embedding = patch_embedding.Distributed1DPatchEmbedding(
+            self.xlat,
+            self.xlon,
+            self.patch_size,
+            config_dict["data"]["n_global_variables"],
+            hidden_dimension,
+            self.rank,
+            self.device,
+            parallelism,
+            model_group,
+        )
+
+        self.n_blocks = config_dict["model"]["mixing_blocks"]
+
+        self.blocks = torch.nn.ModuleList(
+            [
+                MixerBlock(
+                    self.n_lat * self.n_lon,
+                    hidden_dimension,
+                    config_dict["model"]["spatial_hidden_dim_fraction"],
+                    config_dict["model"]["features_hidden_dim_fraction"],
+                    rank,
+                    self.device,
+                    parallelism,
+                    model_group,
+                )
+                for i in range(self.n_blocks)
+            ]
+        )
+
+        # Define layer norms
+        match parallelism:
+            case 2:
+                self.layer_norm = torch.nn.LayerNorm(hidden_dimension // 2)
+                self.num_variables = config_dict["data"]["n_global_variables"]
+            case 4 | 8:
+                self.layer_norm = norm.DistributedLayerNorm(
+                    hidden_dimension // 2, self.rank, self.device, self.column_subgroup
+                )
+                self.num_variables = config_dict["data"]["n_global_variables"] // 2
+
+        self.concat = config_dict["model"]["concat"]
+        self.linear_residual = config_dict["model"]["linear_residual"]
+
+        self.add = config_dict["model"]["add"]
+
+        self.recovery = patch_embedding.Distributed1DPatchRecovery(
+            self.patch_size,
+            hidden_dimension,
+            self.num_variables,
+            rank,
+            self.device,
+            parallelism,
+            model_group,
+            concat=self.concat,
+            stride=self.stride,
+            bias=False,
+        )
+
+        if config_dict["model"]["linear_residual"]:
+            self.linearlayer = linear.DistributedXWT(
+                self.num_variables * 2 if parallelism > 2 else self.num_variables,
+                self.num_variables // 2 if parallelism == 8 else self.num_variables,
+                rank,
+                self.device,
+                parallelism,
+                model_group,
+            )
+            if parallelism == 2:
+                self.layer_norm2 = torch.nn.LayerNorm(self.num_variables // 2)
+                self.layer_norm3 = torch.nn.LayerNorm(self.num_variables)
+            else:
+                self.layer_norm2 = norm.DistributedLayerNorm(
+                    self.num_variables, self.rank, self.device, self.column_subgroup
+                )
+                self.layer_norm3 = norm.DistributedLayerNorm(
+                    self.num_variables * 2, self.rank, self.device, self.column_subgroup
+                )
+
+        self.activation = torch.nn.GELU()
+        self.model_group = model_group
+
+        if self.linear_residual:
+            self.params = torch.nn.ModuleDict(
+                {
+                    "embedding": torch.nn.ModuleList([self.embedding]),
+                    "recovery": torch.nn.ModuleList([self.recovery]),
+                    "common": torch.nn.ModuleList(
+                        [
+                            self.blocks,
+                            self.layer_norm,
+                            self.layer_norm2,
+                            self.layer_norm3,
+                            self.linearlayer,
+                        ]
+                    ),
+                }
+            )
+        else:
+            self.params = torch.nn.ModuleDict(
+                {
+                    "embedding": torch.nn.ModuleList([self.embedding]),
+                    "recovery": torch.nn.ModuleList([self.recovery]),
+                    "common": torch.nn.ModuleList([self.blocks, self.layer_norm]),
+                }
+            )
+
+        # Estimate the number of FLOPs/forward pass and intra-node communication
+        self._load_constant_masks(config_dict, parallelism)
+        self._calc_flop_comm(config_dict)
+
+    def forward(self, x, rollout_=1):
+        for i in range(rollout_):
+            x_res = x
+
+            if len(x_res.shape) > 3:
+                x_res = x_res.flatten(start_dim=1, end_dim=2)
+            else:
+                x = x.reshape(x.shape[0], self.n_lat, self.n_lat, x.shape[-1])
+
+                if self.rank % 2 == 1:
+                    # change last 3 dims to constant mask
+                    x[..., -3] = self.land_mask
+                    x[..., -2] = self.soil_type
+                    x[..., -1] = self.topography
+                    x_res = x.flatten(start_dim=1, end_dim=2)
+            # x_shape [n_batch, n_var, 720, 1440]
+            x_res = x.flatten(start_dim=1, end_dim=2)
+            x = self.embedding(x)
+            x_res2 = x
+
+            for i in range(self.n_blocks):
+                x = self.blocks[i](x)
+
+            # After MLP-mixing blocks: [n_batch, n_patch_lat * n_patch_lon/2, embed_dim/2]
+            # After recovery: [n_batch, n_lat*n_lon//2, n_var//2]
+            if self.concat:
+                x = self.layer_norm(x)
+                x = torch.concat((x, x_res2), dim=2)
+            else:
+                x = self.layer_norm(x + x_res2)
+
+            x = self.recovery(x, self.n_lat, self.n_lon // (self.parallelism // 2))
+            x = x.reshape(x.shape[0], -1, x.shape[-1])
+
+            if self.add:
+                return x + x_res
+
+            if self.linear_residual:
+                x = self.layer_norm2(x)
+                x = torch.concat((x, x_res), dim=2)
+
+                # After recovery: [n_batch, n_lat, n_lon, n_var]
+                x = self.layer_norm3(x)
+                x = x.reshape(x.shape[0], -1, x.shape[-1])
+                x = self.linearlayer(x)
+        return x
+
+    def _load_constant_masks(self, config_dict, parallelism):
+        match parallelism:
+            case 1 | 2:
+                self.start, self.end = 0, self.xlon
+            case 4:
+                match self.rank:
+                    case 0 | 1:
+                        self.start, self.end = 0, self.xlon // 2
+                    case 2 | 3:
+                        self.start, self.end = self.xlon // 2, self.xlon
+            case 8:
+                match self.rank:
+                    case 0 | 1:
+                        self.start, self.end = 0, self.xlon // 4
+                    case 2 | 3:
+                        self.start, self.end = self.xlon // 4, self.xlon // 2
+                    case 4 | 5:
+                        self.start, self.end = self.xlon // 2, self.xlon * 3 // 4
+                    case 6 | 7:
+                        self.start, self.end = self.xlon * 3 // 4, self.xlon
+
+        self.land_mask, self.soil_type, self.topography = dataset.load_constant_mask_2d(
+            config_dict["data"]["constant_masks_path"], xlat=self.xlat
+        )
+        self.land_mask = torch.unsqueeze(self.land_mask[:, self.start : self.end], 0)
+        self.soil_type = torch.unsqueeze(self.soil_type[:, self.start : self.end], 0)
+        self.topography = torch.unsqueeze(self.topography[:, self.start : self.end], 0)
+
+    def _calc_flop_comm(self, config_dict):
+        nlat, nlon = self.xlat, self.xlon
+        parallelism = self.parallelism
+        nvars_in, nvars_out = 72, 72
+        patch_size = config_dict["model"]["patch_size"]
+        patch_embedding_in = patch_size * nvars_in
+        patch_embedding_out = config_dict["model"]["hidden_dim"]
+        # where ntokens = nlat*nlon/patch_size
+        ntokens = self.xlat * self.xlon / patch_size
+        spatial_hidden_dim = int(
+            config_dict["model"]["spatial_hidden_dim_fraction"] * ntokens
+        )
+        channels_hidden_dim = int(
+            config_dict["model"]["features_hidden_dim_fraction"] * patch_embedding_out
+        )
+
+        # patch embedding
+        patch_embedding_comm = flop_comm_estimation.AB_communication(
+            parallelism, ntokens, patch_size * nvars_in, patch_embedding_out
+        )
+        patch_embedding_flop = (
+            flop_comm_estimation.AB_flop_local(
+                ntokens, patch_size * nvars_in, patch_embedding_out
+            )
+            + patch_embedding_out / 1e12
+        )
+
+        # self.concat + 1 (multiplier = 1 if no concatenation, = 2 if concat)
+        patch_recovery_comm = flop_comm_estimation.AB_communication(
+            parallelism,
+            ntokens,
+            patch_embedding_out * (self.concat + 1),
+            patch_embedding_in,
+        )
+        patch_recovery_flop = (
+            flop_comm_estimation.AB_flop_local(
+                ntokens, patch_embedding_out * (self.concat + 1), patch_embedding_in
+            )
+            + patch_embedding_in / 1e12
+        )
+
+        linlayer_comm = flop_comm_estimation.AB_communication(
+            parallelism, nlat * nlon, nvars_out * 2, nvars_out
+        )
+        linlayer_flop = (
+            flop_comm_estimation.AB_flop_local(nlat * nlon, nvars_out * 2, nvars_out)
+            + nvars_out / 1e12
+        )
+
+        tflop_per_block, gb_per_block = flop_comm_estimation.mixing_block(
+            parallelism,
+            ntokens,
+            patch_embedding_out,
+            spatial_hidden_dim,
+            channels_hidden_dim,
+        )
+
+        flop_forward = (
+            tflop_per_block * config_dict["model"]["mixing_blocks"]
+            + patch_embedding_flop
+            + linlayer_flop
+            + patch_recovery_flop
+        )
+        comm_forward = (
+            gb_per_block * config_dict["model"]["mixing_blocks"]
+            + patch_embedding_comm
+            + linlayer_comm
+            + patch_recovery_comm
+        )
+        if self.rank == 0:
+            print(f"Forward TFLOPS: {flop_forward} and comm (GB) {comm_forward}.")
+
+        return flop_forward, comm_forward

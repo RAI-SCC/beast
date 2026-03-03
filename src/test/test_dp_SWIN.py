@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("./src/")
+
 import argparse
 import math
 import os
@@ -7,6 +11,7 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import yaml
+from gb.model.downsampled_swin import BNNNoEmbeddingModel
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
@@ -16,7 +21,6 @@ from torch_blue.vi.distributions import (
 )
 
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
-from gb.model.downsampled_SWIN import BNNNoEmbeddingModel
 from gb.utils import download_1_5_degree_data, get_process_group, init_gb_process_group
 
 

@@ -1,11 +1,15 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
 import os
 
-import Jigsaw
+import jigsaw
 import torch
 import torch.distributed as dist
 import yaml
-from Jigsaw import Convolutions
+from jigsaw import convolutions
 
 from gb.utils import convert_jigsaw_vi, get_process_group, init_gb_process_group
 
@@ -72,7 +76,7 @@ def conversion_test(device):
     local_dtp_row = dtp_row_group.rank()
     total_dtp_cols = dtp_col_group.size()
 
-    # mlp = Jigsaw.MLP.DistributedMLP(
+    # mlp = jigsaw.MLP.DistributedMLP(
     #     in_dim=16,
     #     hidden_dim=32,
     #     out_dim=16,
@@ -82,7 +86,7 @@ def conversion_test(device):
     #     model_group=full_dtp_group,
     # )
 
-    xwt = Jigsaw.Linear.DistributedXWT(
+    xwt = jigsaw.linear.DistributedXWT(
         in_dim=16,
         out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
@@ -91,7 +95,7 @@ def conversion_test(device):
         model_group=full_dtp_group,
     )
 
-    xw = Jigsaw.Linear.DistributedXW(
+    xw = jigsaw.linear.DistributedXW(
         in_dim=16,
         out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
@@ -100,7 +104,7 @@ def conversion_test(device):
         model_group=full_dtp_group,
     )
 
-    xtw = Jigsaw.Linear.DistributedXTW(
+    xtw = jigsaw.linear.DistributedXTW(
         in_dim=16,
         out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
@@ -109,7 +113,7 @@ def conversion_test(device):
         model_group=full_dtp_group,
     )
 
-    xwt_sync = Jigsaw.Linear.DistributedXWTSync(
+    xwt_sync = jigsaw.linear.DistributedXWTSync(
         in_dim=16,
         out_dim=64,
         rank=(local_dtp_col + local_dtp_row * total_dtp_cols),
@@ -119,7 +123,7 @@ def conversion_test(device):
         sync_group=dtp_col_group,
     )
 
-    # conv = Convolutions.DistributedConv2D(
+    # conv = convolutions.DistributedConv2D(
     #     in_channels=16,
     #     out_channels=64,
     #     kernel_size=3,
@@ -136,7 +140,7 @@ def conversion_test(device):
     #     bayesian=True,
     # )
 
-    trp_conv = Convolutions.DistributedConvTranspose2D(
+    trp_conv = convolutions.DistributedConvTranspose2D(
         in_channels=16,
         out_channels=64,
         kernel_size=3,

@@ -10,7 +10,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
-from Jigsaw import Convolutions, Normalization
+from jigsaw import normalization, utils_init
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -40,11 +40,7 @@ def init_gb_process_group(
         device_id=device,
         init_method="env://",
     )
-    if dist.is_initialized():
-        print(
-            f"Rank {rank}/{world_size}: Process group initialized with torch rank {dist.get_rank()} and torch world size {dist.get_world_size()}."
-        )
-    else:
+    if not dist.is_initialized():
         raise RuntimeError("Process group initialization failed.")
 
     # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
@@ -189,9 +185,9 @@ def convert_jigsaw_vi(
     return_log_probs=True,
 ):
     torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
-    torch_blue.vi.utils.convert.ban_convert(Normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        Normalization.DistributedNICENorm, ban_mode="submodule"
+        normalization.DistributedNICENorm, ban_mode="submodule"
     )
 
     torch_blue.vi.convert_to_vimodule(
@@ -229,7 +225,7 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            Convolutions._average_weights(m, get_process_group("JSpatial"))
+            utils_init.average_weights(m, get_process_group("JSpatial"))
 
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
