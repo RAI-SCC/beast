@@ -24,7 +24,7 @@ model:
     embedding_dimension: 384
     n_output_channels: 84
     n_attn_heads: 6
-    patch_size: 4
+    patch_size: 2
     noise_dim: 32
     window_size_outer: [6, 12]
     window_size_inner: [6, 6]
@@ -38,4 +38,4 @@ training:
 model_parallel:
     parallelism: 8
     type: jigsaw
-    mesh_dims: [4,16,4,2,2] # [2,1,2,2,2] #
+mesh_dims: [1,1,1,4,2] # [2,1,2,2,2] #
