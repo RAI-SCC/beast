@@ -21,6 +21,7 @@ class SWIN(torch.nn.Module):
         spatial_group,
         channel_group,
         bayesian,
+        parallelism,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -33,7 +34,7 @@ class SWIN(torch.nn.Module):
 
         self.local_rank = dtp_rank
         self.device = device
-        self.parallelism = 4
+        self.parallelism = parallelism
         self.dtp_group = dtp_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
@@ -57,7 +58,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bayesian=self.bayesian,
         )
         self.downsample = convolutions.DistributedConv2D(
@@ -72,7 +73,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
         )
@@ -89,7 +90,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
         )
@@ -107,7 +108,7 @@ class SWIN(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bayesian=self.bayesian,
         )
 
@@ -164,7 +165,7 @@ class SWIN(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 
@@ -173,7 +174,7 @@ class SWIN(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
         self.roll_in = linear.DistributedRoll(
@@ -181,7 +182,7 @@ class SWIN(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 
@@ -190,7 +191,7 @@ class SWIN(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 

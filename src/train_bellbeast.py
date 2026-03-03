@@ -69,6 +69,7 @@ def training_loop(config_dict):
         ep_group=ep_group,
         up_group=up_group,
         bayesian=True,
+        parallelism=config_dict["model_parallel"]["parallelism"],
     )
 
     model = model.to(torch.float32).to(device)
@@ -78,7 +79,9 @@ def training_loop(config_dict):
     expert_loss_weighting = model.get_loss_weights()
 
     if dist.get_rank(group=None) == 0:
-        print(f"Parameters: {count_model_parameters(model, 4)}")
+        print(
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
+        )
 
     # Make model Bayesian
     convert_jigsaw_vi(model)

@@ -57,7 +57,7 @@ class ERA5DatasetDistributed(Dataset):
         self.n_data_items = len(self.zarr_data["time"])
         self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
 
-        self.constant_masks = self.__load_constant_mask_2d(mask_path, mask_list)
+        self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
@@ -83,7 +83,11 @@ class ERA5DatasetDistributed(Dataset):
 
             self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
             self.in_masks = [row * n_masks, (row + 1) * n_masks]
-            self.in_out_xlon = [col * self.xlon // 2, (col + 1) * self.xlon // 2]
+            # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
+            self.in_out_xlon = [
+                col * self.xlon // (process_group.size() // 2),
+                (col + 1) * self.xlon // (process_group.size() // 2),
+            ]
 
         else:
             self.in_var = [0, self.num_vars]
@@ -132,7 +136,16 @@ class ERA5DatasetDistributed(Dataset):
         target = torch.tensor(y)
         return input, target
 
-    def __load_constant_mask_2d(self, folder_path, mask_list):
+    def get_constant_masks(self):
+        return torch.tensor(
+            self.constant_masks[
+                self.in_masks[0] : self.in_masks[1],
+                : self.xlat,
+                self.in_out_xlon[0] : self.in_out_xlon[1],
+            ]
+        ).to(torch.float32)
+
+    def _load_constant_mask_2d(self, folder_path, mask_list):
         """
         Load the constant masks applied in the patch embedding layer.
 
@@ -152,17 +165,7 @@ class ERA5DatasetDistributed(Dataset):
         for file in data_files:
             data.append(np.load(os.path.join(folder_path, file)))
         masks = np.stack(data, axis=0)
-
         return masks
-
-    def get_constant_masks(self):
-        return torch.tensor(
-            self.constant_masks[
-                self.in_masks[0] : self.in_masks[1],
-                : self.xlat,
-                self.in_out_xlon[0] : self.in_out_xlon[1],
-            ]
-        ).to(torch.float32)
 
 
 class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):

@@ -26,6 +26,7 @@ class Bellbeast(torch.nn.Module):
         ep_group,
         up_group,
         bayesian,
+        parallelism,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -35,10 +36,9 @@ class Bellbeast(torch.nn.Module):
         self.stride = kernel_size
         self.padding = 0
         self.dilation = 1
-
         self.local_rank = dtp_rank
         self.device = device
-        self.parallelism = 4
+        self.parallelism = parallelism
         self.ep_group = ep_group
         self.up_group = up_group
         self.dtp_group = dtp_group
@@ -65,7 +65,7 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bayesian=self.bayesian,
         )
         self.downsample = convolutions.DistributedConv2D(
@@ -80,7 +80,7 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
         )
@@ -104,7 +104,7 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
         )
@@ -122,7 +122,7 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             bayesian=self.bayesian,
         )
 
@@ -181,7 +181,7 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 
@@ -190,7 +190,7 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
         self.roll_in = linear.DistributedRoll(
@@ -198,7 +198,7 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 
@@ -207,7 +207,7 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=4,
+            parallelism=self.parallelism,
             spatial_group=self.spatial_group,
         )
 
