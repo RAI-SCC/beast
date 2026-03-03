@@ -56,7 +56,7 @@ class ERA5DatasetDistributed(Dataset):
         self.n_data_items = len(self.zarr_data["time"])
         self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
 
-        self.constant_masks = self.__load_constant_mask_2d(mask_path, mask_list)
+        self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
@@ -144,7 +144,7 @@ class ERA5DatasetDistributed(Dataset):
             ]
         ).to(torch.float32)
 
-    def __load_constant_mask_2d(self, folder_path, mask_list):
+    def _load_constant_mask_2d(self, folder_path, mask_list):
         """
         Load the constant masks applied in the patch embedding layer.
 
