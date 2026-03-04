@@ -45,7 +45,8 @@ def training_loop(config_dict):
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    set_all_seeds(dtp_group.rank())
+    initialization_rank = dtp_group.rank() + ep_group.rank() * dtp_group.size()
+    set_all_seeds(initialization_rank)
 
     model = Bellbeast(
         xlat=config_dict["data"]["xlat"],
