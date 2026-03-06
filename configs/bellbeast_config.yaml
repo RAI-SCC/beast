@@ -36,7 +36,7 @@ training:
     n_epochs: 3
     batch_size: 1
     dtype: float32
-    autocast: True
+    autocast: False
 model_parallel:
     parallelism: 4
     type: jigsaw
