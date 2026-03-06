@@ -205,7 +205,7 @@ def train_one_epoch(
 
         loss_sum = loss_sum + float(loss.detach())
 
-        if i % 10 == 0:
+        if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
