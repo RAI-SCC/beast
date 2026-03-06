@@ -20,7 +20,12 @@ class JLR(torch.autograd.Function):
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
 
         expert_x = [
-            torch.empty((B, channels, xlat, xlon), requires_grad=False, device=device)
+            torch.empty(
+                (B, channels, xlat, xlon),
+                requires_grad=False,
+                device=device,
+                dtype=x.dtype,
+            )
             for _ in range(num_experts)
         ]
         dist.all_gather(expert_x, x, group=ep_group)
@@ -93,7 +98,7 @@ class ExpertWeightingLayer(torch.nn.Module):
         self.device = device
         # shape is (experts, batch ,channels, 1 )
         self.weights = torch.nn.parameter.Parameter(
-            torch.empty(shape, device=device, dtype=torch.float32)
+            torch.empty(shape, device=device, dtype=dtype)
         )
         init.kaiming_uniform_(self.weights, a=math.sqrt(5))
 

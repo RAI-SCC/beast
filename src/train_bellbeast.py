@@ -21,10 +21,12 @@ from gb.model.expert import Expert
 from gb.model.model_gb import Bellbeast
 from gb.utils import (
     convert_jigsaw_vi,
+    count_flops,
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
     set_all_seeds,
+    set_dtype,
 )
 
 
@@ -36,6 +38,9 @@ def training_loop(config_dict):
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
+
+    dtype = set_dtype(config_dict["training"]["dtype"])
+    autocast = config_dict["training"]["autocast"]
 
     time_log = []
 
@@ -70,9 +75,10 @@ def training_loop(config_dict):
         up_group=up_group,
         bayesian=True,
         parallelism=config_dict["model_parallel"]["parallelism"],
+        dtype=dtype,
     )
 
-    model = model.to(torch.float32).to(device)
+    model = model.to(dtype).to(device)
 
     # Make model expert
     model = Expert(model, ep_group)
@@ -101,6 +107,7 @@ def training_loop(config_dict):
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
         mode="train",
+        dtype=dtype,
     )
 
     loss_fn = UP_AllGaussLoss(
@@ -115,12 +122,19 @@ def training_loop(config_dict):
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
+
+    # Per-step forward, backward, and total flops
+    # These numbers are already summed across all ranks (not just the dtp group)
+    forward_flops, backward_flops, total_flops = count_flops(
+        model, train_dataloader, loss_fn, n_samples, device
+    )
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
@@ -134,6 +148,7 @@ def training_loop(config_dict):
             loss_fn=loss_fn,
             device=device,
             dtp_group=dtp_group,
+            autocast=autocast,
         )
 
         end_time = time.perf_counter()
@@ -143,7 +158,7 @@ def training_loop(config_dict):
 
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
     time_df = pd.DataFrame(
@@ -160,7 +175,7 @@ def training_loop(config_dict):
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
+    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
 ):
     timings = []
     timings.append((epoch, -1, time.time_ns(), time.time_ns()))
@@ -178,8 +193,10 @@ def train_one_epoch(
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x, samples=n_samples)
-        loss = loss_fn(pred, y)
+        # x shape is [batch, channel, ]
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
+            pred = model(x, samples=n_samples)
+            loss = loss_fn(pred, y)
 
         # Backpropagation
         loss.backward()
@@ -188,12 +205,12 @@ def train_one_epoch(
 
         loss_sum = loss_sum + float(loss.detach())
 
-        if i % 100 == 0:
-            # # Average loss over all four processes for exactness
+        if i % 10 == 0:
+            # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
                 )
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)

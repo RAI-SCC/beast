@@ -29,7 +29,9 @@ class GBDataLoader(DataLoader):
         return GBDataLoaderIter(self)
 
 
-def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
+def get_dataloader(
+    config_dict, dtp_process_group, dp_process_group, mode="train", dtype=torch.float32
+):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
 
@@ -40,6 +42,7 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
             process_group=dtp_process_group,
             normalize=True,
             dt=dt,
+            dtype=dtype,
         )
     else:
         dataset = ERA5DatasetDistributed(
@@ -48,6 +51,7 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
             process_group=dtp_process_group,
             normalize=True,
             dt=dt,
+            dtype=dtype,
         )
 
     if config_dict["data"]["train_subset"] > 0:

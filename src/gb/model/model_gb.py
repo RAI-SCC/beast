@@ -27,6 +27,7 @@ class Bellbeast(torch.nn.Module):
         up_group,
         bayesian,
         parallelism,
+        dtype,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -48,9 +49,9 @@ class Bellbeast(torch.nn.Module):
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_channels = out_channels
-
         self.bayesian = bayesian
         self.noise_dim = noise_dim
+        self.dtype = dtype
 
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
@@ -67,6 +68,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
         self.downsample = convolutions.DistributedConv2D(
             self.embed_dim,
@@ -83,6 +85,7 @@ class Bellbeast(torch.nn.Module):
             parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.expert_layer = ExpertWeightingLayer(
@@ -90,6 +93,7 @@ class Bellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            dtype=self.dtype,
         )
 
         self.upsample = convolutions.DistributedConvTranspose2D(
@@ -107,6 +111,7 @@ class Bellbeast(torch.nn.Module):
             parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.patch_recovery = convolutions.DistributedConvTranspose2D(
@@ -124,6 +129,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.n_full_blocks = n_full_blocks
@@ -183,6 +189,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
 
         self.unroll_out = linear.DistributedRoll(
@@ -192,6 +199,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
         self.roll_in = linear.DistributedRoll(
             shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
@@ -200,6 +208,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
 
         self.unroll_in = linear.DistributedRoll(
@@ -209,6 +218,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
 
     def _get_windows(self, x, window_size):
@@ -241,7 +251,7 @@ class Bellbeast(torch.nn.Module):
     def forward(self, x):
         # x has global shape (B, xlat, xlon, channels)
 
-        noise = torch.randn(x.shape[0], self.noise_dim).to(self.device)
+        noise = torch.randn(x.shape[0], self.noise_dim, dtype=x.dtype).to(self.device)
 
         x = self.patch_embedding(x)
         x_res = x.clone()
@@ -265,8 +275,10 @@ class Bellbeast(torch.nn.Module):
             )
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
-            mask = self._gen_mask_(B, xlat, xlon, self.window_size_outer).unsqueeze(
-                1
+            mask = (
+                self._gen_mask_(B, xlat, xlon, self.window_size_outer)
+                .unsqueeze(1)
+                .to(self.dtype)
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer[i * 2 + 1](x, noise_transformer, mask)
@@ -299,8 +311,10 @@ class Bellbeast(torch.nn.Module):
             )
             x = self.roll_in(x)
             x = self._get_windows(x, self.window_size_inner)
-            mask = self._gen_mask_(B, xlat, xlon, self.window_size_inner).unsqueeze(
-                1
+            mask = (
+                self._gen_mask_(B, xlat, xlon, self.window_size_inner)
+                .unsqueeze(1)
+                .to(self.dtype)
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer_down[i * 2 + 1](x, noise_transformer_down, mask)
@@ -327,8 +341,10 @@ class Bellbeast(torch.nn.Module):
 
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
-            mask = self._gen_mask_(B, xlat, xlon, self.window_size_outer).unsqueeze(
-                1
+            mask = (
+                self._gen_mask_(B, xlat, xlon, self.window_size_outer)
+                .unsqueeze(1)
+                .to(self.dtype)
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer[i * 2 + 2 * self.n_full_blocks[0] + 1](
