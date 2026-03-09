@@ -47,15 +47,17 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 
 export PROFILE_DIR="${WORKDIR}/results/lumi/profiles"
 
-export PROFSYS_CMD=(
+profsys_cmd=(
     rocprofv3
     --pmc MfmaFlops
     --output-file "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
     --
 )
+export PROFSYS_CMD="${profsys_cmd[@]}"
 
-export PROFCU_CMD=(
+profcu_cmd=(
 )
+export PROFCU_CMD="${profcu_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration

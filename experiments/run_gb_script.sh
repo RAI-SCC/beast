@@ -92,13 +92,8 @@ else
     PYTHON_CMD="python -u"
 fi
 
-if [[ $profsys == true ]]; then
-    PYTHON_CMD="${PROFSYS_CMD[@]} $PYTHON_CMD"
-fi
-
-if [[ $profcu == true ]]; then
-    PYTHON_CMD="${PROFCU_CMD[@]} $PYTHON_CMD"
-fi
+export PROFSYS=$profsys
+export PROFCU=$profcu
 
 mkdir -p results/lumi/profiles
 

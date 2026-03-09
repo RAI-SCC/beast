@@ -53,7 +53,7 @@ export PMIX_MCA_gds="hash"
 
 export PROFILE_DIR="${WORKDIR}/results/jupiter/profiles"
 
-export PROFSYS_CMD=(
+profsys_cmd=(
     nsys profile
     --output "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
     --trace=cuda,cudnn,cublas,osrt,nvtx
@@ -62,14 +62,18 @@ export PROFSYS_CMD=(
     --python-sampling=true
     --delay=60
 )
+export PROFSYS_CMD="${profsys_cmd[@]}"
 
-export PROFCU_CMD=(
+profcu_cmd=(
     ncu
-    --set roofline
+    --set
+    roofline
     --nvtx
-    --target-processes all
-    --export "${PROFILE_DIR}/ncu_report_${SLURM_JOB_ID}_${SLURM_NODEID}_${SLURM_PROCID}.ncu-rep"
+    --target-processes
+    all
+    --export ${PROFILE_DIR}/ncu_report_${SLURM_JOB_ID}_${SLURM_NODEID}_${SLURM_PROCID}.ncu-rep
 )
+export PROFCU_CMD="${profcu_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration
