@@ -1,37 +1,30 @@
 import argparse
 import os
-import random
 import time
 
+import pandas as pd
 import torch
 import torch.distributed as dist
 
 # torch blue imports
-import torch_blue
 import yaml
 
 # Jigsaw imports
-from Jigsaw import normalization, utils
+from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
-from torch_blue.vi import convert_to_vimodule
 
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.losses.UP_Loss import UP_AllGaussLoss
-from gb.model.NICE_SWIN_Jigsaw_025 import NICE_SWIN
+from gb.losses.up_loss import UP_AllGaussLoss
+from gb.model.expert import Expert
 
 # Import model
-from gb.utils import get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
-    random.seed(seed_value)  # Python random module
-    torch.manual_seed(seed_value)  # pytorch random number generator for CPU
-    torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
-    torch.cuda.manual_seed_all(seed_value)  # for multi-GPU.
-    # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
-    # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
-    os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
+from gb.model.model_gb import Bellbeast
+from gb.utils import (
+    convert_jigsaw_vi,
+    get_process_group,
+    init_gb_process_group,
+    set_all_seeds,
+)
 
 
 def training_loop(config_dict):
@@ -41,16 +34,19 @@ def training_loop(config_dict):
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
+    ep_group = get_process_group("Expert")
 
-    slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
+    time_log = []
+
+    # slurm_localid = int(os.getenv("SLURM_LOCALID") or 0)
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
-    print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
+    # print(f"Rank: {dist.get_rank()}, local rank: {slurm_localid}, device: {device}")
 
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = NICE_SWIN(
+    model = Bellbeast(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -71,21 +67,19 @@ def training_loop(config_dict):
         dtp_group=dtp_group,
         spatial_group=spatial_group,
         channel_group=channel_group,
+        ep_group=ep_group,
+        up_group=up_group,
         bayesian=True,
     )
 
     model = model.to(torch.float32).to(device)
 
+    # make experts
+    model = Expert(model, ep_group)
+    expert_loss_weighting = model.get_loss_weights()
+
     # Make model Bayesian
-    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
-    # torch_blue.vi.utils.convert.ban_convert(normalization.DistributedNoParamLayerNorm)
-    torch_blue.vi.utils.convert.ban_convert(
-        normalization.DistributedNICENorm, ban_mode="submodule"
-    )
-
-    convert_to_vimodule(model)
-    # predictive_distribution = Normal()
-
+    convert_jigsaw_vi(model)
     model.return_log_probs = False
 
     # Make model data parallel
@@ -103,17 +97,18 @@ def training_loop(config_dict):
         dp_process_group=dp_group,
         mode="train",
     )
-    # valid_dataloader = get_dataloader(
-    #     config_dict,
-    #       dtp_process_group = dtp_group,
-    #        dp_process_group=dp_group,
-    #     mode="validation"
-    # )
-    loss_fn = UP_AllGaussLoss(model, len(train_dataloader.dataset), up_group)
+
+    loss_fn = UP_AllGaussLoss(
+        model,
+        expert_loss_weighting,
+        len(train_dataloader.dataset),
+        dtp_group,
+        up_group,
+        dp_group,
+        ep_group,
+    )
     n_samples = config_dict["training"]["n_samples"]
-    # loss_fn = vi.KullbackLeiblerLoss(
-    #        predictive_distribution, dataset_size=len(train_dataloader.dataset)
-    #    )
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     utils.setup_precision(
         config_dict["training"]["tf32"]
@@ -124,7 +119,7 @@ def training_loop(config_dict):
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss = train_one_epoch(
+        avg_loss, timings = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -134,17 +129,36 @@ def training_loop(config_dict):
             device=device,
             dtp_group=dtp_group,
         )
+
         end_time = time.perf_counter()
+
+        for t in timings:
+            time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
             )
 
+    time_df = pd.DataFrame(
+        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
+    )
+    time_df.to_csv(
+        os.path.join(
+            os.getenv("WORKDIR"),
+            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+        ),
+        sep=";",
+        index=False,
+    )
+
 
 def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
 ):
+    timings = []
+    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
+
     model.train()
     loss_sum = 0.0
 
@@ -152,16 +166,19 @@ def train_one_epoch(
         dataloader.sampler.set_epoch(epoch)
 
     for i, (x, y, start, end) in enumerate(dataloader):
+        timings.append((epoch, i, start, end))
+        # print(f'Rank {dist.get_rank(group=None)}, epoch {epoch}, batch {i}, start {start}, end {end}')
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
+
         pred = model(
             x, samples=n_samples
         )  # Add samples = config_dict["training"]["n_samples"]
         loss = loss_fn(pred, y)
 
-        # # Average loss over all four processes for exactness
+        # Average loss over all four processes for exactness
         dist.all_reduce(loss, group=dtp_group)
 
         # Backpropagation
@@ -176,7 +193,7 @@ def train_one_epoch(
             )
 
     average_loss = loss_sum / max(1, len(dataloader))
-    return average_loss
+    return average_loss, timings
 
 
 def validate_epoch():
@@ -212,6 +229,27 @@ def main():
             os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
         )
 
+    # append n_masks for odd number of masks (the dataset does this, too)
+    n_masks = len(config_dict["data"]["constant_masks"])
+    if n_masks % 2 == 1:
+        n_masks += 1
+
+    # default case: load only one timestep
+    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
+        config_dict["data"]["n_in_timesteps"] = 1
+
+    n_input_vars = (
+        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
+    )
+
+    # we'll set this automatically, to avoid confusion when defining the config,
+    # as n_input_channels depends on how many timesteps we use as concatenated input
+    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
+    config_dict["model"]["embedding_dimension"] = (
+        config_dict["model"]["embedding_dimension"]
+        * config_dict["data"]["n_in_timesteps"]
+    )
+
     if "normalization_dir" in config_dict["data"]:
         config_dict["data"]["normalization_dir"] = (
             WORKDIR + "/" + config_dict["data"]["normalization_dir"]
@@ -220,7 +258,7 @@ def main():
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
-        print(f"normalization dir: {config_dict['data']['normalization_dir']}")
+        print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
     training_loop(config_dict)
 

@@ -4,6 +4,10 @@ Test script for loading data from storage to GPUs.
 Purpose is to test different loading strategies, depending on the system architecture
 """
 
+import sys
+
+sys.path.append("./src/")
+
 import argparse
 import os
 import time

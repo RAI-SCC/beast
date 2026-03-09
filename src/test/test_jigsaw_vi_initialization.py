@@ -1,5 +1,8 @@
+import sys
+
+sys.path.append("./src/")  # for utils import
+
 import argparse
-import os
 
 import jigsaw
 import torch
@@ -7,14 +10,12 @@ import torch.distributed as dist
 import yaml
 from jigsaw import convolutions
 
-from gb.utils import convert_jigsaw_vi, get_process_group, init_gb_process_group
-
-
-def set_all_seeds(seed: int) -> None:
-    """Set random seeds."""
-    os.environ["PL_GLOBAL_SEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+from gb.utils import (
+    convert_jigsaw_vi,
+    get_process_group,
+    init_gb_process_group,
+    set_all_seeds,
+)
 
 
 def main():
@@ -72,7 +73,7 @@ def conversion_test(device):
     local_dtp_row = dtp_row_group.rank()
     total_dtp_cols = dtp_col_group.size()
 
-    # mlp = Jigsaw.MLP.DistributedMLP(
+    # mlp = jigsaw.MLP.DistributedMLP(
     #     in_dim=16,
     #     hidden_dim=32,
     #     out_dim=16,

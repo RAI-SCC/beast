@@ -77,8 +77,8 @@ export PROFCU_CMD=(
 
 export SYSTEM_SLURM_PARAMS=(
     -c71
-    --cpu-bind=v
-    # --gpu-bind=closest
+    #--cpu-bind=v
+    --gpu-bind=closest
     apptainer
     exec
     --nv
