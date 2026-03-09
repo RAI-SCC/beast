@@ -110,7 +110,7 @@ def training_loop(config_dict):
         config_dict,
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
-        mode="valid",
+        mode="validation",
     )
 
     validation_results_path = os.path.join(
