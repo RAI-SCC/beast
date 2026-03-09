@@ -221,10 +221,31 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--train_subset")
+    parser.add_argument("--embed_dim")
+    parser.add_argument("--n_attn_blocks")
+    parser.add_argument("--lbs")
+    parser.add_argument("--lsn")
+
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    if args.train_subset is not None:
+        config_dict["data"]["train_subset"] = int(args.train_subset)
+    if args.embed_dim is not None:
+        config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
+    if args.n_attn_blocks is not None:
+        config_dict["model"]["n_attn_blocks"] = [
+            int(args.n_attn_blocks),
+            int(args.n_attn_blocks),
+            int(args.n_attn_blocks),
+        ]
+    if args.lbs is not None:
+        config_dict["training"]["batch_size"] = int(args.lbs)
+    if args.lsn is not None:
+        config_dict["training"]["n_samples"] = int(args.lsn)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
