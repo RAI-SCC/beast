@@ -220,6 +220,7 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
             ),
             dim=0,
         )
+        input = input.to(self.dtype)
 
         # Odd ranks load second half of variables, so they might have less masks
         if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
