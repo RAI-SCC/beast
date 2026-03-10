@@ -40,8 +40,16 @@ def validate(
     spatial_weights = get_spatial_weights(config_dict, device)
 
     # extract means and std for evaluation
-    data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
-    data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
+    try:
+        data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
+        data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
+    except AttributeError:
+        data_means = torch.from_numpy(
+            dataloader.dataset.dataset.norm_values["mean"]
+        ).to(device)
+        data_std = torch.from_numpy(dataloader.dataset.dataset.norm_values["std"]).to(
+            device
+        )
 
     # climatology
     # TODO: Update Climatology Files so this works correctly
