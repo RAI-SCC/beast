@@ -18,7 +18,7 @@ In general the order in the data arrays will be:
 3. V-component of wind velocity at 10m in m/s (10m_v_component_of_wind)
 4. Temperature at 2m in K (2m_temperature)
 5. Sea surface temperature in K (sea_surface_temperature)
-6. Total precipitation in mm (?) (total_precipitation)
+6. Total precipitation in m (total_precipitation)
 
 ## Pressure variables (in order)
 1. Geopotential in m^2 / s^2 (geopotential)
