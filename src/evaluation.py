@@ -29,7 +29,9 @@ def validate(
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
 
-    rank = dist.get_rank()
+    # rank = dist.get_rank()
+    dtp_rank = get_process_group("DTP").rank()
+    dtp_worldsize = get_process_group("DTP").size()
 
     exp_agg = ExpertAggregation(ep_group, expert_weights)
 
@@ -57,10 +59,12 @@ def validate(
 
     # Indicies for metrics
     local_indices, local_names = get_names_and_indices(
-        config_dict, rank, for_plot=False
+        config_dict, dtp_rank, dtp_worldsize, for_plot=False
     )
     # Indices for plots
-    plot_indices, plot_names = get_names_and_indices(config_dict, rank, for_plot=True)
+    plot_indices, plot_names = get_names_and_indices(
+        config_dict, dtp_rank, dtp_worldsize, for_plot=True
+    )
 
     # global names for logging
     if dist.get_world_size(group=channel_group) > 1:
@@ -74,7 +78,7 @@ def validate(
 
     epoch_results = {}
     num_batches = 0
-    plot_step = config_dict["training"]["plot_step"]
+    plot_step = config_dict["training"].get("plot_step", 5)
 
     # loop through dataloader
     for i, (x, y, start, end) in enumerate(dataloader):
@@ -395,7 +399,7 @@ def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
     return mae_part - spread_part
 
 
-def get_names_and_indices(config_dict, rank, for_plot=False):
+def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
 
     training_dict = config_dict.get("training", {})
 
@@ -441,9 +445,14 @@ def get_names_and_indices(config_dict, rank, for_plot=False):
     ]
 
     if for_plot:
-        target_s_vars = training_dict.get("plot_surface_variables", [])
-        target_p_vars = training_dict.get("plot_pressure_variables", [])
-        target_p_levels = training_dict.get("plot_pressure_levels", [])
+        target_s_vars = training_dict.get(
+            "plot_surface_variables",
+            ["mean_sea_level_pressure", "2m_temperature", "total_precipitation"],
+        )
+        target_p_vars = training_dict.get(
+            "plot_pressure_variables", ["geopotential", "u_component_of_wind"]
+        )
+        target_p_levels = training_dict.get("plot_pressure_levels", ["850", "500"])
     else:
         """
         target_s_vars = training_dict.get(
@@ -463,7 +472,7 @@ def get_names_and_indices(config_dict, rank, for_plot=False):
     # num_vars = int(config_dict["data"]["n_variables"])
     num_vars = len(all_s) + len(all_p) * len(all_l)
 
-    if dist.get_world_size() > 1:
+    if world_size > 1:
         row = rank % 2
         local_start = row * (num_vars // 2)
         local_end = (row + 1) * (num_vars // 2)
@@ -509,47 +518,9 @@ def get_spatial_weights(config_dict, device):
     return weight.view(1, 1, n_lat, 1)
 
 
-def get_variable_weights(config_dict, rank, device):
-    # check total variables
-    n_total_vars = config_dict["data"]["n_variables"]
-
-    # check if weights are in config (if not return unweighted tensor)
-    has_surface = "surface_weights" in config_dict.get("training", {})
-    has_pressure = "pressure_weights" in config_dict.get("training", {})
-
-    if has_surface and has_pressure:
-        surface_weights = torch.tensor(
-            config_dict["training"]["surface_weights"], device=device
-        )
-        p_weights_raw = torch.tensor(
-            config_dict["training"]["pressure_weights"], device=device
-        )
-
-        n_p_vars = len(config_dict["data"]["out_pressure_variables"])
-        n_p_levels = len(config_dict["data"]["out_pressure_levels"])
-
-        pressure_weights = (
-            p_weights_raw.unsqueeze(1).expand(n_p_vars, n_p_levels).flatten()
-        )
-        all_var_weights = torch.cat([surface_weights, pressure_weights])
-    else:
-        # All weights are 1.0
-        if dist.get_rank() == 0:
-            print(
-                "WARNING: Variable weights missing in config. Using equal weighting (1.0)."
-            )
-        all_var_weights = torch.ones(n_total_vars, device=device)
-
-    row = rank % 2
-    start_idx = row * n_total_vars // 2
-    end_idx = (row + 1) * n_total_vars // 2
-
-    local_weights = all_var_weights[start_idx:end_idx]
-
-    return local_weights
-
-
 def load_climatology(config_dict, rank, device):
+    # TODO: hardcode the variables, "unhardcode" fixed xlat / xlon
+
     # number of pressure levels
     num_p_vars = len(config_dict["data"]["out_pressure_levels"]) * len(
         config_dict["data"]["out_pressure_variables"]
