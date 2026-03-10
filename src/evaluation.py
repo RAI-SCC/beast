@@ -399,11 +399,53 @@ def get_names_and_indices(config_dict, rank, for_plot=False):
 
     training_dict = config_dict.get("training", {})
 
+    # All global variables
+    """
+    all_s = config_dict["data"]["out_surface_variables"]
+    all_p = config_dict["data"]["out_pressure_variables"]
+    all_l = config_dict["data"]["out_pressure_levels"]
+    """
+
+    all_s = [
+        "mean_sea_level_pressure",
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "2m_temperature",
+        "sea_surface_temperature",
+        "total_precipitation",
+    ]
+
+    all_p = [
+        "geopotential",
+        "specific_humidity",
+        "temperature",
+        "u_component_of_wind",
+        "v_component_of_wind",
+        "vertical_velocity",
+    ]
+
+    all_l = [
+        "1000",
+        "925",
+        "850",
+        "700",
+        "600",
+        "500",
+        "400",
+        "300",
+        "250",
+        "200",
+        "150",
+        "100",
+        "50",
+    ]
+
     if for_plot:
         target_s_vars = training_dict.get("plot_surface_variables", [])
         target_p_vars = training_dict.get("plot_pressure_variables", [])
         target_p_levels = training_dict.get("plot_pressure_levels", [])
     else:
+        """
         target_s_vars = training_dict.get(
             "eval_surface_variables", config_dict["data"]["out_surface_variables"]
         )
@@ -413,18 +455,18 @@ def get_names_and_indices(config_dict, rank, for_plot=False):
         target_p_levels = training_dict.get(
             "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
         )
+        """
+        target_s_vars = all_s.copy()
+        target_p_vars = all_p.copy()
+        target_p_levels = all_l.copy()
 
-    # All global variables
-    all_s = config_dict["data"]["out_surface_variables"]
-    all_p = config_dict["data"]["out_pressure_variables"]
-    all_l = config_dict["data"]["out_pressure_levels"]
-
-    num_vars = int(config_dict["data"]["n_variables"])
+    # num_vars = int(config_dict["data"]["n_variables"])
+    num_vars = len(all_s) + len(all_p) * len(all_l)
 
     if dist.get_world_size() > 1:
         row = rank % 2
-        local_start = row * num_vars // 2
-        local_end = (row + 1) * num_vars // 2
+        local_start = row * (num_vars // 2)
+        local_end = (row + 1) * (num_vars // 2)
     else:
         local_start = 0
         local_end = num_vars
