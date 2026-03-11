@@ -139,8 +139,21 @@ def validate(
                 dist.all_reduce(epoch_results[k], op=dist.ReduceOp.AVG, group=dp_group)
 
             if ep_group is not None and dist.get_world_size(ep_group) > 1:
-                # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
-                epoch_results[k] = exp_agg(epoch_results[k])
+                if epoch_results[k].numel() > 1:
+                    # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+                    epoch_results[k] = exp_agg(epoch_results[k])
+                elif k == "data_fit":
+                    expert_weights_part = (
+                        expert_weights.sum() / exp_agg.ep_normalizations.sum()
+                    )
+                    epoch_results[k] = epoch_results[k] * expert_weights_part
+                    dist.all_reduce(
+                        epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group
+                    )
+                elif k == "prior_matching":
+                    dist.all_reduce(
+                        epoch_results[k], op=dist.ReduceOp.AVG, group=ep_group
+                    )
 
     if "mse" in epoch_results.keys():
         epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
