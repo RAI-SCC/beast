@@ -33,7 +33,9 @@ def validate(
     dtp_rank = get_process_group("DTP").rank()
     dtp_worldsize = get_process_group("DTP").size()
 
-    exp_agg = ExpertAggregation(ep_group, expert_weights)
+    global_expert_mask, _ = gather_vars_for_plot(expert_weights, [""], channel_group)
+
+    exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
@@ -172,7 +174,7 @@ def validate(
         print(f"{'=' * 50}")
 
         for k, v in epoch_results.items():
-            if isinstance(v, torch.Tensor) and v.dim() > 0:
+            if isinstance(v, torch.Tensor) and v.dim() > 0 and v.numel() > 1:
                 print(f"\n{k.upper()}:")
                 for var_name, val in zip(global_names, v):
                     print(f"  {var_name}: {val.item():.6f}")
@@ -764,15 +766,17 @@ class ExpertAggregation(nn.Module):
             temp_expert_weights = expert_weights.clone().detach().contiguous()
             dist.all_reduce(temp_expert_weights, op=dist.ReduceOp.SUM, group=ep_group)
 
-            self.ep_normalizations = temp_expert_weights.reshape(1, -1, 1, 1)
+            self.ep_normalizations = temp_expert_weights.reshape(-1)
             # (batch, channel, lat, lon)
 
     def forward(self, x):
         if self.ep_group.size() <= 1:
             return x
 
-        if len(x.shape) > 4:
+        if x.dim() > 4:
             normalization = self.ep_normalizations.reshape(1, 1, -1, 1, 1)
+        elif x.dim() == 4:
+            normalization = self.ep_normalizations.reshape(1, -1, 1, 1)
         else:
             normalization = self.ep_normalizations
 
