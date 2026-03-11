@@ -86,6 +86,9 @@ def training_loop(config_dict):
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
         )
 
+        if not os.path.exists(os.path.join(os.getenv("WORKDIR"), "logs/timings")):
+            os.makedirs(os.path.join(os.getenv("WORKDIR"), "logs/timings"))
+
     # Make model Bayesian
     convert_jigsaw_vi(model)
     model.return_log_probs = False
