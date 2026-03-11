@@ -1,7 +1,7 @@
 #!/bin/bash
 # submit_weak_lsn.sh
 set -euo pipefail
-SYSTEM_NAME="jupiter"
+SYSTEM_NAME="lumi"
 
 # ── Sweep parameters ──────────────────────────────────────────────────────────
 # EXP_NAME="weak_model_lsn"
@@ -14,17 +14,18 @@ SYSTEM_NAME="jupiter"
 
 EXP_NAME="weak_model_dim"
 VAR_NAME="embed_dim"
-VARS=(128 256 512 1024 2048 4096)
+VARS=(128 256 512)
 
 # ── Defaults (can be overridden via flags) ────────────────────────────────────
-ACCOUNT="jureap1"
-PARTITION="booster"
+ACCOUNT="project_462001248"
+PARTITION="standard-g"
 NODES=2
-TASKS_PER_NODE=4
-GPUS=4
+TASKS_PER_NODE=8
+CPUS_PER_TASK=7
+GPUS=8
 TIME="01:00:00"
 PLOT_TIME="00:10:00"
-SYSTEM_NAME="jupiter"
+CONTAINER_SETUP="lumi_singularity.sh"
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────
 remaining_args=()
@@ -89,10 +90,10 @@ EOF
         --output="${LOG_DIR}/${RUN_NAME}.out" \
         --error="${LOG_DIR}/${RUN_NAME}.err" \
         experiments/run_gb_script.sh \
-        systems/jupiter_container.sh \
+        systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
-        --train_subset 100 \
+        --train_subset 10 \
         --"${VAR_NAME}" ${VAR} )
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
