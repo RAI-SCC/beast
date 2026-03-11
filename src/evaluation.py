@@ -240,9 +240,9 @@ def calculate_aggregate_metrics(
     rmse_sq_map = (mean - target) ** 2
     rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
 
-    # calculate crps
-    crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
-    crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
+    # calculate crps TODO: find a working implementation later
+    # crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
+    # crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
 
     # calculate spread-skill ratio
     avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
@@ -275,7 +275,7 @@ def calculate_aggregate_metrics(
         "data_fit": data_fit,
         "prior_matching": prior_matching,
         "mse": rmse_sq * (std_1d**2),
-        "crps": crps * std_1d,
+        # "crps": crps * std_1d,
         "avg_var": avg_var * (std_1d**2),
     }
 
