@@ -66,6 +66,8 @@ def validate(
         config_dict, dtp_rank, dtp_worldsize, for_plot=True
     )
 
+    plot_exp_agg = ExpertAggregation(ep_group, expert_weights[plot_indices])
+
     # global names for logging
     if dist.get_world_size(group=channel_group) > 1:
         gathered_names_list = [
@@ -119,7 +121,7 @@ def validate(
                 y_unmasked,
                 data_means,
                 data_std,
-                exp_agg,
+                plot_exp_agg,
                 expert_weights,
                 plot_indices,
                 plot_names,
