@@ -66,8 +66,6 @@ def validate(
         config_dict, dtp_rank, dtp_worldsize, for_plot=True
     )
 
-    plot_exp_agg = ExpertAggregation(ep_group, expert_weights[plot_indices])
-
     # global names for logging
     if dist.get_world_size(group=channel_group) > 1:
         gathered_names_list = [
@@ -121,7 +119,7 @@ def validate(
                 y_unmasked,
                 data_means,
                 data_std,
-                plot_exp_agg,
+                ep_group,
                 expert_weights,
                 plot_indices,
                 plot_names,
@@ -600,7 +598,7 @@ def generate_distributed_plots(
     target,
     data_mean,
     data_std,
-    expert_agg,
+    expert_group,
     expert_weights,
     plot_indices,
     plot_names,
@@ -642,6 +640,11 @@ def generate_distributed_plots(
         full_lon_pred, plot_names, channel_group
     )
     global_target, _ = gather_vars_for_plot(full_lon_target, plot_names, channel_group)
+    global_mask, _ = gather_vars_for_plot(
+        expert_weights[plot_indices].unsqueeze(dim=0), plot_names, channel_group
+    )
+
+    expert_agg = ExpertAggregation(expert_group, global_mask)
 
     # aggregation over all the experts (not needed for targets)
     global_pred = expert_agg(global_pred)
