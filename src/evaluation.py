@@ -254,9 +254,8 @@ def calculate_aggregate_metrics(
         divergence_type=torch_blue.vi.NormalNormalDivergence(),
         dataset_size=dataset_size,
     )
-    data_fit = (
-        -dataset_size
-        * kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std))
+    data_fit = -dataset_size * (
+        kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std))
         .mean(dim=0)
         .sum()
     )
@@ -284,7 +283,7 @@ def calculate_aggregate_metrics(
 
     final_results = {}
     for key, val in local_results.items():
-        if val.dim() > 0:
+        if val.dim() > 0 and key not in ["data_fit", "prior_matching"]:
             if dist.get_world_size(channel_group) > 1:
                 gathered_list = [
                     None for _ in range(dist.get_world_size(channel_group))

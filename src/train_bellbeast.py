@@ -153,7 +153,7 @@ def training_loop(config_dict):
             dtp_group=dtp_group,
         )
 
-        validate(
+        data_fit_loss, prior_matching_loss = validate(
             config_dict=config_dict,
             model=model,
             expert_weights=expert_loss_weighting,
@@ -172,6 +172,9 @@ def training_loop(config_dict):
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
+            )
+            print(
+                f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
             )
 
     time_df = pd.DataFrame(
