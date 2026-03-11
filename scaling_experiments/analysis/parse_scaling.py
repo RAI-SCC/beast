@@ -50,7 +50,7 @@ KIT_PALETTE = [
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
 
-def parse_log(path: Path) -> dict | None:
+def parse_log(path: Path, x_axis: str) -> dict | None:
     """
     Extract from each log:
       x-axis  forward_tflops : "Forward flops per iteration is X TFLOP"
@@ -62,27 +62,28 @@ def parse_log(path: Path) -> dict | None:
 
     # ── Forward TFLOP per iteration (x-axis) ──────────────────────────────────
     # "Forward flops per iteration is 4.282531261444092 TFLOP"
-    m_fwd = re.search(r"Forward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP", text)
-    if not m_fwd:
-        print(f"  [skip] no 'Forward flops per iteration' line in {path.name}")
+    m_fwd_bwd = re.search(
+        r"forward-backward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP", text
+    )
+    if not m_fwd_bwd:
+        print(f"  [skip] no 'forward-backward flops per iteration' line in {path.name}")
         return None
-    forward_tflops = float(m_fwd.group(1))
+    forward_backward = float(m_fwd_bwd.group(1))
 
     # ── Per-epoch average TFLOPs (y-axis source) ──────────────────────────────
     # "Epoch 2 time [min]: 0.547..., average loss 2.25e+17, average TFLOPs = 39.109..."
     epoch_pattern = re.compile(
         r"Epoch\s+(\d+)\s+time\s+\[min\]:\s*([\d.eE+\-]+)"
-        r",\s*average loss\s+([\d.eE+\-]+)"
+        r"(?:,\s*average loss\s+[\d.eE+\-]+)?"  # optional, non-capturing
         r",\s*average TFLOPs\s*=\s*([\d.eE+\-]+)"
     )
     epochs = [
         {
             "epoch": int(ep),
             "time_min": float(t),
-            "avg_loss": float(loss),
             "avg_tflops": float(tf),
         }
-        for ep, t, loss, tf in epoch_pattern.findall(text)
+        for ep, t, tf in epoch_pattern.findall(text)
     ]
 
     if len(epochs) < 2:
@@ -93,15 +94,15 @@ def parse_log(path: Path) -> dict | None:
     m_params = re.search(r"Parameters:\s*(\d+)", text)
     params = int(m_params.group(1)) if m_params else None
 
-    m_dim = re.search(r"--embed_dim\s+(\d+)", text)
-    embed_dim = int(m_dim.group(1)) if m_dim else None
+    m_var = re.search(rf"--{x_axis}\s+(\d+)", text)
+    var = int(m_var.group(1)) if m_var else None
 
     return {
         "file": path.name,
-        "forward_tflops": forward_tflops,
+        "forward_backward_tflops": forward_backward,
         "epochs": epochs,
         "params": params,
-        "embed_dim": embed_dim,
+        f"{x_axis}": var,  # whatever is on the x axis. this can be flops, batch size, sample number, nodes"
     }
 
 
@@ -128,17 +129,22 @@ def plot(
     records: list[dict],
     out_path: Path = Path("scaling_plot.png"),
     sweep_id: str | None = None,
+    x_axis: str = "Model size",
 ):
 
-    records = sorted(records, key=lambda r: r["forward_tflops"])
+    records = sorted(records, key=lambda r: r["forward_backward_tflops"])
     n = len(records)
 
-    xs = np.array([r["forward_tflops"] for r in records])
+    if x_axis == "embed_dim":
+        xs = np.array([r["forward_backward_tflops"] for r in records])
+    else:
+        xs = np.array([r[f"{x_axis}"] for r in records])
+
     ys = np.array([r["avg_tflops"] for r in records])
     labels = [
         (
-            f"dim={r['embed_dim']}"
-            if r["embed_dim"] is not None
+            f"{x_axis}={r[f'{x_axis}']}"
+            if r[f"{x_axis}"] is not None
             else Path(r["file"]).stem
         )
         for r in records
@@ -149,11 +155,8 @@ def plot(
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
 
-    ax.grid(color=KIT_GRAY10, linewidth=0.8, zorder=0)
+    ax.grid(color=KIT_GRAY60, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
-
-    # Shaded area under curve
-    ax.fill_between(xs, ys, alpha=0.07, color=KIT_BLUE, zorder=1)
 
     # Trend line
     ax.plot(
@@ -178,8 +181,8 @@ def plot(
             (x, y),
             textcoords="offset points",
             xytext=(8, 6),
-            fontsize=8.5,
-            color=KIT_GRAY60,
+            fontsize=13,
+            color="black",
             fontfamily="monospace",
         )
 
@@ -187,37 +190,40 @@ def plot(
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
     for spine in ["bottom", "left"]:
-        ax.spines[spine].set_color(KIT_GRAY30)
+        ax.spines[spine].set_color("black")
         ax.spines[spine].set_linewidth(0.9)
 
-    ax.xaxis.set_major_formatter(ticker.FuncFormatter(_fmt_tflop))
+    # ax.xaxis.set_major_formatter(ticker.FuncFormatter(_fmt_tflop))
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:.3g}"))
-    ax.tick_params(colors=KIT_GRAY60, labelsize=9, length=4, width=0.8)
-    ax.xaxis.label.set_color(KIT_GRAY60)
-    ax.yaxis.label.set_color(KIT_GRAY60)
+    ax.tick_params(colors="black", labelsize=14, length=4, width=0.8)
+    ax.xaxis.label.set_color("black")
+    ax.yaxis.label.set_color("black")
 
-    ax.set_xlabel("Forward FLOPs per iteration  [TFLOP]", fontsize=10, labelpad=8)
-    ax.set_ylabel("Average TFLOPs/s  (mean over all epochs)", fontsize=10, labelpad=8)
+    if x_axis == "embed_dim":
+        ax.set_xlabel("Model size [TFLOP in forward pass]", fontsize=15, labelpad=8)
+    else:
+        ax.set_xlabel(f"{x_axis}", fontsize=15, labelpad=8)
+    ax.set_ylabel("Throughput [TFLOPs/s/node]", fontsize=15, labelpad=8)
 
     ax.set_title(
-        "Weak Scaling — Throughput vs. Model Size",
-        fontsize=14,
+        f"{x_axis} vs. Throughput",
+        fontsize=20,
         fontweight="bold",
         color=(0.1, 0.1, 0.1),
         pad=14,
         loc="left",
     )
 
-    subtitle_parts = [f"n = {n} runs"]
+    subtitle_parts = [""]
     if sweep_id:
         subtitle_parts.append(f"sweep: {sweep_id}")
     ax.text(
         0.0,
-        1.02,
+        0.98,
         "  ·  ".join(subtitle_parts),
         transform=ax.transAxes,
         fontsize=9,
-        color=KIT_GRAY60,
+        color="black",
         va="bottom",
     )
 
@@ -238,13 +244,13 @@ def plot(
         ]
         ax.legend(
             handles=handles,
-            fontsize=8,
+            fontsize=15,
             frameon=True,
             framealpha=0.9,
             edgecolor=KIT_GRAY10,
             loc="best",
             title="runs",
-            title_fontsize=8,
+            title_fontsize=15,
         )
 
     plt.tight_layout(pad=1.4)
@@ -262,7 +268,12 @@ def collect_paths(path: str) -> list[Path]:
     return sorted(Path(f) for f in glob.glob(path))
 
 
-def main(logs_dir: str, out_path: str, sweep_id: str | None = None):
+def main(
+    logs_dir: str,
+    out_path: str,
+    sweep_id: str | None = None,
+    x_axis: str = "Model size",
+):
     paths = collect_paths(logs_dir)
     if not paths:
         print("No .out files found.")
@@ -271,12 +282,12 @@ def main(logs_dir: str, out_path: str, sweep_id: str | None = None):
     print(f"Parsing {len(paths)} log file(s)...\n")
     records = []
     for p in paths:
-        run = parse_log(p)
+        run = parse_log(p, x_axis)
         if run:
             m = compute_metrics(run)
             records.append(m)
             print(
-                f"  {p.name:45s}  fwd_tflop={m['forward_tflops']:.4f}T  "
+                f"  {p.name:45s}  fwd_tflop={m['forward_backward_tflops']:.4f}T  "
                 f"avg_tflops={m['avg_tflops']:.3f}  "
                 f"epochs={len(m['epochs'])}"
             )
@@ -285,7 +296,7 @@ def main(logs_dir: str, out_path: str, sweep_id: str | None = None):
         print("No valid records parsed.")
         sys.exit(1)
 
-    plot(records, out_path=Path(out_path), sweep_id=sweep_id)
+    plot(records, out_path=Path(out_path), sweep_id=sweep_id, x_axis=x_axis)
 
 
 if __name__ == "__main__":
@@ -301,5 +312,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sweep_id", default=None, help="Sweep identifier for plot subtitle."
     )
+    parser.add_argument(
+        "--x_axis",
+        default=None,
+        help="x axis indicates what to search for and plot on the x axis",
+    )
     args = parser.parse_args()
-    main(args.logs_dir, args.out_path, sweep_id=args.sweep_id)
+    main(args.logs_dir, args.out_path, sweep_id=args.sweep_id, x_axis=args.x_axis)

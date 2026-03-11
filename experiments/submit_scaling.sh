@@ -1,31 +1,92 @@
 #!/bin/bash
 # submit_weak_lsn.sh
 set -euo pipefail
-SYSTEM_NAME="lumi"
 
-# ── Sweep parameters ──────────────────────────────────────────────────────────
+# ── Experiments ──────────────────────────────────────────────────────────
+# Uncomment the one that you want to run
+
+# ---------------------------
+# Exp 1: Constant nodes
+# Increase the local sampling number
+# Model size stays the same
+# ---------------------------
 # EXP_NAME="weak_model_lsn"
 # VAR_NAME="lsn"
-# VARS=(1 2 4 8 16)
+# VARS=(2 4)
+# NODES=(2)
+# X_AXIS_NAME=${VAR_NAME}
 
+# ---------------------------
+# Exp 2: Constant nodes
+# Increase the local batch size
+# Model size stays the same
+# Total dataset size increases with the local batch size
+# ---------------------------
 # EXP_NAME="weak_model_lbs"
 # VAR_NAME="lbs"
-# VARS=(1 2 4 8 16)
+# VARS=(1 2)
+# NODES=(2)
+# X_AXIS_NAME=${VAR_NAME}
 
-EXP_NAME="weak_model_dim"
-VAR_NAME="embed_dim"
-VARS=(128 256 512)
+# ---------------------------
+# Exp 3: Constant nodes
+# Increase the model size
+# Local batch size and sampling number stay the same
+# ---------------------------
+# EXP_NAME="weak_model_dim"
+# VAR_NAME="embed_dim"
+# VARS=(128 256)
+# NODES=(2)
+# X_AXIS_NAME=${VAR_NAME}
 
-# ── Defaults (can be overridden via flags) ────────────────────────────────────
-ACCOUNT="project_462001248"
-PARTITION="standard-g"
-NODES=2
-TASKS_PER_NODE=8
-CPUS_PER_TASK=7
-GPUS=8
+# ---------------------------
+# MULTI-NODE EXPERIMENTS
+# ---------------------------
+# Exp 1: Increase global sampling number by increasing node count
+# Local sampling number and batch size stay the same
+# Total dataset size stays the same
+# ---------------------------
+
+# EXP_NAME="lsn_multinode"
+# VAR_NAME="lsn"
+# VARS=(1)
+# NODES=(2 4)
+# X_AXIS_NAME="nodes"
+
+# ---------------------------
+# Exp 2: Increase global batch size by increasing node count
+# Local sampling number and batch size stay the same
+# Total dataset is scaled with node count to ensure constant work per node
+# ---------------------------
+
+EXP_NAME="lbs_multinode"
+VAR_NAME="lbs"
+VARS=(1)
+NODES=(4 8)
+X_AXIS_NAME="nodes"
+
+# ── System (can be overridden via flags) ────────────────────────────────────
+# Choose the system that you are running on. Commene the other one out.
+# Nothing here needs to be changed.
+SYSTEM_NAME="jupiter"
+ACCOUNT="jureap1"
+PARTITION="booster"
+NODE=2
+TASKS_PER_NODE=4
+GPUS=4
 TIME="01:00:00"
 PLOT_TIME="00:10:00"
-CONTAINER_SETUP="lumi_singularity.sh"
+CONTAINER_SETUP="jupiter_container.sh"
+
+# SYSTEM_NAME="lumi"
+# ACCOUNT="project_462001248"
+# PARTITION="standard-g"
+# NODES=2
+# TASKS_PER_NODE=8
+# GPUS=8
+# TIME="01:00:00"
+# PLOT_TIME="00:10:00"
+# CONTAINER_SETUP="lumi_singularity.sh"
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────
 remaining_args=()
@@ -33,7 +94,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --account|-A)        ACCOUNT="$2";        shift 2 ;;
         --partition|-p)      PARTITION="$2";      shift 2 ;;
-        --nodes|-N)          NODES="$2";           shift 2 ;;
+        --node|-N)           NODE="$2";           shift 2 ;;
         --tasks-per-node)    TASKS_PER_NODE="$2"; shift 2 ;;
         --gpus)              GPUS="$2";            shift 2 ;;
         --time)              TIME="$2";            shift 2 ;;
@@ -66,6 +127,7 @@ EOF
 RUN_ID=0
 JOB_IDS=()
 
+for NODE in "${NODES[@]}"; do
 for VAR in "${VARS[@]}"; do
 
     RUN_NAME=$(printf "run_%03d_${VAR}-%04d" "$RUN_ID" "$VAR")
@@ -84,7 +146,7 @@ EOF
 
     RAW=$(sbatch \
         -A "$ACCOUNT" -p "$PARTITION" \
-        --nodes "$NODES" --tasks-per-node "$TASKS_PER_NODE" --gres=gpu:${GPUS} \
+        --nodes "${NODE}" --tasks-per-node "$TASKS_PER_NODE" --gres=gpu:${GPUS} \
         --time ${TIME} \
         --job-name="scale_${RUN_NAME}" \
         --output="${LOG_DIR}/${RUN_NAME}.out" \
@@ -94,7 +156,9 @@ EOF
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
         --train_subset 10 \
-        --"${VAR_NAME}" ${VAR} )
+        --"${VAR_NAME}" ${VAR} \
+        --scaling True \
+        --nodes "${NODE}" )
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
     JOB_IDS+=("$JOB_ID")
@@ -105,9 +169,11 @@ EOF
     echo "Submitted ${RUN_NAME} → SLURM job ${JOB_ID}"
     RUN_ID=$(( RUN_ID + 1 ))
 done
+done
 
 echo ""
 echo "All sweep jobs submitted. Experiment root: ${EXPERIMENT_DIR}"
+
 
 # ── Build afterany dependency string  job1:job2:job3 … ───────────────────────
 DEPENDENCY=$(IFS=:; echo "${JOB_IDS[*]}")
@@ -148,7 +214,8 @@ echo "========================================================"
 python3 "${REPO_ROOT}/scaling_experiments/analysis/parse_scaling.py" \\
     --logs_dir  "${LOG_DIR}" \\
     --out_path  "${PLOT_PATH}" \\
-    --sweep_id  "${SWEEP_TAG}"
+    --sweep_id  "${SWEEP_TAG}" \\
+    --x_axis "${X_AXIS_NAME}"
 
 echo ""
 echo "Plot written → ${PLOT_PATH}"

@@ -272,6 +272,7 @@ def count_flops(
     loss_fn: callable,
     n_samples: int,
     device: torch.device,
+    dtp_group: dist.ProcessGroup,
 ):
     """
     Count floating point operations [TFLOP] in forward and backward pass of the model.
@@ -286,7 +287,7 @@ def count_flops(
         pred = model(x, samples=n_samples)
 
     forward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
-    dist.all_reduce(forward_flops, group=None)
+    dist.all_reduce(forward_flops, group=dtp_group)
 
     with FlopCounterMode(
         display=False
@@ -295,7 +296,7 @@ def count_flops(
         loss.backward()
 
     backward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
-    dist.all_reduce(backward_flops, group=None)
+    dist.all_reduce(backward_flops, group=dtp_group)
 
     with FlopCounterMode(
         display=False
@@ -305,7 +306,7 @@ def count_flops(
         loss.backward()
 
     total_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
-    dist.all_reduce(total_flops, group=None)
+    dist.all_reduce(total_flops, group=dtp_group)
 
     if dist.get_rank(group=None) == 0:
         print(f"Forward flops per iteration is {forward_flops / 1e12} TFLOP")

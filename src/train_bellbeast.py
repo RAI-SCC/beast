@@ -133,7 +133,7 @@ def training_loop(config_dict):
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
     forward_flops, backward_flops, total_flops = count_flops(
-        model, train_dataloader, loss_fn, n_samples, device
+        model, train_dataloader, loss_fn, n_samples, device, dtp_group
     )
 
     ### Run Training
@@ -221,31 +221,48 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--scaling", default=False)
     parser.add_argument("--train_subset")
     parser.add_argument("--embed_dim")
     parser.add_argument("--n_attn_blocks")
     parser.add_argument("--lbs")
     parser.add_argument("--lsn")
+    parser.add_argument("--nodes", default=2)
 
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
-    if args.train_subset is not None:
-        config_dict["data"]["train_subset"] = int(args.train_subset)
-    if args.embed_dim is not None:
-        config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
-    if args.n_attn_blocks is not None:
-        config_dict["model"]["n_attn_blocks"] = [
-            int(args.n_attn_blocks),
-            int(args.n_attn_blocks),
-            int(args.n_attn_blocks),
-        ]
-    if args.lbs is not None:
-        config_dict["training"]["batch_size"] = int(args.lbs)
-    if args.lsn is not None:
-        config_dict["training"]["n_samples"] = int(args.lsn)
+    # If we are performing a scaling experiment, read the command line arguments.
+    # Otherwise, the arguments will not be read.
+    if args.scaling:
+        if args.train_subset is not None:
+            config_dict["data"]["train_subset"] = int(args.train_subset)
+        if args.embed_dim is not None:
+            config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
+        if args.n_attn_blocks is not None:
+            config_dict["model"]["n_attn_blocks"] = [
+                int(args.n_attn_blocks),
+                int(args.n_attn_blocks),
+                int(args.n_attn_blocks),
+            ]
+        if args.lbs is not None:
+            config_dict["training"]["batch_size"] = int(args.lbs)
+            # If we are scaling across nodes and modifying the node count
+            config_dict["mesh_dims"][1] = int(args.nodes) // 2
+            # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
+            config_dict["data"]["train_subset"] = (
+                int(args.lbs)
+                * config_dict["data"]["train_subset"]
+                * int(args.nodes)
+                // 2
+            )
+        if args.lsn is not None:
+            config_dict["training"]["n_samples"] = int(args.lsn)
+            # If we are scaling across nodes and modifying the node count
+            if int(args.nodes) > 2:
+                config_dict["mesh_dims"][2] = int(args.nodes)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
