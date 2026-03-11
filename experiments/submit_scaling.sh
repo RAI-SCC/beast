@@ -12,8 +12,8 @@ set -euo pipefail
 # ---------------------------
 # EXP_NAME="weak_model_lsn"
 # VAR_NAME="lsn"
-# VARS=(2 4)
-# NODES=(2)
+# VARS=(1 2 4 8 16)
+# NODES=(2) # stays constant
 # X_AXIS_NAME=${VAR_NAME}
 
 # ---------------------------
@@ -24,8 +24,8 @@ set -euo pipefail
 # ---------------------------
 # EXP_NAME="weak_model_lbs"
 # VAR_NAME="lbs"
-# VARS=(1 2)
-# NODES=(2)
+# VARS=(1 2 4 8 16)
+# NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
 
 # ---------------------------
@@ -33,10 +33,11 @@ set -euo pipefail
 # Increase the model size
 # Local batch size and sampling number stay the same
 # ---------------------------
+
 # EXP_NAME="weak_model_dim"
 # VAR_NAME="embed_dim"
-# VARS=(128 256)
-# NODES=(2)
+# VARS=(128 256 512 1024 2048 4096)
+# NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
 
 # ---------------------------
@@ -50,7 +51,7 @@ set -euo pipefail
 # EXP_NAME="lsn_multinode"
 # VAR_NAME="lsn"
 # VARS=(1)
-# NODES=(2 4)
+# NODES=(2 4 8 16 32 64 128 256 512)
 # X_AXIS_NAME="nodes"
 
 # ---------------------------
@@ -68,25 +69,25 @@ X_AXIS_NAME="nodes"
 # ── System (can be overridden via flags) ────────────────────────────────────
 # Choose the system that you are running on. Commene the other one out.
 # Nothing here needs to be changed.
-SYSTEM_NAME="jupiter"
-ACCOUNT="jureap1"
-PARTITION="booster"
-NODE=2
-TASKS_PER_NODE=4
-GPUS=4
-TIME="01:00:00"
-PLOT_TIME="00:10:00"
-CONTAINER_SETUP="jupiter_container.sh"
-
-# SYSTEM_NAME="lumi"
-# ACCOUNT="project_462001248"
-# PARTITION="standard-g"
-# NODES=2
-# TASKS_PER_NODE=8
-# GPUS=8
+# SYSTEM_NAME="jupiter"
+# ACCOUNT="jureap1"
+# PARTITION="booster"
+# NODE=2
+# TASKS_PER_NODE=4
+# GPUS=4
 # TIME="01:00:00"
 # PLOT_TIME="00:10:00"
-# CONTAINER_SETUP="lumi_singularity.sh"
+# CONTAINER_SETUP="jupiter_container.sh"
+
+SYSTEM_NAME="lumi"
+ACCOUNT="project_462001248"
+PARTITION="standard-g"
+NODE=2
+TASKS_PER_NODE=8
+GPUS=8
+TIME="01:00:00"
+PLOT_TIME="00:10:00"
+CONTAINER_SETUP="lumi_singularity.sh"
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────
 remaining_args=()
@@ -130,7 +131,7 @@ JOB_IDS=()
 for NODE in "${NODES[@]}"; do
 for VAR in "${VARS[@]}"; do
 
-    RUN_NAME=$(printf "run_%03d_${VAR}-%04d" "$RUN_ID" "$VAR")
+    RUN_NAME=$(printf "run_%03d_${VAR_NAME}-%04d_nodes-%04d" "$RUN_ID" "$VAR" "$NODE")
 
     CONFIG_FILE="${CONFIG_DIR}/${RUN_NAME}.yaml"
     cat > "$CONFIG_FILE" <<EOF
@@ -155,7 +156,7 @@ EOF
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
-        --train_subset 10 \
+        --train_subset 100 \
         --"${VAR_NAME}" ${VAR} \
         --scaling True \
         --nodes "${NODE}" )
@@ -209,9 +210,10 @@ echo " Output    : ${PLOT_PATH}"
 echo " Started   : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "========================================================"
 
-# Activate the project virtualenv (same path used by training jobs)
+module use /appl/local/csc/modulefiles
+module load pytorch
 
-python3 "${REPO_ROOT}/scaling_experiments/analysis/parse_scaling.py" \\
+python3 "${REPO_ROOT}/experiments/parse_scaling.py" \\
     --logs_dir  "${LOG_DIR}" \\
     --out_path  "${PLOT_PATH}" \\
     --sweep_id  "${SWEEP_TAG}" \\
