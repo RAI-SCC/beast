@@ -33,7 +33,10 @@ def validate(
     dtp_rank = get_process_group("DTP").rank()
     dtp_worldsize = get_process_group("DTP").size()
 
-    global_expert_mask, _ = gather_vars_for_plot(expert_weights, [""], channel_group)
+    global_expert_mask, _ = gather_vars_for_plot(
+        expert_weights.unsqueeze(dim=0), [""], channel_group
+    )
+    global_expert_mask = global_expert_mask.squeeze(dim=0)
 
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
