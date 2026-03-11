@@ -221,7 +221,7 @@ def calculate_aggregate_metrics(
         climatology = climatology[indices]
 
     # calculate mean and std
-    mean, std = GaussianAggregation.apply(samples, up_group, expert_weights)
+    mean, std = GaussianAggregation.apply(samples, up_group, expert_weights[indices])
     std = std * expert_weights.reshape(1, -1, 1, 1)
 
     acc = None
@@ -615,7 +615,9 @@ def generate_distributed_plots(
         local_samples = samples[:, :, plot_indices]
         local_target = target[:, plot_indices]
 
-        mean, _ = GaussianAggregation.apply(local_samples, up_group, expert_weights)
+        mean, _ = GaussianAggregation.apply(
+            local_samples, up_group, expert_weights[plot_indices]
+        )
 
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
