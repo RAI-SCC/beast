@@ -144,15 +144,15 @@ def validate(
                 # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
                 epoch_results[k] = exp_agg(epoch_results[k])
 
-        if "mse" in epoch_results.keys():
-            epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
-            epoch_results.pop("mse")
+    if "mse" in epoch_results.keys():
+        epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
+        epoch_results.pop("mse")
 
-        if "avg_var" in epoch_results.keys() and "rmse" in epoch_results.keys():
-            epoch_results["spread_skill"] = (
-                torch.sqrt(epoch_results["avg_var"]) / epoch_results["rmse"]
-            )
-            epoch_results.pop("avg_var")
+    if "avg_var" in epoch_results.keys() and "rmse" in epoch_results.keys():
+        epoch_results["spread_skill"] = (
+            torch.sqrt(epoch_results["avg_var"]) / epoch_results["rmse"]
+        )
+        epoch_results.pop("avg_var")
 
     # save results
     if dist.get_rank() == 0:
