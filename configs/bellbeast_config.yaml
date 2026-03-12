@@ -23,7 +23,7 @@ model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 384
     n_output_channels: 84
-    n_attn_heads: 6
+    n_attn_heads: [6, 6, 6]
     patch_size: 2
     noise_dim: 32
     window_size_outer: [6, 12]
