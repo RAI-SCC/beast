@@ -111,7 +111,7 @@ class Bellbeast(torch.nn.Module):
             bayesian=self.bayesian,
         )
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix = linear.DistributedXWTSync(  # TODO: Check dropout default
+        self.upsample_mix = linear.DistributedXWTSync(
             self.embed_dim // 2,
             self.embed_dim,
             bias=True,
@@ -152,7 +152,7 @@ class Bellbeast(torch.nn.Module):
                     dropout=0 if self.bayesian else 1e-3,  # dropout
                     local_rank=self.local_rank,
                     device=self.device,
-                    parallelism=self.channel_group.size(),  # TODO: check syntax
+                    parallelism=self.channel_group.size(),
                     model_group=self.dtp_group,
                     spatial_group=self.spatial_group,
                     channel_group=self.channel_group,
@@ -189,12 +189,12 @@ class Bellbeast(torch.nn.Module):
                     x_features=self.embed_dim,
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
-                    heads=self.heads[2],  # TODO
+                    heads=self.heads[2],
                     noise_dim=self.noise_dim,
                     dropout=0 if self.bayesian else 1e-3,  # dropout
                     local_rank=self.local_rank,
                     device=self.device,
-                    parallelism=self.channel_group.size(),  # TODO: check syntax
+                    parallelism=self.channel_group.size(),
                     model_group=self.dtp_group,
                     spatial_group=self.spatial_group,
                     channel_group=self.channel_group,
@@ -299,7 +299,6 @@ class Bellbeast(torch.nn.Module):
         """
         # Rolled mask
         # 1 n_patch_lat n_patch_lon 1
-        # TODO: initialize once per model, not on every forward pass
         img_mask = torch.zeros((1, n_patch_lat, n_patch_lon, 1), device=self.device)
 
         img_mask[:, slice(0, window_size[0] // 2)] = 1
