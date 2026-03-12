@@ -149,7 +149,9 @@ def validate(
                     epoch_results[k] = exp_agg(epoch_results[k])
                 elif k == "data_fit":
                     expert_weights_part = (
-                        expert_weights.sum() / exp_agg.ep_normalizations.sum()
+                        expert_weights.sum()
+                        / exp_agg.ep_normalizations.sum()
+                        * expert_weights.numel()
                     )
                     epoch_results[k] = epoch_results[k] * expert_weights_part
                     dist.all_reduce(
