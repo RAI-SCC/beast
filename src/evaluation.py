@@ -240,30 +240,6 @@ def calculate_aggregate_metrics(
 
     # calculate mean and std
     mean, std = GaussianAggregation.apply(samples, up_group, expert_weights[indices])
-    std = std * expert_weights.reshape(1, -1, 1, 1)
-
-    acc = None
-    if climatology is not None:
-        acc = calculate_climatology(
-            target,
-            mean,
-            data_mean,
-            data_std,
-            climatology,
-            spatial_weights,
-            spatial_group,
-        )
-
-    # calculate rmse
-    rmse_sq_map = (mean - target) ** 2
-    rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
-
-    # calculate crps TODO: find a working implementation later
-    # crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
-    # crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
-
-    # calculate spread-skill ratio
-    avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
 
     # likelihood and KL
     kl_loss = torch_blue.vi.AnalyticalKullbackLeiblerLoss(
@@ -283,6 +259,34 @@ def calculate_aggregate_metrics(
     prior_matching = kl_loss.prior_matching()
     if dist.get_world_size(channel_group) > 1:
         dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=channel_group)
+
+    # mask std for other metrics
+    std = std * expert_weights.reshape(1, -1, 1, 1)
+
+    # calculate ACC
+
+    acc = None
+    if climatology is not None:
+        acc = calculate_climatology(
+            target,
+            mean,
+            data_mean,
+            data_std,
+            climatology,
+            spatial_weights,
+            spatial_group,
+        )
+
+    # calculate rmse (surrogate)
+    rmse_sq_map = (mean - target) ** 2
+    rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
+
+    # calculate crps TODO: find a working implementation later
+    # crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
+    # crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
+
+    # calculate spread-skill ratio (surrogate)
+    avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
 
     # flatten for calculation
     std_1d = data_std.flatten()
