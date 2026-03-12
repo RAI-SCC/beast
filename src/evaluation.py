@@ -236,8 +236,8 @@ def calculate_aggregate_metrics(
     if channel_group.rank() > 0:
         local_var_slice = slice(data_mean.shape[1] // 2, None)
 
-    data_mean = data_mean[:, local_var_slice]
-    data_std = data_std[:, local_var_slice]
+    data_mean = data_mean[local_var_slice]
+    data_std = data_std[local_var_slice]
     data_mean = data_mean[indices]
     data_std = data_std[indices]
 
