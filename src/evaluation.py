@@ -37,7 +37,7 @@ def validate(
         expert_weights.unsqueeze(dim=0), [""], channel_group
     )
     global_expert_mask = global_expert_mask.squeeze(dim=0)
-
+    local_exp_agg = ExpertAggregation(ep_group, expert_weights)
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
@@ -101,6 +101,7 @@ def validate(
             y,
             model,
             expert_weights,
+            local_exp_agg,
             len(dataloader.dataset),
             data_means,
             data_std,
@@ -147,16 +148,8 @@ def validate(
                 if epoch_results[k].numel() > 1:
                     # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
                     epoch_results[k] = exp_agg(epoch_results[k])
-                elif k == "data_fit":
-                    expert_weights_part = (
-                        expert_weights.sum()
-                        / exp_agg.ep_normalizations.sum()
-                        * expert_weights.numel()
-                    )
-                    epoch_results[k] = epoch_results[k] * expert_weights_part
-                    dist.all_reduce(
-                        epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group
-                    )
+                # elif k == "data_fit":
+                #    pass
                 elif k == "prior_matching":
                     dist.all_reduce(
                         epoch_results[k], op=dist.ReduceOp.AVG, group=ep_group
@@ -219,6 +212,7 @@ def calculate_aggregate_metrics(
     target,
     model,
     expert_weights,
+    expert_agg,
     dataset_size,
     data_mean,
     data_std,
@@ -257,10 +251,12 @@ def calculate_aggregate_metrics(
         dataset_size=dataset_size,
     )
     data_fit = -dataset_size * (
-        kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std))
-        .mean(dim=0)
-        .sum()
+        kl_loss.predictive_distribution.log_prob_from_parameters(
+            target, (mean, std)
+        ).mean(dim=0, keepdim=True)
     )
+    data_fit = expert_agg(data_fit)
+    data_fit = data_fit.sum()
     if dist.get_world_size(dtp_group) > 1:
         dist.all_reduce(data_fit, op=dist.ReduceOp.SUM, group=dtp_group)
 
