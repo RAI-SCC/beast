@@ -128,7 +128,7 @@ def training_loop(config_dict):
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(42 + up_group.rank())
+    set_all_seeds(config_dict['mesh_dims'][2] + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -250,19 +250,14 @@ def main():
         if args.lbs is not None:
             config_dict["training"]["batch_size"] = int(args.lbs)
             # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][1] = int(args.nodes) // 2
+            config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
             # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
-            config_dict["data"]["train_subset"] = (
-                int(args.lbs)
-                * config_dict["data"]["train_subset"]
-                * int(args.nodes)
-                // 2
-            )
+            
         if args.lsn is not None:
             config_dict["training"]["n_samples"] = int(args.lsn)
             # If we are scaling across nodes and modifying the node count
-            if int(args.nodes) > 2:
-                config_dict["mesh_dims"][2] = int(args.nodes)
+            # if int(args.nodes) > 2:
+            config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
