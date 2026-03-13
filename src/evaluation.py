@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import h5py
@@ -6,27 +7,38 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch_blue
+from torch import nn
 
 from gb.losses.up_loss import GaussianAggregation
+from gb.utils import get_process_group
 
 
 @torch.no_grad()
 def validate(
     config_dict: dict,
     model: torch.nn.Module,
+    expert_weights: torch.Tensor,
     n_samples: int,
     dataloader: torch.utils.data.DataLoader,
     device: torch.device,
     epoch: int,
     results_path: str,
-    groups: dict,
 ):
     # get group information
-    channel_group = groups["JChannel"]
-    dp_group = groups["DP"]
-    ep_group = groups.get("Expert")
+    channel_group = get_process_group("JChannel")
+    dp_group = get_process_group("DP")
+    ep_group = get_process_group("Expert")
 
-    rank = dist.get_rank()
+    # rank = dist.get_rank()
+    dtp_rank = get_process_group("DTP").rank()
+    dtp_worldsize = get_process_group("DTP").size()
+
+    global_expert_mask, _ = gather_vars_for_plot(
+        expert_weights.unsqueeze(dim=0), [""], channel_group
+    )
+    global_expert_mask = global_expert_mask.squeeze(dim=0)
+    local_exp_agg = ExpertAggregation(ep_group, expert_weights)
+    exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
@@ -35,8 +47,16 @@ def validate(
     spatial_weights = get_spatial_weights(config_dict, device)
 
     # extract means and std for evaluation
-    data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
-    data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
+    try:
+        data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
+        data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
+    except AttributeError:
+        data_means = torch.from_numpy(
+            dataloader.dataset.dataset.norm_values["mean"]
+        ).to(device)
+        data_std = torch.from_numpy(dataloader.dataset.dataset.norm_values["std"]).to(
+            device
+        )
 
     # climatology
     # TODO: Update Climatology Files so this works correctly
@@ -44,10 +64,12 @@ def validate(
 
     # Indicies for metrics
     local_indices, local_names = get_names_and_indices(
-        config_dict, rank, for_plot=False
+        config_dict, dtp_rank, dtp_worldsize, for_plot=False
     )
     # Indices for plots
-    plot_indices, plot_names = get_names_and_indices(config_dict, rank, for_plot=True)
+    plot_indices, plot_names = get_names_and_indices(
+        config_dict, dtp_rank, dtp_worldsize, for_plot=True
+    )
 
     # global names for logging
     if dist.get_world_size(group=channel_group) > 1:
@@ -61,24 +83,28 @@ def validate(
 
     epoch_results = {}
     num_batches = 0
-    plot_step = config_dict["training"]["plot_step"]
+    plot_step = config_dict["training"].get("plot_step", 5)
 
     # loop through dataloader
     for i, (x, y, start, end) in enumerate(dataloader):
         x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
+        y_unmasked = y.to(device, non_blocking=True)
 
         # prediction
         samples = model(x, samples=n_samples)
+
+        y = y_unmasked * expert_weights.reshape(1, -1, 1, 1)
+        samples = samples * expert_weights.reshape(1, 1, -1, 1, 1)
 
         val_results = calculate_aggregate_metrics(
             samples,
             y,
             model,
+            expert_weights,
+            local_exp_agg,
             len(dataloader.dataset),
             data_means,
             data_std,
-            groups,
             spatial_weights,
             local_indices,
             climatology=None,
@@ -96,10 +122,11 @@ def validate(
         if epoch % plot_step == 0 and i == 0:
             generate_distributed_plots(
                 samples,
-                y,
+                y_unmasked,
                 data_means,
                 data_std,
-                groups,
+                ep_group,
+                expert_weights,
                 plot_indices,
                 plot_names,
                 epoch,
@@ -118,17 +145,25 @@ def validate(
                 dist.all_reduce(epoch_results[k], op=dist.ReduceOp.AVG, group=dp_group)
 
             if ep_group is not None and dist.get_world_size(ep_group) > 1:
-                dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+                if epoch_results[k].numel() > 1:
+                    # dist.all_reduce(epoch_results[k], op=dist.ReduceOp.SUM, group=ep_group)
+                    epoch_results[k] = exp_agg(epoch_results[k])
+                # elif k == "data_fit":
+                #    pass
+                elif k == "prior_matching":
+                    dist.all_reduce(
+                        epoch_results[k], op=dist.ReduceOp.AVG, group=ep_group
+                    )
 
-        if "mse" in epoch_results.keys():
-            epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
-            epoch_results.pop("mse")
+    if "mse" in epoch_results.keys():
+        epoch_results["rmse"] = torch.sqrt(epoch_results["mse"])
+        epoch_results.pop("mse")
 
-        if "avg_var" in epoch_results.keys() and "rmse" in epoch_results.keys():
-            epoch_results["spread_skill"] = (
-                torch.sqrt(epoch_results["avg_var"]) / epoch_results["rmse"]
-            )
-            epoch_results.pop("avg_var")
+    if "avg_var" in epoch_results.keys() and "rmse" in epoch_results.keys():
+        epoch_results["spread_skill"] = (
+            torch.sqrt(epoch_results["avg_var"]) / epoch_results["rmse"]
+        )
+        epoch_results.pop("avg_var")
 
     # save results
     if dist.get_rank() == 0:
@@ -137,7 +172,7 @@ def validate(
         print(f"{'=' * 50}")
 
         for k, v in epoch_results.items():
-            if isinstance(v, torch.Tensor) and v.dim() > 0:
+            if isinstance(v, torch.Tensor) and v.dim() > 0 and v.numel() > 1:
                 print(f"\n{k.upper()}:")
                 for var_name, val in zip(global_names, v):
                     print(f"  {var_name}: {val.item():.6f}")
@@ -149,7 +184,13 @@ def validate(
         # save to hdf5
         h5_path = Path(results_path) / "evaluation_metrics.h5"
         try:
-            log_epoch_to_hdf5(epoch_results, global_names, epoch, h5_path)
+            log_epoch_to_hdf5(
+                epoch_results,
+                global_names,
+                epoch,
+                h5_path,
+                config_dict=(config_dict if epoch == 0 else None),
+            )
         except Exception as e:
             print(f"WARNING: HDF5 Logging failed! Error: {e}")
             print("Metrics are still preserved in this Slurm log above.")
@@ -170,22 +211,29 @@ def calculate_aggregate_metrics(
     samples,
     target,
     model,
+    expert_weights,
+    expert_agg,
     dataset_size,
     data_mean,
     data_std,
-    groups,
     spatial_weights,
     indices,
     climatology=None,
 ):
-    up_group = groups["SP"]
-    dtp_group = groups["DTP"]
-    spatial_group = groups["JSpatial"]
-    channel_group = groups["JChannel"]
+    up_group = get_process_group("SP")
+    dtp_group = get_process_group("DTP")
+    spatial_group = get_process_group("JSpatial")
+    channel_group = get_process_group("JChannel")
 
     target = target[:, indices]
     samples = samples[:, :, indices]
 
+    local_var_slice = slice(0, len(data_mean) // 2)
+    if channel_group.rank() > 0:
+        local_var_slice = slice(len(data_mean) // 2, None)
+
+    data_mean = data_mean[local_var_slice]
+    data_std = data_std[local_var_slice]
     data_mean = data_mean[indices]
     data_std = data_std[indices]
 
@@ -193,7 +241,33 @@ def calculate_aggregate_metrics(
         climatology = climatology[indices]
 
     # calculate mean and std
-    mean, std = GaussianAggregation.apply(samples, up_group)
+    mean, std = GaussianAggregation.apply(samples, up_group, expert_weights[indices])
+
+    # likelihood and KL
+    kl_loss = torch_blue.vi.AnalyticalKullbackLeiblerLoss(
+        model,
+        torch_blue.vi.distributions.MeanFieldNormal(),
+        divergence_type=torch_blue.vi.NormalNormalDivergence(),
+        dataset_size=dataset_size,
+    )
+    data_fit = -dataset_size * (
+        kl_loss.predictive_distribution.log_prob_from_parameters(
+            target, (mean, std)
+        ).mean(dim=0, keepdim=True)
+    )
+    data_fit = expert_agg(data_fit)
+    data_fit = data_fit.sum()
+    if dist.get_world_size(dtp_group) > 1:
+        dist.all_reduce(data_fit, op=dist.ReduceOp.SUM, group=dtp_group)
+
+    prior_matching = kl_loss.prior_matching()
+    if dist.get_world_size(channel_group) > 1:
+        dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=channel_group)
+
+    # mask std for other metrics
+    std = std * expert_weights.reshape(1, -1, 1, 1)
+
+    # calculate ACC
 
     acc = None
     if climatology is not None:
@@ -207,36 +281,16 @@ def calculate_aggregate_metrics(
             spatial_group,
         )
 
-    # calculate rmse
+    # calculate rmse (surrogate)
     rmse_sq_map = (mean - target) ** 2
     rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
 
-    # calculate crps
-    crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
-    crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
+    # calculate crps TODO: find a working implementation later
+    # crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
+    # crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
 
-    # calculate spread-skill ratio
+    # calculate spread-skill ratio (surrogate)
     avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
-
-    # likelihood and KL
-    kl_loss = torch_blue.vi.AnalyticalKullbackLeiblerLoss(
-        model,
-        torch_blue.vi.distributions.MeanFieldNormal(),
-        divergence_type=torch_blue.vi.NormalNormalDivergence(),
-        dataset_size=dataset_size,
-    )
-    data_fit = (
-        -dataset_size
-        * kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std))
-        .mean(dim=0)
-        .sum()
-    )
-    if dist.get_world_size(dtp_group) > 1:
-        dist.all_reduce(data_fit, op=dist.ReduceOp.SUM, group=dtp_group)
-
-    prior_matching = kl_loss.prior_matching()
-    if dist.get_world_size(channel_group) > 1:
-        dist.all_reduce(prior_matching, op=dist.ReduceOp.SUM, group=channel_group)
 
     # flatten for calculation
     std_1d = data_std.flatten()
@@ -246,7 +300,7 @@ def calculate_aggregate_metrics(
         "data_fit": data_fit,
         "prior_matching": prior_matching,
         "mse": rmse_sq * (std_1d**2),
-        "crps": crps * std_1d,
+        # "crps": crps * std_1d,
         "avg_var": avg_var * (std_1d**2),
     }
 
@@ -255,7 +309,7 @@ def calculate_aggregate_metrics(
 
     final_results = {}
     for key, val in local_results.items():
-        if val.dim() > 0:
+        if val.dim() > 0 and key not in ["data_fit", "prior_matching"]:
             if dist.get_world_size(channel_group) > 1:
                 gathered_list = [
                     None for _ in range(dist.get_world_size(channel_group))
@@ -370,15 +424,62 @@ def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
     return mae_part - spread_part
 
 
-def get_names_and_indices(config_dict, rank, for_plot=False):
+def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
 
     training_dict = config_dict.get("training", {})
 
+    # All global variables
+    """
+    all_s = config_dict["data"]["out_surface_variables"]
+    all_p = config_dict["data"]["out_pressure_variables"]
+    all_l = config_dict["data"]["out_pressure_levels"]
+    """
+
+    all_s = [
+        "mean_sea_level_pressure",
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "2m_temperature",
+        "sea_surface_temperature",
+        "total_precipitation",
+    ]
+
+    all_p = [
+        "geopotential",
+        "specific_humidity",
+        "temperature",
+        "u_component_of_wind",
+        "v_component_of_wind",
+        "vertical_velocity",
+    ]
+
+    all_l = [
+        "1000",
+        "925",
+        "850",
+        "700",
+        "600",
+        "500",
+        "400",
+        "300",
+        "250",
+        "200",
+        "150",
+        "100",
+        "50",
+    ]
+
     if for_plot:
-        target_s_vars = training_dict.get("plot_surface_variables", [])
-        target_p_vars = training_dict.get("plot_pressure_variables", [])
-        target_p_levels = training_dict.get("plot_pressure_levels", [])
+        target_s_vars = training_dict.get(
+            "plot_surface_variables",
+            ["mean_sea_level_pressure", "2m_temperature", "total_precipitation"],
+        )
+        target_p_vars = training_dict.get(
+            "plot_pressure_variables", ["geopotential", "u_component_of_wind"]
+        )
+        target_p_levels = training_dict.get("plot_pressure_levels", ["850", "500"])
     else:
+        """
         target_s_vars = training_dict.get(
             "eval_surface_variables", config_dict["data"]["out_surface_variables"]
         )
@@ -388,18 +489,18 @@ def get_names_and_indices(config_dict, rank, for_plot=False):
         target_p_levels = training_dict.get(
             "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
         )
+        """
+        target_s_vars = all_s.copy()
+        target_p_vars = all_p.copy()
+        target_p_levels = all_l.copy()
 
-    # All global variables
-    all_s = config_dict["data"]["out_surface_variables"]
-    all_p = config_dict["data"]["out_pressure_variables"]
-    all_l = config_dict["data"]["out_pressure_levels"]
+    # num_vars = int(config_dict["data"]["n_variables"])
+    num_vars = len(all_s) + len(all_p) * len(all_l)
 
-    num_vars = int(config_dict["data"]["n_variables"])
-
-    if dist.get_world_size() > 1:
+    if world_size > 1:
         row = rank % 2
-        local_start = row * num_vars // 2
-        local_end = (row + 1) * num_vars // 2
+        local_start = row * (num_vars // 2)
+        local_end = (row + 1) * (num_vars // 2)
     else:
         local_start = 0
         local_end = num_vars
@@ -442,47 +543,9 @@ def get_spatial_weights(config_dict, device):
     return weight.view(1, 1, n_lat, 1)
 
 
-def get_variable_weights(config_dict, rank, device):
-    # check total variables
-    n_total_vars = config_dict["data"]["n_variables"]
-
-    # check if weights are in config (if not return unweighted tensor)
-    has_surface = "surface_weights" in config_dict.get("training", {})
-    has_pressure = "pressure_weights" in config_dict.get("training", {})
-
-    if has_surface and has_pressure:
-        surface_weights = torch.tensor(
-            config_dict["training"]["surface_weights"], device=device
-        )
-        p_weights_raw = torch.tensor(
-            config_dict["training"]["pressure_weights"], device=device
-        )
-
-        n_p_vars = len(config_dict["data"]["out_pressure_variables"])
-        n_p_levels = len(config_dict["data"]["out_pressure_levels"])
-
-        pressure_weights = (
-            p_weights_raw.unsqueeze(1).expand(n_p_vars, n_p_levels).flatten()
-        )
-        all_var_weights = torch.cat([surface_weights, pressure_weights])
-    else:
-        # All weights are 1.0
-        if dist.get_rank() == 0:
-            print(
-                "WARNING: Variable weights missing in config. Using equal weighting (1.0)."
-            )
-        all_var_weights = torch.ones(n_total_vars, device=device)
-
-    row = rank % 2
-    start_idx = row * n_total_vars // 2
-    end_idx = (row + 1) * n_total_vars // 2
-
-    local_weights = all_var_weights[start_idx:end_idx]
-
-    return local_weights
-
-
 def load_climatology(config_dict, rank, device):
+    # TODO: hardcode the variables, "unhardcode" fixed xlat / xlon
+
     # number of pressure levels
     num_p_vars = len(config_dict["data"]["out_pressure_levels"]) * len(
         config_dict["data"]["out_pressure_variables"]
@@ -560,23 +623,26 @@ def generate_distributed_plots(
     target,
     data_mean,
     data_std,
-    groups,
+    expert_group,
+    expert_weights,
     plot_indices,
     plot_names,
     epoch,
     file_path,
 ):
 
-    up_group = groups["SP"]
-    spatial_group = groups["JSpatial"]
-    channel_group = groups["JChannel"]
+    up_group = get_process_group("SP")
+    spatial_group = get_process_group("JSpatial")
+    channel_group = get_process_group("JChannel")
 
     # slice and unnormalize - only indices to be plotted
     if len(plot_indices) > 0:
         local_samples = samples[:, :, plot_indices]
         local_target = target[:, plot_indices]
 
-        mean, _ = GaussianAggregation.apply(local_samples, up_group)
+        mean, _ = GaussianAggregation.apply(
+            local_samples, up_group, expert_weights[plot_indices]
+        )
 
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
@@ -599,8 +665,14 @@ def generate_distributed_plots(
         full_lon_pred, plot_names, channel_group
     )
     global_target, _ = gather_vars_for_plot(full_lon_target, plot_names, channel_group)
+    global_mask, _ = gather_vars_for_plot(
+        expert_weights[plot_indices].unsqueeze(dim=0), plot_names, channel_group
+    )
 
-    # TODO maybe there needs to be an expert aggregation here (unsure)
+    expert_agg = ExpertAggregation(expert_group, global_mask)
+
+    # aggregation over all the experts (not needed for targets)
+    global_pred = expert_agg(global_pred)
 
     # plot
     if dist.get_rank() == 0 and len(global_plot_names) > 0:
@@ -662,11 +734,17 @@ def generate_distributed_plots(
             print(f"Saved plot: {save_path}")
 
 
-def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath):
+def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath, config_dict=None):
     filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(filepath, "a") as f:
+        if config_dict is not None:
+            conf_grp = f.require_group("config")
+            conf_grp.create_dataset(
+                "json", dtype=h5py.string_dtype(), data=json.dumps(config_dict)
+            )
+
         # results grouped by epoch
         epoch_grp = f.require_group(f"epoch_{epoch}")
 
@@ -687,3 +765,34 @@ def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath):
                 epoch_grp.create_dataset(metric_name, data=val)
 
     print(f"Epoch {epoch} validation metrics saved successfully to {filepath}")
+
+
+class ExpertAggregation(nn.Module):
+    def __init__(self, ep_group, expert_weights):
+        super().__init__()
+
+        self.ep_group = ep_group
+
+        if ep_group.size() > 1:
+            temp_expert_weights = expert_weights.clone().detach().contiguous()
+            dist.all_reduce(temp_expert_weights, op=dist.ReduceOp.SUM, group=ep_group)
+
+            self.ep_normalizations = temp_expert_weights.reshape(-1)
+            # (batch, channel, lat, lon)
+
+    def forward(self, x):
+        if self.ep_group.size() <= 1:
+            return x
+
+        if x.dim() > 4:
+            normalization = self.ep_normalizations.reshape(1, 1, -1, 1, 1)
+        elif x.dim() == 4:
+            normalization = self.ep_normalizations.reshape(1, -1, 1, 1)
+        else:
+            normalization = self.ep_normalizations
+
+        y = x.clone()
+        dist.all_reduce(y, op=dist.ReduceOp.SUM, group=self.ep_group)
+        y = y / normalization
+
+        return y

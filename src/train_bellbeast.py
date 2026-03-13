@@ -13,6 +13,8 @@ import yaml
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
+# Import evaluation
+from evaluation import validate
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
@@ -43,7 +45,8 @@ def training_loop(config_dict):
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    set_all_seeds(dtp_group.rank())
+    initialization_rank = dtp_group.rank() + ep_group.rank() * dtp_group.size()
+    set_all_seeds(initialization_rank)
 
     model = Bellbeast(
         xlat=config_dict["data"]["xlat"],
@@ -83,6 +86,9 @@ def training_loop(config_dict):
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
         )
 
+        if not os.path.exists(os.path.join(os.getenv("WORKDIR"), "logs/timings")):
+            os.makedirs(os.path.join(os.getenv("WORKDIR"), "logs/timings"))
+
     # Make model Bayesian
     convert_jigsaw_vi(model)
     model.return_log_probs = False
@@ -101,6 +107,20 @@ def training_loop(config_dict):
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
         mode="train",
+    )
+
+    valid_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="validation",
+    )
+
+    validation_results_path = os.path.join(
+        os.getenv("WORKDIR"),
+        "results",
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID"),
     )
 
     loss_fn = UP_AllGaussLoss(
@@ -136,6 +156,18 @@ def training_loop(config_dict):
             dtp_group=dtp_group,
         )
 
+        # data_fit_loss, prior_matching_loss = validate(
+        validate(
+            config_dict=config_dict,
+            model=model,
+            expert_weights=expert_loss_weighting,
+            n_samples=n_samples,
+            dataloader=valid_dataloader,
+            device=device,
+            epoch=epoch,
+            results_path=validation_results_path,
+        )
+
         end_time = time.perf_counter()
 
         for t in timings:
@@ -145,6 +177,9 @@ def training_loop(config_dict):
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
             )
+            # print(
+            #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
+            # )
 
     time_df = pd.DataFrame(
         time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
