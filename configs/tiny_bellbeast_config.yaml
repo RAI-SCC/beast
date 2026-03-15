@@ -3,7 +3,7 @@ data:
     train_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
     valid_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr"
     constant_masks_path: "constant_masks"
-    constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
+    constant_masks : ["soil_type_121_240.npy", "geopotential_at_surface_121_240.npy", "land_sea_mask_121_240.npy"]
     preprocessed: False
     normalization_dir: "data/normalization"
     train_subset: -1

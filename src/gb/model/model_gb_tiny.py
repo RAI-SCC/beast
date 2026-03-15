@@ -1,8 +1,11 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 
-from gb.model.expert import ExpertWeightingLayer
+from src.gb.model.expert import ExpertWeightingLayer
+
 
 class TinyBellbeast(torch.nn.Module):
     def __init__(
@@ -330,7 +333,6 @@ class TinyBellbeast(torch.nn.Module):
         return x
 
 
-
 class NiceWindowedTransformerBlock(torch.nn.Module):
     def __init__(
         self,
@@ -348,8 +350,7 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         self.heads = heads
         self.output_dim = output_dim
         self.noise_dim = noise_dim
-        
-        
+
         self.attention_block = WindowedAttention(
             self.x_features,
             self.embed_dim,
@@ -359,20 +360,21 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
 
         self.layer_norm1 = NiceNorm(output_dim, self.noise_dim, device).to(device)
         self.layer_norm2 = NiceNorm(output_dim, self.noise_dim, device).to(device)
-        
+
         self.MLP = MLP(
             output_dim,
             output_dim,
             output_dim,
         ).to(device)
 
-        #_average_weights(self, spatial_group, device)
+        # _average_weights(self, spatial_group, device)
 
     def forward(self, x: torch.tensor, noise: torch.tensor, mask=None):
         x = self.attention_block(self.layer_norm1(x, noise), mask) + x
         x = self.MLP(self.layer_norm2(x, noise)) + x
-        
+
         return x
+
 
 class WindowedAttention(nn.Module):
     """
@@ -383,7 +385,7 @@ class WindowedAttention(nn.Module):
 
     def __init__(
         self,
-        x_features
+        x_features,
         embed_dim,
         output_dim,
         heads,
@@ -395,14 +397,13 @@ class WindowedAttention(nn.Module):
 
         # Initialize several operations
         # Should make sense to use dim*3 to generate the vectors for a qkv matrix
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
+        self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
         self.softmax = nn.Softmax(dim=-1)
         self.linear = nn.Linear(embed_dim, embed_dim)
 
         # Store several attributes
         self.heads = heads
         self.scale = (embed_dim // heads) ** -0.5
-     
 
     def forward(self, x, mask):
         """
@@ -424,26 +425,25 @@ class WindowedAttention(nn.Module):
 
         # reshape the data to calculate multi-head attention
         qkv = self.qkv(x_patches_local).reshape(
-                (
+            (
                 x.shape[0],
                 x.shape[1],
                 3,
                 self.head_number,
                 self.dim // self.head_number,
-                )
             )
-        q, k, v = ptorch.tensor_split(qkv, 3, dim=-1)
+        )
+        q, k, v = torch.tensor_split(qkv, 3, dim=-1)
 
         # Scale the attention
         q = q * self.scale
 
         # Calculated the attention, a learnable bias is added to fix the nonuniformity of the grid.
         # Attention shape: nB * n_windows, nHeads, N, N (n_patch_in_window = W0*W1*W2)
-        attention = query @ key.transpose(-2, -1)  # @ denotes matrix multiplication
+        attention = q @ k.transpose(-2, -1)  # @ denotes matrix multiplication
 
         if mask is not None:
             attention = attention + mask
-
 
         attention = self.softmax(attention)
 
@@ -451,6 +451,7 @@ class WindowedAttention(nn.Module):
         values = self.linear(values)
 
         return values
+
 
 class MLP(nn.Module):
     """MLP."""
@@ -460,8 +461,8 @@ class MLP(nn.Module):
         input_dim,
         hidden_dim,
         output_dim,
-        device=None, 
-        dtype=None
+        device=None,
+        dtype=None,
         # dropout_rate
     ):
         """
@@ -483,6 +484,7 @@ class MLP(nn.Module):
         x = self.activation(x)
         x = self.linear2(x)
         return x
+
 
 class NiceNorm(nn.Module):
     def __init__(self, normalized_shape, noise_dim, eps=1e-5, device=None, dtype=None):
@@ -565,4 +567,3 @@ class NiceNorm(nn.Module):
         x = scale * x + shift
 
         return x
-

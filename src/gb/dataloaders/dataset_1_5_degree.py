@@ -75,12 +75,6 @@ class ERA5DatasetDownsampled(Dataset):
 
         self.level_ordering = range(13 - 1, -1, -1)
 
-        self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
-
-
-        self.in_masks = [0, self.num_masks]
-        self.in_out_xlon = [0, self.xlon]
-
     def __len__(self):
         """Return total number of samples."""
         return self.n_data_items - self.dt
@@ -94,7 +88,12 @@ class ERA5DatasetDownsampled(Dataset):
         """
         target_idx = idx + self.dt
 
-        input_pressure = self.zarr_data.isel(time=idx, level=self.level_ordering)[
+        input_pressure = self.zarr_data.isel(
+            time=idx,
+            level=self.level_ordering,
+            latitude=range(0, self.xlat),
+            longitude=range(0, self.xlon),
+        )[
             [
                 "geopotential",
                 "specific_humidity",
@@ -103,7 +102,9 @@ class ERA5DatasetDownsampled(Dataset):
                 "v_component_of_wind",
             ]
         ]
-        input_surface = self.zarr_data.isel(time=idx)[
+        input_surface = self.zarr_data.isel(
+            time=idx, latitude=range(0, self.xlat), longitude=range(0, self.xlon)
+        )[
             [
                 "mean_sea_level_pressure",
                 "10m_u_component_of_wind",
@@ -132,6 +133,8 @@ class ERA5DatasetDownsampled(Dataset):
             ],
             axis=0,
         )
+        input_pressure = np.permute_dims(input_pressure, (0, 1, 3, 2))
+        input_surface = np.permute_dims(input_surface, (0, 2, 1))
 
         input_pressure = (input_pressure - self.p_mean) / self.p_std
         input_surface = (input_surface - self.s_mean) / self.s_std
@@ -148,7 +151,10 @@ class ERA5DatasetDownsampled(Dataset):
 
         # Output data
         target_pressure = self.zarr_data.isel(
-            time=target_idx, level=self.level_ordering
+            time=target_idx,
+            level=self.level_ordering,
+            latitude=range(0, self.xlat),
+            longitude=range(self.xlon),
         )[
             [
                 "geopotential",
@@ -158,7 +164,9 @@ class ERA5DatasetDownsampled(Dataset):
                 "v_component_of_wind",
             ]
         ]
-        target_surface = self.zarr_data.isel(time=target_idx)[
+        target_surface = self.zarr_data.isel(
+            time=target_idx, latitude=range(0, self.xlat), longitude=range(self.xlon)
+        )[
             [
                 "mean_sea_level_pressure",
                 "10m_u_component_of_wind",
@@ -188,6 +196,9 @@ class ERA5DatasetDownsampled(Dataset):
             axis=0,
         )
 
+        target_pressure = np.permute_dims(target_pressure, (0, 1, 3, 2))
+        target_surface = np.permute_dims(target_surface, (0, 2, 1))
+
         target_pressure = (target_pressure - self.p_mean) / self.p_std
         target_surface = (target_surface - self.s_mean) / self.s_std
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
@@ -199,7 +210,9 @@ class ERA5DatasetDownsampled(Dataset):
         return input, target
 
     def get_constant_masks(self):
-        return torch.tensor(self.constant_masks).to(torch.float32)
+        return torch.tensor(self.constant_masks[:, : self.xlat, : self.xlon]).to(
+            torch.float32
+        )
 
     def _load_constant_mask_2d(self, folder_path, mask_list):
         """
@@ -232,7 +245,7 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
         normalize=True,
         dt=None,
     ):
-        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+        super().__init__(config, mode, normalize=normalize, dt=dt)
         if dist.get_rank(group=None) == 0:
             print("Loading two timeframes as input...")
 
@@ -249,7 +262,12 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
         """
         target_idx = idx + 2 * self.dt
 
-        input_pressure1 = self.zarr_data.isel(time=idx, level=self.level_ordering)[
+        input_pressure1 = self.zarr_data.isel(
+            time=idx,
+            level=self.level_ordering,
+            latitude=range(0, self.xlat),
+            longitude=range(self.xlon),
+        )[
             [
                 "geopotential",
                 "specific_humidity",
@@ -258,7 +276,9 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
                 "v_component_of_wind",
             ]
         ]
-        input_surface1 = self.zarr_data.isel(time=idx)[
+        input_surface1 = self.zarr_data.isel(
+            time=idx, latitude=range(0, self.xlat), longitude=range(self.xlon)
+        )[
             [
                 "mean_sea_level_pressure",
                 "10m_u_component_of_wind",
@@ -288,11 +308,18 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
             axis=0,
         )
 
+        input_pressure1 = np.permute_dims(input_pressure1, (0, 1, 3, 2))
+        input_surface1 = np.permute_dims(input_surface1, (0, 2, 1))
         input_pressure1 = (input_pressure1 - self.p_mean) / self.p_std
         input_surface1 = (input_surface1 - self.s_mean) / self.s_std
         input_pressure1 = input_pressure1.reshape(-1, self.xlat, self.xlon)
 
-        input_pressure2 = self.zarr_data.isel(time=idx, level=self.level_ordering)[
+        input_pressure2 = self.zarr_data.isel(
+            time=idx,
+            level=self.level_ordering,
+            latitude=range(0, self.xlat),
+            longitude=range(self.xlon),
+        )[
             [
                 "geopotential",
                 "specific_humidity",
@@ -301,7 +328,9 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
                 "v_component_of_wind",
             ]
         ]
-        input_surface2 = self.zarr_data.isel(time=idx)[
+        input_surface2 = self.zarr_data.isel(
+            time=idx, latitude=range(0, self.xlat), longitude=range(self.xlon)
+        )[
             [
                 "mean_sea_level_pressure",
                 "10m_u_component_of_wind",
@@ -331,6 +360,9 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
             axis=0,
         )
 
+        input_pressure2 = np.permute_dims(input_pressure2, (0, 1, 3, 2))
+        input_surface2 = np.permute_dims(input_surface2, (0, 2, 1))
+
         input_pressure2 = (input_pressure2 - self.p_mean) / self.p_std
         input_surface2 = (input_surface2 - self.s_mean) / self.s_std
         input_pressure2 = input_pressure2.reshape(-1, self.xlat, self.xlon)
@@ -348,7 +380,10 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
 
         # Output data
         target_pressure = self.zarr_data.isel(
-            time=target_idx, level=self.level_ordering
+            time=target_idx,
+            level=self.level_ordering,
+            latitude=range(0, self.xlat),
+            longitude=range(self.xlon),
         )[
             [
                 "geopotential",
@@ -358,7 +393,9 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
                 "v_component_of_wind",
             ]
         ]
-        target_surface = self.zarr_data.isel(time=target_idx)[
+        target_surface = self.zarr_data.isel(
+            time=target_idx, latitude=range(0, self.xlat), longitude=range(self.xlon)
+        )[
             [
                 "mean_sea_level_pressure",
                 "10m_u_component_of_wind",
@@ -388,6 +425,8 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
             axis=0,
         )
 
+        target_pressure = np.permute_dims(target_pressure, (0, 1, 3, 2))
+        target_surface = np.permute_dims(target_surface, (0, 2, 1))
         target_pressure = (target_pressure - self.p_mean) / self.p_std
         target_surface = (target_surface - self.s_mean) / self.s_std
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
