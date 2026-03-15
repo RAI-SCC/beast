@@ -1,0 +1,41 @@
+data:
+    dt: 6
+    train_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
+    valid_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr"
+    constant_masks_path: "constant_masks"
+    constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
+    preprocessed: False
+    normalization_dir: "data/normalization"
+    train_subset: -1
+    valid_subset: -1
+    train_time_range: ["1979-01-01", "2020-12-31"]
+    valid_time_range: ["2021-01-01", "2022-12-31"]
+    test_time_range: ["2021-01-01", "2022-12-31"]
+    dataset_subsampling: 1
+    target_subsampling: 6
+    prefetch_factor: 2
+    num_workers: 7
+    xlat: 120
+    xlon: 240
+    n_variables: 69
+    n_in_timesteps: 1 #Can be 1 or 2, other not supported atm
+model:
+    n_input_channels: 72 #Will be overwritten internally to fit the data set specifications
+    embedding_dimension: 384
+    n_output_channels: 69
+    n_attn_heads: 6
+    patch_size: 2
+    noise_dim: 32
+    window_size_outer: [6, 12]
+    window_size_inner: [6, 6]
+    n_attn_blocks: [3,2,3]
+    latent_rollout: 1
+training:
+    tf32: True
+    n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_epochs: 1
+    batch_size: 1
+model_parallel:
+    parallelism: 1
+    type: jigsaw
+mesh_dims: [4,16,1,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels

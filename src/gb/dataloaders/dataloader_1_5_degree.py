@@ -3,8 +3,56 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from gb.dataloaders.dataset_1_5_degree import WeatherTestDataset
+from gb.dataloaders.dataset_1_5_degree import (
+    ERA5DatasetDownsampled,
+    ERA5TwoTimestepsDatasetDownsampled,
+    WeatherTestDataset
+)
+from gb.dataloaders.dataloader_2_25_degree import GBDataLoader
 
+def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
+    dt = config_dict["data"]["dt"]
+    batch_size = config_dict["training"]["batch_size"]
+
+    if config_dict["data"]["n_in_timesteps"] == 2:
+        dataset = ERA5TwoTimestepsDatasetDownsampled(
+            config_dict,
+            mode=mode,
+            normalize=True,
+            dt=dt,
+        )
+    else:
+        dataset = ERA5DatasetDownsampled(
+            config_dict,
+            mode=mode,
+            normalize=True,
+            dt=dt,
+        )
+
+    if config_dict["data"]["train_subset"] > 0:
+        subset_indices = torch.arange(config_dict["data"]["train_subset"])
+        dataset = Subset(dataset, subset_indices)
+
+    sampler = DistributedSampler(
+        dataset,
+        shuffle=True,
+        rank=dp_process_group.rank(),
+        num_replicas=dp_process_group.size(),
+        seed=42,
+    )
+
+    dataloader = GBDataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        drop_last=True,
+        pin_memory=torch.cuda.is_available(),
+        prefetch_factor=config_dict["data"]["prefetch_factor"],
+        num_workers=config_dict["data"]["num_workers"],
+    )
+
+    return dataloader
 
 def get_test_dataloader(config, pg):
     dataset = WeatherTestDataset(config)

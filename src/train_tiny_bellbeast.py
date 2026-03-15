@@ -18,7 +18,7 @@ from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
-from gb.model.model_gb import Bellbeast
+from gb.model.model_gb_tiny import TinyBellbeast
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,
@@ -29,8 +29,6 @@ from gb.utils import (
 
 
 def training_loop(config_dict):
-    spatial_group = get_process_group("JSpatial")
-    channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
@@ -45,7 +43,7 @@ def training_loop(config_dict):
     # Define the Model
     set_all_seeds(dtp_group.rank())
 
-    model = Bellbeast(
+    model = TinyBellbeast(
         xlat=config_dict["data"]["xlat"],
         xlon=config_dict["data"]["xlon"],
         in_channels=config_dict["model"]["n_input_channels"],
@@ -61,15 +59,9 @@ def training_loop(config_dict):
         n_full_blocks=config_dict["model"][
             "n_attn_blocks"
         ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
-        dtp_rank=dtp_group.rank(),
         device=device,
-        dtp_group=dtp_group,
-        spatial_group=spatial_group,
-        channel_group=channel_group,
         ep_group=ep_group,
         up_group=up_group,
-        bayesian=True,
-        parallelism=config_dict["model_parallel"]["parallelism"],
     )
 
     model = model.to(torch.float32).to(device)
@@ -98,7 +90,6 @@ def training_loop(config_dict):
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
-        dtp_process_group=dtp_group,
         dp_process_group=dp_group,
         mode="train",
     )

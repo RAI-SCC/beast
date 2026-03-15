@@ -229,7 +229,6 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
         self,
         config,
         mode,
-        process_group,
         normalize=True,
         dt=None,
     ):
@@ -249,47 +248,154 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
                 global index of item
         """
         target_idx = idx + 2 * self.dt
-        x_t1 = self.zarr_data.isel(
-            time=idx,
-            feature=range(self.in_var[0], self.in_var[1]),
-            latitude=range(0, self.xlat),
-            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-        )["fields"].values
-        x_t1 = (
-            x_t1 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
-        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
-        x_t2 = self.zarr_data.isel(
-            time=(idx + self.dt),
-            feature=range(self.in_var[0], self.in_var[1]),
-            latitude=range(0, self.xlat),
-            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-        )["fields"].values
-        x_t2 = (
-            x_t2 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
-        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+        input_pressure1 = self.zarr_data.isel(time=idx, level=self.level_ordering)[
+            [
+                "geopotential",
+                "specific_humidity",
+                "temperature",
+                "u_component_of_wind",
+                "v_component_of_wind",
+            ]
+        ]
+        input_surface1 = self.zarr_data.isel(time=idx)[
+            [
+                "mean_sea_level_pressure",
+                "10m_u_component_of_wind",
+                "10m_v_component_of_wind",
+                "2m_temperature",
+            ]
+        ]
+
+        # Stack and convert to numpy array
+        input_pressure1 = np.stack(
+            [
+                input_pressure1["geopotential"].values,
+                input_pressure1["specific_humidity"].values,
+                input_pressure1["temperature"].values,
+                input_pressure1["u_component_of_wind"].values,
+                input_pressure1["v_component_of_wind"].values,
+            ],
+            axis=0,
+        )
+        input_surface1 = np.stack(
+            [
+                input_surface1["mean_sea_level_pressure"].values,
+                input_surface1["10m_u_component_of_wind"].values,
+                input_surface1["10m_v_component_of_wind"].values,
+                input_surface1["2m_temperature"].values,
+            ],
+            axis=0,
+        )
+
+        input_pressure1 = (input_pressure1 - self.p_mean) / self.p_std
+        input_surface1 = (input_surface1 - self.s_mean) / self.s_std
+        input_pressure1 = input_pressure1.reshape(-1, self.xlat, self.xlon)
+
+        input_pressure2 = self.zarr_data.isel(time=idx, level=self.level_ordering)[
+            [
+                "geopotential",
+                "specific_humidity",
+                "temperature",
+                "u_component_of_wind",
+                "v_component_of_wind",
+            ]
+        ]
+        input_surface2 = self.zarr_data.isel(time=idx)[
+            [
+                "mean_sea_level_pressure",
+                "10m_u_component_of_wind",
+                "10m_v_component_of_wind",
+                "2m_temperature",
+            ]
+        ]
+
+        # Stack and convert to numpy array
+        input_pressure2 = np.stack(
+            [
+                input_pressure2["geopotential"].values,
+                input_pressure2["specific_humidity"].values,
+                input_pressure2["temperature"].values,
+                input_pressure2["u_component_of_wind"].values,
+                input_pressure2["v_component_of_wind"].values,
+            ],
+            axis=0,
+        )
+        input_surface2 = np.stack(
+            [
+                input_surface2["mean_sea_level_pressure"].values,
+                input_surface2["10m_u_component_of_wind"].values,
+                input_surface2["10m_v_component_of_wind"].values,
+                input_surface2["2m_temperature"].values,
+            ],
+            axis=0,
+        )
+
+        input_pressure2 = (input_pressure2 - self.p_mean) / self.p_std
+        input_surface2 = (input_surface2 - self.s_mean) / self.s_std
+        input_pressure2 = input_pressure2.reshape(-1, self.xlat, self.xlon)
 
         input = torch.cat(
-            (torch.tensor(x_t2), torch.tensor(x_t2 - x_t1), self.get_constant_masks()),
+            (
+                torch.tensor(input_surface1),
+                torch.tensor(input_pressure1),
+                torch.tensor(input_surface2),
+                torch.tensor(input_pressure2),
+                self.get_constant_masks(),
+            ),
             dim=0,
         )
 
-        # Odd ranks load second half of variables, so they might have less masks
-        if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
-            input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
-
         # Output data
-        y = self.zarr_data.isel(
-            time=target_idx,
-            feature=range(self.in_var[0], self.in_var[1]),
-            latitude=range(0, self.xlat),
-            longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-        )["fields"].values
-        y = (
-            y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
-        ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+        target_pressure = self.zarr_data.isel(
+            time=target_idx, level=self.level_ordering
+        )[
+            [
+                "geopotential",
+                "specific_humidity",
+                "temperature",
+                "u_component_of_wind",
+                "v_component_of_wind",
+            ]
+        ]
+        target_surface = self.zarr_data.isel(time=target_idx)[
+            [
+                "mean_sea_level_pressure",
+                "10m_u_component_of_wind",
+                "10m_v_component_of_wind",
+                "2m_temperature",
+            ]
+        ]
 
-        target = torch.tensor(y)
+        # Stack and convert to numpy array
+        target_pressure = np.stack(
+            [
+                target_pressure["geopotential"].values,
+                target_pressure["specific_humidity"].values,
+                target_pressure["temperature"].values,
+                target_pressure["u_component_of_wind"].values,
+                target_pressure["v_component_of_wind"].values,
+            ],
+            axis=0,
+        )
+        target_surface = np.stack(
+            [
+                target_surface["mean_sea_level_pressure"].values,
+                target_surface["10m_u_component_of_wind"].values,
+                target_surface["10m_v_component_of_wind"].values,
+                target_surface["2m_temperature"].values,
+            ],
+            axis=0,
+        )
+
+        target_pressure = (target_pressure - self.p_mean) / self.p_std
+        target_surface = (target_surface - self.s_mean) / self.s_std
+        target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
+
+        target = torch.cat(
+            (torch.tensor(target_pressure), torch.tensor(target_surface)), dim=0
+        )
+
         return input, target
 
 
