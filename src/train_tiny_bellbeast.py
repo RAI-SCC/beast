@@ -223,10 +223,8 @@ def main():
 
     # append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
-    if n_masks % 2 == 1:
-        n_masks += 1
-
-    # default case: load only one timestep
+ 
+     # default case: load only one timestep
     if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
         config_dict["data"]["n_in_timesteps"] = 1
 

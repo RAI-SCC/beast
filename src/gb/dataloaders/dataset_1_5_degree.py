@@ -75,8 +75,8 @@ class ERA5DatasetDownsampled(Dataset):
 
         self.level_ordering = range(13 - 1, -1, -1)
 
-        self.in_var = config["data"]["variables"]
-        self.num_vars = len(self.in_var)
+        self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
+
 
         self.in_masks = [0, self.num_masks]
         self.in_out_xlon = [0, self.xlon]

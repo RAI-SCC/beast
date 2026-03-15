@@ -343,17 +343,22 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         device: torch.device,
     ):
         super().__init__()
+        self.x_features = x_features
+        self.embed_dim = embed_dim
+        self.heads = heads
+        self.output_dim = output_dim
         self.noise_dim = noise_dim
+        
+        
         self.attention_block = WindowedAttention(
-            x_features,
-            embed_dim,
-            output_dim,
-            heads,
-            device,
+            self.x_features,
+            self.embed_dim,
+            self.output_dim,
+            self.heads,
         ).to(device)
 
-        self.layer_norm1 = NICENorm(output_dim, self.noise_dim, device).to(device)
-        self.layer_norm2 = NICENorm(output_dim, self.noise_dim, device).to(device)
+        self.layer_norm1 = NiceNorm(output_dim, self.noise_dim, device).to(device)
+        self.layer_norm2 = NiceNorm(output_dim, self.noise_dim, device).to(device)
         
         self.MLP = MLP(
             output_dim,
@@ -382,11 +387,9 @@ class WindowedAttention(nn.Module):
         embed_dim,
         output_dim,
         heads,
-        device,
     ):
         super().__init__()
 
-        self.device = device
         self.embed_dim = embed_dim
         self.x_features = x_features
 
@@ -456,7 +459,9 @@ class MLP(nn.Module):
         self,
         input_dim,
         hidden_dim,
-        output_dim
+        output_dim,
+        device=None, 
+        dtype=None
         # dropout_rate
     ):
         """
@@ -468,8 +473,8 @@ class MLP(nn.Module):
         super().__init__()
         """MLP layers, same as most vision transformer architectures."""
 
-        self.linear1 = nn.Linear(input_dim, hidden_dim)
-        self.linear2 = nn.Linear(hidden_dim, output_dim)
+        self.linear1 = nn.Linear(input_dim, hidden_dim, device=device, dtype=dtype)
+        self.linear2 = nn.Linear(hidden_dim, output_dim, device=device, dtype=dtype)
         self.activation = nn.GELU()
 
     def forward(self, x):
