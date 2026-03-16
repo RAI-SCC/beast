@@ -57,17 +57,10 @@ class ERA5DatasetDistributed(Dataset):
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
-        self.norm = netCDF4.Dataset(f"{config['data']['normalization_dir']}/norms.nc")
-        self.norm_values = {
-            "mean": np.array(self.norm["mean"]).reshape(self.num_vars, 1, 1),
-            "std": np.array(self.norm["std"]).reshape(self.num_vars, 1, 1),
-        }
-        # dummy norm values for code testing
-        # self.norm_values = {
-        #     "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
-        #     "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
-        # }
-
+        self.norm_values = {}
+        self.norm_values["mean"] = np.load(f"{config["data"]["normalization_dir"]}/norm_mean.npy")
+        self.norm_values["std"] = np.load(f"{config["data"]["normalization_dir"]}/norm_std.npy")
+        
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
