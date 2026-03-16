@@ -12,7 +12,7 @@ set -euo pipefail
 # ---------------------------
 # EXP_NAME="weak_model_lsn"
 # VAR_NAME="lsn"
-# VARS=(1 2 4 8 16)
+# VARS=(1 2 4 8)
 # NODES=(2) # stays constant
 # X_AXIS_NAME=${VAR_NAME}
 
@@ -36,9 +36,10 @@ set -euo pipefail
 
 # EXP_NAME="weak_model_dim"
 # VAR_NAME="embed_dim"
-# VARS=(128 256 512 1024 2048 4096)
+# VARS=(128 256)
 # NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
+# SUBSET_SIZE=100
 
 # ---------------------------
 # MULTI-NODE EXPERIMENTS
@@ -51,8 +52,9 @@ set -euo pipefail
 # EXP_NAME="lsn_multinode"
 # VAR_NAME="lsn"
 # VARS=(1)
-# NODES=(2 4 8 16 32 64 128 256 512)
+# NODES=(32 64 128 256)
 # X_AXIS_NAME="nodes"
+SUBSET_SIZE=100
 
 # ---------------------------
 # Exp 2: Increase global batch size by increasing node count
@@ -63,7 +65,8 @@ set -euo pipefail
 EXP_NAME="lbs_multinode"
 VAR_NAME="lbs"
 VARS=(1)
-NODES=(4 8)
+NODES=(16 32 64)
+SUBSET_SIZE=4000
 X_AXIS_NAME="nodes"
 
 # ── System (can be overridden via flags) ────────────────────────────────────
@@ -156,8 +159,9 @@ EOF
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
-        --train_subset 100 \
+        --train_subset ${SUBSET_SIZE} \
         --"${VAR_NAME}" ${VAR} \
+        --embed_dim 1024 \
         --scaling True \
         --nodes "${NODE}" )
 
