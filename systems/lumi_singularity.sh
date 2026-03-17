@@ -12,6 +12,7 @@ export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
 
 export DATA_DIR=$SCRATCH_DIR/data/
+export OUPUT_DIR=$PROJECT_DIR/output
 
 # =============================================================================
 # Environment configuration
@@ -29,8 +30,8 @@ export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
 
 # RCCL Configuration
 export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
-# export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
-# export NCCL_NET_GDR_LEVEL=3
+export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
+export NCCL_NET_GDR_LEVEL="PHB"
 
 # Libfabric/CXI for Slingshot
 # export FI_CXI_ATS=0
@@ -70,7 +71,7 @@ export SYSTEM_SLURM_PARAMS=(
 )
 
 setup_system(){
-#    module purge
+    # module purge
     echo "Setting up LUMI-G environment..."
     module use /appl/local/containers/ai-modules
     module load singularity-AI-bindings
@@ -90,11 +91,11 @@ setup_system(){
 
 init_system(){
     module use /appl/local/containers/ai-modules
-	module load singularity-AI-bindings
-	singularity exec $SIF python -m venv $VENV_DIR --system-site-packages
-	singularity exec $SIF systems/venv_entry.sh pip install --upgrade pip
-	singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
-	singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
-	singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
-	singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
+    module load singularity-AI-bindings
+    singularity exec $SIF python -m venv $VENV_DIR --system-site-packages
+    singularity exec $SIF systems/venv_entry.sh pip install --upgrade pip
+    singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
+    singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
+    singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
+    singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
 }

@@ -1,6 +1,6 @@
 data:
-    dt: 6
-    train_data_path: "era5_preprocessed.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
+    dt: 6 # Hours
+    train_data_path: "era5_preprocessed.zarr"
     valid_data_path: "era5_preprocessed.zarr"
     constant_masks_path: "constant_masks"
     constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]

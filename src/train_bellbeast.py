@@ -30,6 +30,8 @@ from gb.utils import (
     set_all_seeds,
     set_dtype,
 )
+from gb.config import setup_config_dict
+
 
 
 def training_loop(config_dict):
@@ -91,9 +93,6 @@ def training_loop(config_dict):
         print(
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
         )
-
-        if not os.path.exists(os.path.join(os.getenv("WORKDIR"), "logs/timings")):
-            os.makedirs(os.path.join(os.getenv("WORKDIR"), "logs/timings"))
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -196,17 +195,21 @@ def training_loop(config_dict):
             #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
             # )
 
-    time_df = pd.DataFrame(
-        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
-    )
-    time_df.to_csv(
-        os.path.join(
-            os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
-        ),
-        sep=";",
-        index=False,
-    )
+    if config_dict["timings"]:
+        timings_path = f"{os.getenv('PROJECT_DIR')}/{os.getenv('SLURM_JOB_NAME')}/timings"
+        if not os.path.exists(timings_path):
+            os.makedirs(timings_path)
+        time_df = pd.DataFrame(
+            time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
+        )
+        time_df.to_csv(
+            os.path.join(
+                timings_path,
+                f"timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+            ),
+            sep=";",
+            index=False,
+        )
 
 
 def train_one_epoch(
@@ -256,13 +259,10 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
-    parser.add_argument("--scaling", default=False)
-    parser.add_argument("--train_subset")
-    parser.add_argument("--embed_dim")
-    parser.add_argument("--n_attn_blocks")
-    parser.add_argument("--lbs")
-    parser.add_argument("--lsn")
-    parser.add_argument("--nodes", default=2)
+    parser.add_argument("--scaling", action="store_true")
+    parser.add_argument("--timings", action="store_true")
+    parser.add_argument("configargs", nargs="*")
+    
 
     args = parser.parse_args()
 
@@ -271,28 +271,7 @@ def main():
 
     # If we are performing a scaling experiment, read the command line arguments.
     # Otherwise, the arguments will not be read.
-    if args.scaling:
-        if args.train_subset is not None:
-            config_dict["data"]["train_subset"] = int(args.train_subset)
-        if args.embed_dim is not None:
-            config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
-        if args.n_attn_blocks is not None:
-            config_dict["model"]["n_attn_blocks"] = [
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-            ]
-        if args.lbs is not None:
-            config_dict["training"]["batch_size"] = int(args.lbs)
-            # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
-            # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
-            
-        if args.lsn is not None:
-            config_dict["training"]["n_samples"] = int(args.lsn)
-            # If we are scaling across nodes and modifying the node count
-            # if int(args.nodes) > 2:
-            config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
+    config_dict = setup_config_dict(config_dict, args)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
@@ -300,46 +279,6 @@ def main():
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)
-
-    ### Data Stuff ###
-    WORKDIR = os.getenv("WORKDIR")
-
-    if os.getenv("DATA_DIR") is not None:
-        config_dict["data"]["train_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
-        )
-        config_dict["data"]["valid_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
-        )
-        config_dict["data"]["constant_masks_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
-        )
-
-    # append n_masks for odd number of masks (the dataset does this, too)
-    n_masks = len(config_dict["data"]["constant_masks"])
-    if n_masks % 2 == 1:
-        n_masks += 1
-
-    # default case: load only one timestep
-    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
-        config_dict["data"]["n_in_timesteps"] = 1
-
-    n_input_vars = (
-        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
-    )
-
-    # we'll set this automatically, to avoid confusion when defining the config,
-    # as n_input_channels depends on how many timesteps we use as concatenated input
-    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
-    config_dict["model"]["embedding_dimension"] = (
-        config_dict["model"]["embedding_dimension"]
-        * config_dict["data"]["n_in_timesteps"]
-    )
-
-    if "normalization_dir" in config_dict["data"]:
-        config_dict["data"]["normalization_dir"] = (
-            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
-        )
 
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
