@@ -1,6 +1,5 @@
 import os
 
-import netCDF4
 import numpy as np
 import pandas as pd
 import torch
@@ -58,9 +57,13 @@ class ERA5DatasetDistributed(Dataset):
 
         # normalization for pressure levels and standard deviation
         self.norm_values = {}
-        self.norm_values["mean"] = np.load(f"{config["data"]["normalization_dir"]}/norm_mean.npy")
-        self.norm_values["std"] = np.load(f"{config["data"]["normalization_dir"]}/norm_std.npy")
-        
+        self.norm_values["mean"] = np.load(
+            f"{config['data']['normalization_dir']}/norm_mean.npy"
+        )
+        self.norm_values["std"] = np.load(
+            f"{config['data']['normalization_dir']}/norm_std.npy"
+        )
+
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
