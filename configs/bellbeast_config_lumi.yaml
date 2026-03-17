@@ -23,11 +23,7 @@ model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 1024
     n_output_channels: 84
-<<<<<<< HEAD:configs/bellbeast_config_lumi.yaml
     n_attn_heads: 4
-=======
-    n_attn_heads: [6, 6, 6]
->>>>>>> main:configs/bellbeast_config.yaml
     patch_size: 2
     noise_dim: 32
     window_size_outer: [12, 30]
