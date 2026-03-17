@@ -2,7 +2,6 @@ import argparse
 import os
 import time
 
-import pandas as pd
 import torch
 import torch.distributed as dist
 
@@ -46,13 +45,13 @@ def training_loop(config_dict):
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
 
-    time_log = []
-
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    initialization_rank = dtp_group.rank() + ep_group.rank() * dtp_group.size()
+    initialization_rank = (
+        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+    )
     set_all_seeds(initialization_rank)
 
     model = Bellbeast(
@@ -147,7 +146,7 @@ def training_loop(config_dict):
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(config_dict['mesh_dims'][2] + up_group.rank())
+    set_all_seeds(config_dict["mesh_dims"][2] + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -158,7 +157,7 @@ def training_loop(config_dict):
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss, timings = train_one_epoch(
+        avg_loss = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -169,9 +168,8 @@ def training_loop(config_dict):
             dtp_group=dtp_group,
             autocast=autocast,
         )
-
-        # data_fit_loss, prior_matching_loss = validate(
-        validate(
+        end_time = time.perf_counter()
+        data_fit_loss, prior_matching_loss = validate(
             config_dict=config_dict,
             model=model,
             expert_weights=expert_loss_weighting,
@@ -182,11 +180,6 @@ def training_loop(config_dict):
             results_path=validation_results_path,
         )
 
-        end_time = time.perf_counter()
-
-        for t in timings:
-            time_log.append(t)
-
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
@@ -196,7 +189,7 @@ def training_loop(config_dict):
             # )
 
     if config_dict["timings"]:
-        timings_path = f"{os.getenv('PROJECT_DIR')}/{os.getenv('SLURM_JOB_NAME')}/timings"
+        timings_path = f"{os.getenv('OUPUT_DIR')}/{os.getenv('SLURM_JOB_NAME')}/timings"
         if not os.path.exists(timings_path):
             os.makedirs(timings_path)
         time_df = pd.DataFrame(
@@ -210,14 +203,12 @@ def training_loop(config_dict):
             sep=";",
             index=False,
         )
+        dist.barrier(group=None)
 
 
 def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
 ):
-    timings = []
-    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
-
     model.train()
     loss_sum = 0.0
 
@@ -225,8 +216,6 @@ def train_one_epoch(
         dataloader.sampler.set_epoch(epoch)
 
     for i, (x, y, start, end) in enumerate(dataloader):
-        timings.append((epoch, i, start, end))
-
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
@@ -243,7 +232,7 @@ def train_one_epoch(
 
         loss_sum = loss_sum + float(loss.detach())
 
-        if i % 10 == 0:
+        if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
@@ -253,7 +242,7 @@ def train_one_epoch(
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-    return average_loss, timings
+    return average_loss
 
 
 def main():
@@ -262,15 +251,11 @@ def main():
     parser.add_argument("--scaling", action="store_true")
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("configargs", nargs="*")
-    
-
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
-    # If we are performing a scaling experiment, read the command line arguments.
-    # Otherwise, the arguments will not be read.
     config_dict = setup_config_dict(config_dict, args)
 
     ### Distributed Stuff ###
@@ -288,7 +273,6 @@ def main():
     training_loop(config_dict)
 
     dist.destroy_process_group()
-
 
 if __name__ == "__main__":
     main()

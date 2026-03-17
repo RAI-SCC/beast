@@ -116,7 +116,7 @@ Current model is ``Bellbeast`` in ``model_gb.py`` and includes :
      * Either one or two timesteps can serve as input (concatenated along variable dimension) to predict the next (6h) timestep
      * Normalization values are in ``data/normalization/norms.nc``
 
-To run training, configure in ``configs/bellbeast_config.yaml``
+To run training, configure in ``configs/bellbeast_config_{system}.yaml``, where {system} is either jupiter or lumi
 * Adjust the process mesh (``mesh_dims``) to match your number of GPUs/Nodes
     * The last two dims are "fixed" to ``[2,2]`` = 4 GPUs on Jupiter and ``[4,2]`` GPUs on LUMI
     * Distribute your nodes to the first three dims, such that their product equals the job node count ``<N_NODES>``; Order is ``[num_experts, num_data_parallel, num_sample_parallel]``
@@ -131,12 +131,12 @@ To run training, configure in ``configs/bellbeast_config.yaml``
 
 ### On Jupiter
 ```console
-sbatch -A jureap1 -p booster --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 -t 00:06:00 --job-name=train_bellbeast experiments/run_gb_script.sh systems/jupiter_container.sh src/train_bellbeast.py --config_file configs/bellbeast_config.yaml
+sbatch -A jureap1 -p booster --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 -t 00:06:00 --job-name=train_bellbeast experiments/run_gb_script.sh systems/jupiter_container.sh src/train_bellbeast_jupiter.py --config_file configs/bellbeast_config.yaml
 ```
 
 ### On LUMI: (8 tasks per node is work in progress)
 ```console
-sbatch -A project_462001248 -p standard-g --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 --job-name=train_bellbeast experiments/run_gb_script.sh systems/lumi_singularity.sh src/train_bellbeast.py --config_file configs/bellbeast_config.yaml
+sbatch -A project_462001248 -p standard-g --nodes <N_NODES> --tasks-per-node 4 --gres=gpu:4 --job-name=train_bellbeast experiments/run_gb_script.sh systems/lumi_singularity.sh src/train_bellbeast.py --config_file configs/bellbeast_config_lumi.yaml
 ```
 Go grab a cup of coffe and stare at loss values
 
@@ -178,7 +178,7 @@ Parallel Process Groups keys:
  - DTP: Domain Tensor Parallel group, equal to Column x Row
  - SP: Sample Parallel Group
  - DP: Data Parallel Group
- - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
+ - DDP: Distributed Data Parallel Group (DP x SP x JSpatial), to be pased to the DDP module
  - Expert: Top group for Mixture of Experts
 
 Mesh Dimensions: [Expert, DP, SP, JSpatial, JChannel]
