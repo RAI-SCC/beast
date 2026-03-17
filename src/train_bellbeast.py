@@ -2,7 +2,6 @@ import argparse
 import os
 import time
 
-import pandas as pd
 import torch
 import torch.distributed as dist
 
@@ -43,8 +42,6 @@ def training_loop(config_dict):
 
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
-
-    time_log = []
 
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
@@ -91,9 +88,6 @@ def training_loop(config_dict):
         print(
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
         )
-
-        if not os.path.exists(os.path.join(os.getenv("WORKDIR"), "logs/timings")):
-            os.makedirs(os.path.join(os.getenv("WORKDIR"), "logs/timings"))
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -148,7 +142,7 @@ def training_loop(config_dict):
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(config_dict['mesh_dims'][2] + up_group.rank())
+    set_all_seeds(config_dict["mesh_dims"][2] + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -159,7 +153,7 @@ def training_loop(config_dict):
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss, timings = train_one_epoch(
+        avg_loss = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -185,9 +179,6 @@ def training_loop(config_dict):
 
         end_time = time.perf_counter()
 
-        for t in timings:
-            time_log.append(t)
-
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
@@ -195,26 +186,12 @@ def training_loop(config_dict):
             # print(
             #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
             # )
-
-    time_df = pd.DataFrame(
-        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
-    )
-    time_df.to_csv(
-        os.path.join(
-            os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
-        ),
-        sep=";",
-        index=False,
-    )
+        dist.barrier(group=None)
 
 
 def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
 ):
-    timings = []
-    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
-
     model.train()
     loss_sum = 0.0
 
@@ -222,8 +199,6 @@ def train_one_epoch(
         dataloader.sampler.set_epoch(epoch)
 
     for i, (x, y, start, end) in enumerate(dataloader):
-        timings.append((epoch, i, start, end))
-
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
@@ -240,7 +215,7 @@ def train_one_epoch(
 
         loss_sum = loss_sum + float(loss.detach())
 
-        if i % 10 == 0:
+        if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
@@ -250,7 +225,7 @@ def train_one_epoch(
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-    return average_loss, timings
+    return average_loss
 
 
 def main():
@@ -287,11 +262,10 @@ def main():
             # If we are scaling across nodes and modifying the node count
             config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
             # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
-            
+
         if args.lsn is not None:
             config_dict["training"]["n_samples"] = int(args.lsn)
             # If we are scaling across nodes and modifying the node count
-            # if int(args.nodes) > 2:
             config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
 
     ### Distributed Stuff ###
