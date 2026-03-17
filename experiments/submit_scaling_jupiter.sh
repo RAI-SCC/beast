@@ -49,12 +49,13 @@ set -euo pipefail
 # Total dataset size stays the same
 # ---------------------------
 
-# EXP_NAME="lsn_multinode"
-# VAR_NAME="lsn"
-# VARS=(1)
-# NODES=(32 64 128 256)
-# X_AXIS_NAME="nodes"
-SUBSET_SIZE=100
+EXP_NAME="lsn_multinode"
+VAR_NAME="lsn"
+VARS=(1)
+NODES=(16 32 64 128 256 512)
+X_AXIS_NAME="nodes"
+SUBSET_SIZE=500
+EMBED_DIM=1024
 
 # ---------------------------
 # Exp 2: Increase global batch size by increasing node count
@@ -62,35 +63,26 @@ SUBSET_SIZE=100
 # Total dataset is scaled with node count to ensure constant work per node
 # ---------------------------
 
-EXP_NAME="lbs_multinode"
-VAR_NAME="lbs"
-VARS=(1)
-NODES=(16 32 64)
-SUBSET_SIZE=4000
-X_AXIS_NAME="nodes"
+# EXP_NAME="lbs_multinode"
+# VAR_NAME="lbs"
+# VARS=(1)
+# NODES=(32 64 128 256 512)
+# SUBSET_SIZE=4000
+# X_AXIS_NAME="nodes"
+# EMBED_DIM=1024
 
 # ── System (can be overridden via flags) ────────────────────────────────────
 # Choose the system that you are running on. Commene the other one out.
 # Nothing here needs to be changed.
-# SYSTEM_NAME="jupiter"
-# ACCOUNT="jureap1"
-# PARTITION="booster"
-# NODE=2
-# TASKS_PER_NODE=4
-# GPUS=4
-# TIME="01:00:00"
-# PLOT_TIME="00:10:00"
-# CONTAINER_SETUP="jupiter_container.sh"
-
-SYSTEM_NAME="lumi"
-ACCOUNT="project_462001248"
-PARTITION="standard-g"
+SYSTEM_NAME="jupiter"
+ACCOUNT="jureap1"
+PARTITION="booster"
 NODE=2
-TASKS_PER_NODE=8
-GPUS=8
+TASKS_PER_NODE=4
+GPUS=4
 TIME="01:00:00"
 PLOT_TIME="00:10:00"
-CONTAINER_SETUP="lumi_singularity.sh"
+CONTAINER_SETUP="jupiter_container.sh"
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────
 remaining_args=()
@@ -160,8 +152,8 @@ EOF
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
         --train_subset ${SUBSET_SIZE} \
+        --embed_dim ${EMBED_DIM} \
         --"${VAR_NAME}" ${VAR} \
-        --embed_dim 1024 \
         --scaling True \
         --nodes "${NODE}" )
 
@@ -213,9 +205,6 @@ echo " Logs dir  : ${LOG_DIR}"
 echo " Output    : ${PLOT_PATH}"
 echo " Started   : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "========================================================"
-
-module use /appl/local/csc/modulefiles
-module load pytorch
 
 python3 "${REPO_ROOT}/experiments/parse_scaling.py" \\
     --logs_dir  "${LOG_DIR}" \\
