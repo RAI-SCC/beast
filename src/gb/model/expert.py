@@ -14,7 +14,9 @@ class JLR(torch.autograd.Function):
         num_samples = sp_group.size()
 
         B, channels, xlat, xlon = x.shape
-        num_loc_samples = w.shape[0]
+        num_loc_samples = w.shape[
+            0
+        ]  # TODO: will break for non-bayesian. Introduce boolean (default False)
 
         x /= num_samples
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
