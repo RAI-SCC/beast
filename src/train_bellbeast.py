@@ -47,7 +47,9 @@ def training_loop(config_dict):
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    initialization_rank = dtp_group.rank() + ep_group.rank() * dtp_group.size()
+    initialization_rank = (
+        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+    )
     set_all_seeds(initialization_rank)
 
     model = Bellbeast(
@@ -164,9 +166,8 @@ def training_loop(config_dict):
             dtp_group=dtp_group,
             autocast=autocast,
         )
-
-        # data_fit_loss, prior_matching_loss = validate(
-        validate(
+        end_time = time.perf_counter()
+        data_fit_loss, prior_matching_loss = validate(
             config_dict=config_dict,
             model=model,
             expert_weights=expert_loss_weighting,
@@ -176,8 +177,6 @@ def training_loop(config_dict):
             epoch=epoch,
             results_path=validation_results_path,
         )
-
-        end_time = time.perf_counter()
 
         if dist.get_rank(group=None) == 0:
             print(
