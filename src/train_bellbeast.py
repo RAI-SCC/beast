@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import pandas as pd
 
 import torch
 import torch.distributed as dist
@@ -121,12 +122,6 @@ def training_loop(config_dict):
         mode="validation",
     )
 
-    validation_results_path = os.path.join(
-        os.getenv("WORKDIR"),
-        "results",
-        os.getenv("SLURM_JOB_PARTITION"),
-        os.getenv("SLURM_JOB_ID"),
-    )
 
     loss_fn = UP_AllGaussLoss(
         model,
@@ -154,10 +149,34 @@ def training_loop(config_dict):
         model, train_dataloader, loss_fn, n_samples, device, dtp_group
     )
 
+    ### Validation and timings
+    results_path = os.path.join(
+        os.getenv("OUTPUT_DIR"),
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID", "interactive"),
+    )
+
+    validation_results_path = os.path.join(
+        results_path,
+        "validation"
+    )
+    if dist.get_rank(group=None) == 0:
+        os.makedirs(validation_results_path, exist_ok=True)
+        with open(f"{results_path}/config.yaml", "w") as file:
+            yaml.dump(config_dict, file)
+
+        timings_path = os.path.join(
+            results_path,
+            "timings"
+        )
+        os.makedirs(timings_path, exist_ok=True)
+
+    time_log = []
+
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss = train_one_epoch(
+        avg_loss, timings = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -169,16 +188,20 @@ def training_loop(config_dict):
             autocast=autocast,
         )
         end_time = time.perf_counter()
-        data_fit_loss, prior_matching_loss = validate(
-            config_dict=config_dict,
-            model=model,
-            expert_weights=expert_loss_weighting,
-            n_samples=n_samples,
-            dataloader=valid_dataloader,
-            device=device,
-            epoch=epoch,
-            results_path=validation_results_path,
-        )
+        if not config_dict["scaling"]:
+            data_fit_loss, prior_matching_loss = validate(
+                config_dict=config_dict,
+                model=model,
+                expert_weights=expert_loss_weighting,
+                n_samples=n_samples,
+                dataloader=valid_dataloader,
+                device=device,
+                epoch=epoch,
+                results_path=validation_results_path,
+            )
+
+        for t in timings:
+            time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
@@ -189,11 +212,12 @@ def training_loop(config_dict):
             # )
 
     if config_dict["timings"]:
-        timings_path = f"{os.getenv('OUPUT_DIR')}/{os.getenv('SLURM_JOB_NAME')}/timings"
-        if not os.path.exists(timings_path):
-            os.makedirs(timings_path)
+        timings_path = os.path.join(
+            results_path,
+            "timings"
+        )
         time_df = pd.DataFrame(
-            time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
+            time_log, columns=["#epoch", "#batch", "step_start", "data_loading_start", "data_loading_end", "gpu_time", "step_end"]
         )
         time_df.to_csv(
             os.path.join(
@@ -209,15 +233,19 @@ def training_loop(config_dict):
 def train_one_epoch(
     epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
 ):
+    timings = []
+
     model.train()
     loss_sum = 0.0
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y, start, end) in enumerate(dataloader):
+    step_start = time.time_ns()
+    for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
+        gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
         # x shape is [batch, channel, ]
@@ -231,6 +259,8 @@ def train_one_epoch(
         optimizer.step()
 
         loss_sum = loss_sum + float(loss.detach())
+        step_end = time.time_ns()
+        timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
 
         if i % 100 == 0:
             # Average loss over all four processes for exactness
@@ -239,10 +269,13 @@ def train_one_epoch(
                 print(
                     f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
                 )
+
+        step_start = time.time_ns()
+
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-    return average_loss
+    return average_loss, timings
 
 
 def main():

@@ -12,7 +12,7 @@ export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
 
 export DATA_DIR=$SCRATCH_DIR/data/
-export OUPUT_DIR=$PROJECT_DIR/output
+export OUTPUT_DIR=$PROJECT_DIR/output
 
 # =============================================================================
 # Environment configuration
