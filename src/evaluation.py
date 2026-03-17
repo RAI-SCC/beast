@@ -654,6 +654,12 @@ def generate_distributed_plots(
             local_samples, up_group, expert_weights[plot_indices]
         )
 
+        local_var_slice = slice(0, len(data_mean) // 2)
+        if channel_group.rank() > 0:
+            local_var_slice = slice(len(data_mean) // 2, None)
+
+        data_mean = data_mean[local_var_slice]
+        data_std = data_std[local_var_slice]
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
 
