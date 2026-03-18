@@ -38,4 +38,4 @@ training:
 model_parallel:
     parallelism: 1
     type: jigsaw
-mesh_dims: [4,16,1,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
+mesh_dims: [1,2,2,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
