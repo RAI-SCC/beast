@@ -410,8 +410,8 @@ def aggregate_crps(
         for step in range(1, size):
             # swap buffers
             ops = [
-                dist.P2POp(dist.isend, send_buffer, next_rank, group=up_group),
-                dist.P2POp(dist.irecv, recv_buffer, prev_rank, group=up_group),
+                dist.P2POp(dist.isend, send_buffer, next_rank),  # , group=up_group),
+                dist.P2POp(dist.irecv, recv_buffer, prev_rank),  # , group=up_group),
             ]
             reqs = dist.batch_isend_irecv(ops)
             for req in reqs:
