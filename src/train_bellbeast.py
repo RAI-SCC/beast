@@ -1,8 +1,8 @@
 import argparse
 import os
 import time
-import pandas as pd
 
+import pandas as pd
 import torch
 import torch.distributed as dist
 
@@ -15,6 +15,7 @@ from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
 from evaluation import validate
+from gb.config import setup_config_dict
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
@@ -30,8 +31,6 @@ from gb.utils import (
     set_all_seeds,
     set_dtype,
 )
-from gb.config import setup_config_dict
-
 
 
 def training_loop(config_dict):
@@ -122,7 +121,6 @@ def training_loop(config_dict):
         mode="validation",
     )
 
-
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
@@ -156,19 +154,13 @@ def training_loop(config_dict):
         os.getenv("SLURM_JOB_ID", "interactive"),
     )
 
-    validation_results_path = os.path.join(
-        results_path,
-        "validation"
-    )
+    validation_results_path = os.path.join(results_path, "validation")
     if dist.get_rank(group=None) == 0:
         os.makedirs(validation_results_path, exist_ok=True)
         with open(f"{results_path}/config.yaml", "w") as file:
             yaml.dump(config_dict, file)
 
-        timings_path = os.path.join(
-            results_path,
-            "timings"
-        )
+        timings_path = os.path.join(results_path, "timings")
         os.makedirs(timings_path, exist_ok=True)
 
     time_log = []
@@ -212,12 +204,18 @@ def training_loop(config_dict):
             # )
 
     if config_dict["timings"]:
-        timings_path = os.path.join(
-            results_path,
-            "timings"
-        )
+        timings_path = os.path.join(results_path, "timings")
         time_df = pd.DataFrame(
-            time_log, columns=["#epoch", "#batch", "step_start", "data_loading_start", "data_loading_end", "gpu_time", "step_end"]
+            time_log,
+            columns=[
+                "#epoch",
+                "#batch",
+                "step_start",
+                "data_loading_start",
+                "data_loading_end",
+                "gpu_time",
+                "step_end",
+            ],
         )
         time_df.to_csv(
             os.path.join(
@@ -306,6 +304,7 @@ def main():
     training_loop(config_dict)
 
     dist.destroy_process_group()
+
 
 if __name__ == "__main__":
     main()

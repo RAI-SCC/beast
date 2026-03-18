@@ -1,8 +1,12 @@
-import os
 import argparse
+import os
+
 import torch
 
-def setup_config_dict(config_dict: dict[str, dict[str, any]], args: argparse.Namespace) -> dict[str, dict[str, any]]: 
+
+def setup_config_dict(
+    config_dict: dict[str, dict[str, any]], args: argparse.Namespace
+) -> dict[str, dict[str, any]]:
     """
     Clean the configuration file, adjust based on environmental variables and overwritten options.
     """
@@ -15,7 +19,9 @@ def setup_config_dict(config_dict: dict[str, dict[str, any]], args: argparse.Nam
     mesh_dims = config_dict["mesh_dims"]
     if -1 in config_dict["mesh_dims"]:
         index = mesh_dims.index(-1)
-        config_dict["mesh_dims"][index] = world_size // -torch.prod(torch.tensor(mesh_dims)).item() 
+        config_dict["mesh_dims"][index] = (
+            world_size // -torch.prod(torch.tensor(mesh_dims)).item()
+        )
 
     ### Data Stuff ###
     WORKDIR = os.getenv("WORKDIR")
@@ -60,7 +66,9 @@ def setup_config_dict(config_dict: dict[str, dict[str, any]], args: argparse.Nam
     return config_dict
 
 
-def overwrite_config(config_dict: dict[str, dict[str, any]], configargs: list[str]) -> dict[str, dict[str, any]]:
+def overwrite_config(
+    config_dict: dict[str, dict[str, any]], configargs: list[str]
+) -> dict[str, dict[str, any]]:
     """
     Change configuration file values based on cmd line arguments passed as '<section>_<key>=<value>' after all the optional flags. Arrays are passed with the elements connected by comas.
     """
@@ -69,15 +77,19 @@ def overwrite_config(config_dict: dict[str, dict[str, any]], configargs: list[st
 
         # Special case for mesh dim, as it is not part of a section (though it should be parallelism)
         if section_key == "mesh_dims":
-            config_dict["mesh_dims"] = [int(x) for x in new_value.split(',')]
+            config_dict["mesh_dims"] = [int(x) for x in new_value.split(",")]
             continue
 
         section, key = section_key.split("_", maxsplit=1)
         if section not in config_dict:
-            print(f"Section for keyword argument {configargs[i]} does not exist in the configuration file")
+            print(
+                f"Section for keyword argument {configargs[i]} does not exist in the configuration file"
+            )
             continue
         elif key not in config_dict[section]:
-            print(f"Configuration option {key} does not exist in the configuration file")
+            print(
+                f"Configuration option {key} does not exist in the configuration file"
+            )
             continue
 
         original_value = config_dict[section][key]
@@ -89,12 +101,9 @@ def overwrite_config(config_dict: dict[str, dict[str, any]], configargs: list[st
             config_dict[section][key] = int(new_value)
         elif isinstance(original_value, list):
             if isinstance(original_value[0], str):
-                formated_new_value = [x for x in new_value.split(',')]
+                formated_new_value = [x for x in new_value.split(",")]
             elif isinstance(original_value[0], int):
-                formated_new_value = [int(x) for x in new_value.split(',')]
+                formated_new_value = [int(x) for x in new_value.split(",")]
             config_dict[section][key] = formated_new_value
 
     return config_dict
-
-
-
