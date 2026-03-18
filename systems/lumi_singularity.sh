@@ -29,8 +29,8 @@ export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
 
 # RCCL Configuration
 export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
-# export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
-# export NCCL_NET_GDR_LEVEL=3
+export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
+export NCCL_NET_GDR_LEVEL=3
 
 # Libfabric/CXI for Slingshot
 # export FI_CXI_ATS=0
