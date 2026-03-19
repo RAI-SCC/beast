@@ -13,6 +13,7 @@ export WORKDIR="$( pwd )" # For source code
 
 #export DATA_DIR="${PROJECT_DIR}/data"
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
+export OUTPUT_DIR="${PROJECT_DIR}/output"
 
 # =============================================================================
 # Environment configuration
@@ -51,11 +52,11 @@ export PMIX_MCA_gds="hash"
 # Profiling configuration
 # =============================================================================
 
-export PROFILE_DIR="${WORKDIR}/results/jupiter/profiles"
+export PROFILE_DIR="${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles"
 
 profsys_cmd=(
     nsys profile
-    --output "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
+    --output "${PROFILE_DIR}/profile_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
     --trace=cuda,cudnn,cublas,osrt,nvtx
     --cudabacktrace=all
     --python-backtrace=cuda

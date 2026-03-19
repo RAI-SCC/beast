@@ -95,8 +95,6 @@ fi
 export PROFSYS=$profsys
 export PROFCU=$profcu
 
-mkdir -p results/lumi/profiles
-
 echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"
 echo ""
