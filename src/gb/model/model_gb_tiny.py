@@ -1,4 +1,5 @@
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 
 from gb.model.expert import ExpertWeightingLayer
@@ -19,6 +20,7 @@ class TinyBellbeast(torch.nn.Module):
         n_full_blocks,
         noise_dim,
         device,
+        channel_group,
         ep_group,
         up_group,
     ):
@@ -39,6 +41,8 @@ class TinyBellbeast(torch.nn.Module):
         self.out_channels = out_channels
 
         self.noise_dim = noise_dim
+
+        self.channel_group = channel_group  # hard coded, to avoid parsing through
 
         self.patch_embedding = torch.nn.Conv2d(
             self.in_channels,
@@ -64,7 +68,7 @@ class TinyBellbeast(torch.nn.Module):
         )
 
         self.expert_layer = ExpertWeightingLayer(
-            (self.ep_group.size(), 1, self.embed_dim, 1),
+            (self.ep_group.size(), 1, self.embed_dim * 2, 1),
             self.ep_group,
             self.up_group,
             device=self.device,
@@ -98,7 +102,6 @@ class TinyBellbeast(torch.nn.Module):
         self.transformer = torch.nn.ModuleList(
             [
                 NiceWindowedTransformerBlock(
-                    x_features=self.embed_dim,
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
                     heads=self.heads,
@@ -115,7 +118,6 @@ class TinyBellbeast(torch.nn.Module):
         self.transformer_down = torch.nn.ModuleList(
             [
                 NiceWindowedTransformerBlock(
-                    self.embed_dim * 2,
                     self.embed_dim * 2,
                     self.embed_dim * 2,
                     heads=self.heads,
@@ -224,41 +226,48 @@ class TinyBellbeast(torch.nn.Module):
         return attention_mask
 
     def forward(self, x):
-        # x has global shape (B, xlat, xlon, channels)
-
+        # x has  shape (B, channels, xlat, xlon)
         noise = torch.randn(x.shape[0], self.noise_dim).to(self.device)
 
         x = self.patch_embedding(x)
+        # x has shape (B, embed_dim, xlat/patch, xlon/patch)
+
         x_res = x.clone()
         B, channels, xlat, xlon = x.shape
         x = x.view(B, channels, xlat * xlon)
 
         x = x.mT
         x = x.view(B, xlat, xlon, channels)
+        # x has shape (B, xlat/patch, xlon/patch, embed_dim)
 
         # attention
         for i in range(self.n_full_blocks[0]):
             x = self._get_windows(x, self.window_size_outer)
+            # x has shape [B*num_windows, (xlat/patche/window_x * xlon/patche/window_y), embed_dim]
             n_windows = x.shape[0] // B
-            # x has shape: [S, B*n_windows, window_, window_]
-            # noise has shape [B, noise_dim]
-            # we want noise to have [B*n_sw]
+
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
+
             x = self.transformer[i * 2](x, noise_transformer, mask=None)
+            print(f"#Attn1 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.roll_out(x)
+            print(f"#RollOut {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._get_windows(x, self.window_size_outer)
+            print(f"#Windows2 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             mask = self._gen_mask_(B, xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer[i * 2 + 1](x, noise_transformer, mask)
+            print(f"#Attn2 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
+            print(f"#UnRollOut {dist.get_rank(group=None)}, x.shape = {x.shape}")
 
         x_res2 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous()
@@ -356,8 +365,12 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
             self.heads,
         ).to(device)
 
-        self.layer_norm1 = NiceNorm(output_dim, self.noise_dim, device).to(device)
-        self.layer_norm2 = NiceNorm(output_dim, self.noise_dim, device).to(device)
+        self.layer_norm1 = NiceNorm(output_dim, self.noise_dim, device=device).to(
+            device
+        )
+        self.layer_norm2 = NiceNorm(output_dim, self.noise_dim, device=device).to(
+            device
+        )
 
         self.MLP = MLP(
             output_dim,
@@ -385,7 +398,7 @@ class WindowedAttention(nn.Module):
         self,
         embed_dim,
         output_dim,
-        heads,
+        num_heads,
     ):
         super().__init__()
 
@@ -398,8 +411,8 @@ class WindowedAttention(nn.Module):
         self.linear = nn.Linear(embed_dim, embed_dim)
 
         # Store several attributes
-        self.heads = heads
-        self.scale = (embed_dim // heads) ** -0.5
+        self.num_heads = num_heads
+        self.scale = (self.embed_dim // self.num_heads) ** -0.5
 
     def forward(self, x, mask):
         """
@@ -415,35 +428,32 @@ class WindowedAttention(nn.Module):
         x: Tensor
             of shape (n_batch * n_windows, n_patch_in_window, hidden_dim)
         """
-
-        # reshape the data to calculate multi-head attention
-        qkv = self.qkv(x).reshape(
+        qkv = self.qkv(x)
+        qkv = qkv.reshape(
             (
                 x.shape[0],
                 x.shape[1],
                 3,
-                self.head_number,
-                self.embed_dim // self.head_number,
+                self.num_heads,
+                self.embed_dim // self.num_heads,
             )
         )
-        q, k, v = torch.tensor_split(qkv, 3, dim=-3)
+        qkv = torch.permute(qkv, (2, 0, 3, 1, 4))
+        q, k, v = torch.tensor_split(qkv, 3, dim=0)
 
-        # Scale the attention
-        q = q.squeeze(dim=-3) * self.scale
+        q = q.squeeze(dim=0) * self.scale
 
-        # Calculated the attention, a learnable bias is added to fix the nonuniformity of the grid.
-        # Attention shape: nB * n_windows, nHeads, N, N (n_patch_in_window = W0*W1*W2)
-        attention = q @ k.squeeze(dim=-3).transpose(
-            -2, -1
-        )  # @ denotes matrix multiplication
+        attention = q @ k.squeeze(dim=0).transpose(-2, -1)
 
         if mask is not None:
             attention = attention + mask
 
         attention = self.softmax(attention)
 
-        values = attention @ v.squeeze(dim=-3)
-        ## TODO: head merging: Reshape so that head_dim and hidden_dim are one dim
+        values = attention @ v.squeeze(dim=0)
+
+        # head merging
+        values = torch.transpose(values, 1, 2).reshape(x.shape)
         values = self.linear(values)
 
         return values
@@ -505,6 +515,7 @@ class NiceNorm(nn.Module):
 
         scale = self.scale_mlp(noise)
         shift = self.shift_mlp(noise)
-        x = scale * x + shift
+
+        x = scale.unsqueeze(dim=1) * x + shift.unsqueeze(dim=1)
 
         return x

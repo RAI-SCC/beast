@@ -491,8 +491,8 @@ class DummyDataset(Dataset):
         total_vars = self.n_variables + self.num_masks
         shape = (total_vars, self.xlat, self.xlon)
 
-        input = torch.random(shape)
-        target = torch.random(shape)
+        input = torch.rand(shape)
+        target = torch.rand(shape)
 
         return input, target
 

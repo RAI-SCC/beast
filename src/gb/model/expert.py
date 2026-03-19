@@ -12,7 +12,7 @@ class JLR(torch.autograd.Function):
     def forward(x, w, ep_group, sp_group, device):
         num_experts = ep_group.size()
         num_samples = sp_group.size()
-
+        print(f"#EXPERT JLR: x.shape = {x.shape}")
         B, channels, xlat, xlon = x.shape
         num_loc_samples = w.shape[
             0
@@ -32,6 +32,7 @@ class JLR(torch.autograd.Function):
         # expert_x is of shape (num_experts, batch, channel, xlat, xlon)
         expert_x = expert_x.view(1, num_experts, B, channels, xlat * xlon)
         # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
+        print(f"#EXPERT JLR: expert_x.shape = {expert_x.shape}")
 
         jlr = expert_x * w
         # jlr is of shape (samples, experts, batch, channel, xlat * xlon)

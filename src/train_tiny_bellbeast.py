@@ -28,6 +28,7 @@ from gb.utils import (
 
 
 def training_loop(config_dict):
+    channel_group = get_process_group("JChannel")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
@@ -58,6 +59,7 @@ def training_loop(config_dict):
             "n_attn_blocks"
         ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
         device=device,
+        channel_group=channel_group,
         ep_group=ep_group,
         up_group=up_group,
     )
