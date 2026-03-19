@@ -11,7 +11,8 @@ def setup_config_dict(
     Clean the configuration file, adjust based on environmental variables and overwritten options.
     """
     config_dict["timings"] = args.timings
-    config_dict["scaling"] = args.scaling
+    config_dict["skip_validation"] = args.skip_validation
+    config_dict["profile"] = args.profile
 
     config_dict = overwrite_config(config_dict, args.configargs)
     world_size = int(os.getenv("SLURM_NTASKS", 1))

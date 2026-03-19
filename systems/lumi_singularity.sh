@@ -7,7 +7,6 @@ export SCRATCH_DIR=/scratch/project_462001248
 
 export VENV_DIR=$HOME/.venvs/gbb
 export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
-# export SIF="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260216_093549/lumi-multitorch-full-u24r64f21m43t29-20260216_093549.sif"
 
 export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
@@ -46,12 +45,13 @@ export NCCL_NET_GDR_LEVEL="PHB"
 # Profiling configuration
 # =============================================================================
 
-export PROFILE_DIR="${WORKDIR}/results/lumi/profiles"
+export PROFILE_DIR="${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles"
 
 profsys_cmd=(
     rocprofv3 
-    --trace kfd,hip
-    -d "${OUTPUT_DIR}/${SLURM_PARTITION}/${SLURM_JOB_ID}"
+    --sys-trace
+    --output-format pftrace
+    -d "$PROFILE_DIR"
     --
 )
 export PROFSYS_CMD="${profsys_cmd[@]}"

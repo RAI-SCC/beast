@@ -33,7 +33,7 @@ from gb.utils import (
 )
 
 
-def training_loop(config_dict):
+def training_loop(config_dict, prof=None):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
@@ -178,9 +178,10 @@ def training_loop(config_dict):
             device=device,
             dtp_group=dtp_group,
             autocast=autocast,
+            prof=prof,
         )
         end_time = time.perf_counter()
-        if not config_dict["scaling"]:
+        if not config_dict["skip_validation"]:
             data_fit_loss, prior_matching_loss = validate(
                 config_dict=config_dict,
                 model=model,
@@ -229,7 +230,7 @@ def training_loop(config_dict):
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
+    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast, prof=None
 ):
     timings = []
 
@@ -269,6 +270,8 @@ def train_one_epoch(
                 )
 
         step_start = time.time_ns()
+        if prof:
+            prof.step()
 
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
@@ -279,8 +282,9 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
-    parser.add_argument("--scaling", action="store_true")
+    parser.add_argument("--skip_validation", action="store_true")
     parser.add_argument("--timings", action="store_true")
+    parser.add_argument("--profile", action="store_true")
     parser.add_argument("configargs", nargs="*")
     args = parser.parse_args()
 
@@ -301,7 +305,32 @@ def main():
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
-    training_loop(config_dict)
+    if config_dict["profile"] and global_rank==3:
+        import torch.profiler as tprofiler
+        def trace_handler(p):
+            # Export in Chrome trace format (Perfetto can open this)
+            path = os.getenv("PROFILE_DIR")
+            os.makedirs(path, exist_ok=True)
+            p.export_chrome_trace(f'{path}/trace-{global_rank}.json')
+
+        with tprofiler.profile(
+                activities=[tprofiler.ProfilerActivity.CPU, tprofiler.ProfilerActivity.CUDA],
+                #record_shapes=True,
+                #profile_memory=True,
+                schedule=tprofiler.schedule(
+                    skip_first=1,
+                    wait=2,
+                    warmup=2,
+                    active=3
+                ),
+                #with_stack=True,
+                #with_flops=True,
+                on_trace_ready=trace_handler
+                ) as prof:
+            training_loop(config_dict, prof)
+
+    else:
+        training_loop(config_dict)
 
     dist.destroy_process_group()
 
