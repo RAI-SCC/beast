@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
-source $VENV_DIR/bin/activate
 if [ "$SLURM_PROCID" -eq 0 ]; then
     echo "VENV_DIR: $VENV_DIR"
     echo "DATA_DIR: $DATA_DIR"
     echo "Runnning cmd: $@"
 fi
-exec "$@"
+
+source $VENV_DIR/bin/activate
+
+if [[ "$SLURM_PROCID" -eq 3 ]]; then
+    if [[ ${PROFSYS} == true ]]; then
+        echo "Enabling program tracing (PROF_TRACE=true) for process $SLURM_PROCID"
+        echo "Profiling command: $PROFSYS_CMD $@"
+        $PROFSYS_CMD $@
+    elif [[ ${PROFCU} == true ]]; then
+        echo "Enabling kernel profiling (PROF_KERNEL=true) for process $SLURM_PROCID"
+        echo "Profiling command: $PROFCU_CMD $@"
+        $PROFCU_CMD $@
+    else
+        exec "$@"
+    fi
+else
+    exec "$@"
+fi

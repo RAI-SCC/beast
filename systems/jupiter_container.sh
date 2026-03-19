@@ -48,6 +48,34 @@ export NCCL_P2P_LEVEL=NVL
 export PMIX_MCA_gds="hash"
 
 # =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${WORKDIR}/results/jupiter/profiles"
+
+profsys_cmd=(
+    nsys profile
+    --output "${PROFILE_DIR}/profile_%q{SLURM_JOB_ID}_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
+    --trace=cuda,cudnn,cublas,osrt,nvtx
+    --cudabacktrace=all
+    --python-backtrace=cuda
+    --python-sampling=true
+    --delay=60
+)
+export PROFSYS_CMD="${profsys_cmd[@]}"
+
+profcu_cmd=(
+    ncu
+    --set
+    roofline
+    --nvtx
+    --target-processes
+    all
+    --export ${PROFILE_DIR}/ncu_report_${SLURM_JOB_ID}_${SLURM_NODEID}_${SLURM_PROCID}.ncu-rep
+)
+export PROFCU_CMD="${profcu_cmd[@]}"
+
+# =============================================================================
 # Slurm configuration
 # =============================================================================
 

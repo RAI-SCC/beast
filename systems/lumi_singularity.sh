@@ -7,6 +7,7 @@ export SCRATCH_DIR=/scratch/project_462001248
 
 export VENV_DIR=$HOME/.venvs/gbb
 export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
+# export SIF="/appl/local/laifs/containers/lumi-multitorch-u24r64f21m43t29-20260216_093549/lumi-multitorch-full-u24r64f21m43t29-20260216_093549.sif"
 
 export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
@@ -40,6 +41,24 @@ export NCCL_NET_GDR_LEVEL="PHB"
 
 # ROCm / HIP Settings
 # export ROCM_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"  # 8 GCDs per node
+#
+# =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${WORKDIR}/results/lumi/profiles"
+
+profsys_cmd=(
+    rocprofv3 
+    --trace kfd,hip
+    -d "${OUTPUT_DIR}/${SLURM_PARTITION}/${SLURM_JOB_ID}"
+    --
+)
+export PROFSYS_CMD="${profsys_cmd[@]}"
+
+profcu_cmd=(
+)
+export PROFCU_CMD="${profcu_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration
