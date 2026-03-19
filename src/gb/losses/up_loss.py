@@ -103,8 +103,9 @@ class GaussianAggregation(torch.autograd.Function):
         std = torch.sqrt(var)
 
         replace_val = loss_weights == 0.0
-        replace_val = replace_val.squeeze(dim=0)
-        replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+        replace_val = replace_val.reshape(1, -1, 1, 1)
+        # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+        replace_val = replace_val.expand_as(std)
         std = torch.where(replace_val, 1.0, std)
 
         return mean, std

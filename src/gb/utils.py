@@ -230,7 +230,7 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            utils_init.average_weights(m, get_process_group("JSpatial"))
+            utils_init.average_weights_module(m, get_process_group("JSpatial"))
 
 
 def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:

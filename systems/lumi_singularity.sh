@@ -29,8 +29,8 @@ export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
 
 # RCCL Configuration
 export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
-# export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
-# export NCCL_NET_GDR_LEVEL=3
+export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
+export NCCL_NET_GDR_LEVEL=3
 
 # Libfabric/CXI for Slingshot
 # export FI_CXI_ATS=0
@@ -55,14 +55,12 @@ export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 # For 8 tasks (one per GCD), bind each task to 7 cores (mask 0xfe = 11111110)
 # Leaving core 0 of each group for system tasks
 
-# From https://462000265.lumidata.eu/user-coffee-breaks/files/20260211-user-coffe-break-LUMI-update-LUST.pdf
-GPU_BIND="map:4,5,2,3,6,7,0,1"
+# Set up the CPU bind masks
+CPU_BIND_MASKS="0x00fe000000000000,0xfe00000000000000,0x0000000000fe0000,0x00000000fe000000,0x00000000000000fe,0x000000000000fe00,0x000000fe00000000,0x0000fe0000000000"
 
 export SYSTEM_SLURM_PARAMS=(
-    --cpu-bind=v
+    --cpu-bind="v,mask_cpu=$CPU_BIND_MASKS"
     --cpus-per-task=7
-    --gpu-bind="${GPU_BIND}"
-    --gres-flags=allow-task-sharing
     --mpi=pmi2
     singularity
     exec
