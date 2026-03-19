@@ -195,7 +195,7 @@ def convert_jigsaw_vi(
     prior_initialization=False,
     return_log_probs=True,
 ):
-    torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
+    # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(
         normalization.DistributedNICENorm, ban_mode="submodule"

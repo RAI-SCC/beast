@@ -28,6 +28,8 @@ def validate(
     channel_group = get_process_group("JChannel")
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
+    up_group = get_process_group("SP")
+    global_up_ranks = gather_global_ranks(up_group, device).cpu()
 
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
@@ -107,6 +109,7 @@ def validate(
             data_std,
             spatial_weights,
             local_indices,
+            global_up_ranks,
             climatology=None,
         )
 
@@ -218,6 +221,7 @@ def calculate_aggregate_metrics(
     data_std,
     spatial_weights,
     indices,
+    global_up_ranks,
     climatology=None,
 ):
     up_group = get_process_group("SP")
@@ -286,8 +290,10 @@ def calculate_aggregate_metrics(
     rmse_sq = reduce_spatial_mean(rmse_sq_map, spatial_weights, spatial_group)
 
     # calculate crps TODO: find a working implementation later
-    # crps_map = aggregate_crps(samples, target, up_group=up_group)  # sp aggregation
-    # crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
+    crps_map = aggregate_crps(
+        samples, target, up_group=up_group, global_up_ranks=global_up_ranks
+    )  # sp aggregation
+    crps = reduce_spatial_mean(crps_map, spatial_weights, spatial_group)
 
     # calculate spread-skill ratio (surrogate)
     avg_var = reduce_spatial_mean(std**2, spatial_weights, spatial_group)
@@ -300,7 +306,7 @@ def calculate_aggregate_metrics(
         "data_fit": data_fit,
         "prior_matching": prior_matching,
         "mse": rmse_sq * (std_1d**2),
-        # "crps": crps * std_1d,
+        "crps": crps * std_1d,
         "avg_var": avg_var * (std_1d**2),
     }
 
@@ -366,7 +372,9 @@ def calculate_climatology(
 
 
 @torch.no_grad()
-def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
+def aggregate_crps(
+    local_samples: torch.Tensor, target: torch.Tensor, up_group, global_up_ranks
+):
     mae_part = (local_samples - target.expand_as(local_samples)).abs().mean(dim=0)
 
     if up_group is not None and dist.get_world_size(group=up_group) > 1:
@@ -389,8 +397,10 @@ def aggregate_crps(local_samples: torch.Tensor, target: torch.Tensor, up_group):
         my_group_rank = dist.get_rank(group=up_group)
 
         # neighbors (deal with start and end ring)
-        next_rank = (my_group_rank + 1) % size
-        prev_rank = (my_group_rank - 1 + size) % size
+        next_rank_index = (my_group_rank + 1) % size
+        prev_rank_index = (my_group_rank - 1 + size) % size
+        next_rank = global_up_ranks[next_rank_index].item()
+        prev_rank = global_up_ranks[prev_rank_index].item()
 
         # MGR buffers
         send_buffer = local_samples.clone()
@@ -429,11 +439,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
     training_dict = config_dict.get("training", {})
 
     # All global variables
-    """
-    all_s = config_dict["data"]["out_surface_variables"]
-    all_p = config_dict["data"]["out_pressure_variables"]
-    all_l = config_dict["data"]["out_pressure_levels"]
-    """
 
     all_s = [
         "mean_sea_level_pressure",
@@ -479,17 +484,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
         )
         target_p_levels = training_dict.get("plot_pressure_levels", ["850", "500"])
     else:
-        """
-        target_s_vars = training_dict.get(
-            "eval_surface_variables", config_dict["data"]["out_surface_variables"]
-        )
-        target_p_vars = training_dict.get(
-            "eval_pressure_variables", config_dict["data"]["out_pressure_variables"]
-        )
-        target_p_levels = training_dict.get(
-            "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
-        )
-        """
         target_s_vars = all_s.copy()
         target_p_vars = all_p.copy()
         target_p_levels = all_l.copy()
@@ -644,6 +638,12 @@ def generate_distributed_plots(
             local_samples, up_group, expert_weights[plot_indices]
         )
 
+        local_var_slice = slice(0, len(data_mean) // 2)
+        if channel_group.rank() > 0:
+            local_var_slice = slice(len(data_mean) // 2, None)
+
+        data_mean = data_mean[local_var_slice]
+        data_std = data_std[local_var_slice]
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
 
@@ -796,3 +796,14 @@ class ExpertAggregation(nn.Module):
         y = y / normalization
 
         return y
+
+
+def gather_global_ranks(process_group, device):
+    gather_tensor = torch.tensor([dist.get_rank()], device=device, dtype=torch.uint8)
+
+    gathered = [
+        torch.zeros_like(gather_tensor)
+        for _ in range(dist.get_world_size(process_group))
+    ]
+    dist.all_gather(gathered, gather_tensor, group=process_group)
+    return torch.cat(gathered, dim=0)
