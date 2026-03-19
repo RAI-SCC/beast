@@ -132,14 +132,17 @@ class Expert(torch.nn.Module):
 
         match self.expert_group.rank():
             case 0:
+                # universal expert, all variables; default
+                self.weights = torch.ones_like(self.weights)
+            case 1:
                 # surface variable expert: 'mean_sea_level_pressure', '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_temperature', 'sea_surface_temperature','total_precipitation'
                 if self.channel_group.rank() == 0:
                     self.weights[0:6] = 1.0
-            case 1:
+            case 2:
                 # wind expert: u, v and w at all pressure levels
                 if self.channel_group.rank() == 1:
                     self.weights[(45 - num_loc_variables) :] = 1.0
-            case 2:
+            case 3:
                 # thermodynamic expert: geopotential, temperature and specific humidity at all pressure levels
                 if self.channel_group.rank() == 0:
                     self.weights[6:num_loc_variables] = 1.0
