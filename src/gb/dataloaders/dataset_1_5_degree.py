@@ -489,10 +489,11 @@ class DummyDataset(Dataset):
 
     def __getitem__(self, idx):
         total_vars = self.n_variables + self.num_masks
-        shape = (total_vars, self.xlat, self.xlon)
+        shape_in = (total_vars, self.xlat, self.xlon)
+        shape_out = (self.n_variables, self.xlat, self.xlon)
 
-        input = torch.rand(shape)
-        target = torch.rand(shape)
+        input = torch.rand(shape_in)
+        target = torch.rand(shape_out)
 
         return input, target
 

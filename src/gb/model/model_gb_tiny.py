@@ -1,5 +1,4 @@
 import torch
-import torch.distributed as dist
 import torch.nn as nn
 
 from gb.model.expert import ExpertWeightingLayer
@@ -49,8 +48,8 @@ class TinyBellbeast(torch.nn.Module):
             self.embed_dim,  # global values
             self.kernel_size,
             self.stride,
-            self.padding,
-            self.dilation,
+            padding=self.padding,
+            dilation=self.dilation,
             groups=1,
             bias=True,
             device=self.device,
@@ -60,8 +59,8 @@ class TinyBellbeast(torch.nn.Module):
             self.embed_dim * 2,  # global values
             2,
             2,
-            self.padding,
-            self.dilation,
+            padding=self.padding,
+            dilation=self.dilation,
             groups=1,
             device=self.device,
             bias=True,
@@ -79,8 +78,8 @@ class TinyBellbeast(torch.nn.Module):
             self.embed_dim,  # global values
             2,
             2,
-            self.padding,
-            self.dilation,
+            padding=self.padding,
+            dilation=self.dilation,
             groups=1,
             device=self.device,
             bias=True,
@@ -91,8 +90,8 @@ class TinyBellbeast(torch.nn.Module):
             self.out_channels,  # global values
             self.kernel_size,
             self.stride,
-            self.padding,
-            self.dilation,
+            padding=self.padding,
+            dilation=self.dilation,
             bias=True,
             groups=1,
             device=self.device,
@@ -249,25 +248,20 @@ class TinyBellbeast(torch.nn.Module):
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
 
             x = self.transformer[i * 2](x, noise_transformer, mask=None)
-            print(f"#Attn1 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.roll_out(x)
-            print(f"#RollOut {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._get_windows(x, self.window_size_outer)
-            print(f"#Windows2 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             mask = self._gen_mask_(B, xlat, xlon, self.window_size_outer).unsqueeze(
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
             x = self.transformer[i * 2 + 1](x, noise_transformer, mask)
-            print(f"#Attn2 {dist.get_rank(group=None)}, x.shape = {x.shape}")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
-            print(f"#UnRollOut {dist.get_rank(group=None)}, x.shape = {x.shape}")
 
         x_res2 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous()
