@@ -21,7 +21,6 @@ from gb.model.expert import Expert
 from gb.model.model_gb_tiny import TinyBellbeast
 from gb.utils import (
     convert_jigsaw_vi,
-    count_model_parameters,
     get_process_group,
     init_gb_process_group,
     set_all_seeds,
@@ -68,11 +67,6 @@ def training_loop(config_dict):
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
-
-    if dist.get_rank(group=None) == 0:
-        print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
-        )
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -140,7 +134,7 @@ def training_loop(config_dict):
     time_df.to_csv(
         os.path.join(
             os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}.csv",
+            f"logs/timings_1_5_deg/timings_rank{dist.get_rank(group=None)}.csv",
         ),
         sep=";",
         index=False,

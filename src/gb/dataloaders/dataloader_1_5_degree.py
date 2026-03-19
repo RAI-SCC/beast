@@ -1,10 +1,13 @@
+import os
+
 import torch
 import torch.distributed as dist
-from gb.dataloaders.dataloader_2_25_degree import GBDataLoader
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 
+from gb.dataloaders.dataloader_0_25_degree import GBDataLoader
 from gb.dataloaders.dataset_1_5_degree import (
+    DummyDataset,
     ERA5DatasetDownsampled,
     ERA5TwoTimestepsDatasetDownsampled,
     WeatherTestDataset,
@@ -15,15 +18,23 @@ def get_dataloader(config_dict, dp_process_group, mode="train"):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
 
-    if config_dict["data"]["n_in_timesteps"] == 2:
-        dataset = ERA5TwoTimestepsDatasetDownsampled(
-            config_dict,
-            mode=mode,
-            normalize=True,
-            dt=dt,
-        )
+    if os.path.exists(config_dict["data"]["train_data_path"]):
+        if config_dict["data"]["n_in_timesteps"] == 2:
+            dataset = ERA5TwoTimestepsDatasetDownsampled(
+                config_dict,
+                mode=mode,
+                normalize=True,
+                dt=dt,
+            )
+        else:
+            dataset = ERA5DatasetDownsampled(
+                config_dict,
+                mode=mode,
+                normalize=True,
+                dt=dt,
+            )
     else:
-        dataset = ERA5DatasetDownsampled(
+        dataset = DummyDataset(
             config_dict,
             mode=mode,
             normalize=True,

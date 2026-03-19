@@ -1,5 +1,6 @@
 import csv
 import os
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -434,6 +435,64 @@ class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
         target = torch.cat(
             (torch.tensor(target_pressure), torch.tensor(target_surface)), dim=0
         )
+
+        return input, target
+
+
+class DummyDataset(Dataset):
+    """Dataset in the shape of 1.5 degree data, filled with random numbers, for testing on systems without data"""
+
+    def __init__(
+        self,
+        config,
+        mode,
+        normalize=True,
+        dt=None,
+    ):
+        """
+        Initialize.
+
+        params: Dict
+            configuration file
+        mode: String
+            of value 'training', 'testing', 'validation'
+        """
+        self.dt = config["data"]["dt"]
+        self.datapath = config["data"]["train_data_path"]
+        if mode == "train":  # training case, lite
+            self.years = config["data"]["train_time_range"]
+        elif mode == "validation":  # validation
+            self.years = config["data"]["valid_time_range"]
+        else:
+            self.years = None
+
+        self.batch_size = config["training"]["batch_size"]
+
+        self.xlat, self.xlon = config["data"]["xlat"], config["data"]["xlon"]
+        mask_list = config["data"]["constant_masks"]
+
+        # Filter desired time points based on parameters and return file statistics.
+        max_date = datetime.strptime(self.years[1], "%Y-%m-%d")
+        min_date = datetime.strptime(self.years[0], "%Y-%m-%d")
+
+        self.n_data_items = (max_date - min_date).days * 24
+        self.num_masks = len(mask_list)
+
+        if config["data"]["n_variables"] is None:
+            self.n_variables = 69
+        else:
+            self.n_variables = config["data"]["n_variables"]
+
+    def __len__(self):
+        """Return total number of samples."""
+        return self.n_data_items - self.dt
+
+    def __getitem__(self, idx):
+        total_vars = self.n_variables + self.num_masks
+        shape = (total_vars, self.xlat, self.xlon)
+
+        input = torch.random(shape)
+        target = torch.random(shape)
 
         return input, target
 
