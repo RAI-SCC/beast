@@ -107,7 +107,6 @@ def training_loop(config_dict):
         model,
         expert_loss_weighting,
         len(train_dataloader.dataset),
-        dtp_group,
         up_group,
         dp_group,
         ep_group,

@@ -29,7 +29,6 @@ from gb.utils import (
 
 
 def training_loop(config_dict):
-    dtp_group = get_process_group("DTP")
     up_group = get_process_group("SP")
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
@@ -41,7 +40,7 @@ def training_loop(config_dict):
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    set_all_seeds(dtp_group.rank())
+    set_all_seeds(42)
 
     model = TinyBellbeast(
         xlat=config_dict["data"]["xlat"],
@@ -98,7 +97,6 @@ def training_loop(config_dict):
         model,
         expert_loss_weighting,
         len(train_dataloader.dataset),
-        dtp_group,
         up_group,
         dp_group,
         ep_group,
@@ -124,7 +122,6 @@ def training_loop(config_dict):
             optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
-            dtp_group=dtp_group,
         )
 
         end_time = time.perf_counter()
@@ -143,16 +140,14 @@ def training_loop(config_dict):
     time_df.to_csv(
         os.path.join(
             os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+            f"logs/timings/timings_rank{dist.get_rank(group=None)}.csv",
         ),
         sep=";",
         index=False,
     )
 
 
-def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
-):
+def train_one_epoch(epoch, dataloader, model, n_samples, optimizer, loss_fn, device):
     timings = []
     timings.append((epoch, -1, time.time_ns(), time.time_ns()))
 
@@ -181,13 +176,11 @@ def train_one_epoch(
 
         if i % 100 == 0:
             # # Average loss over all four processes for exactness
-            dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
                     f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
                 )
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
-    dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
     return average_loss, timings
 
@@ -223,8 +216,8 @@ def main():
 
     # append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
- 
-     # default case: load only one timestep
+
+    # default case: load only one timestep
     if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
         config_dict["data"]["n_in_timesteps"] = 1
 

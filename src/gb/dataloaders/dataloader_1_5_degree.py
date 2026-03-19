@@ -1,16 +1,17 @@
-# from .dataset import KanguDataset, UnpaddedDataset, GlobePaddedKanguDataset, AugmentedKanguDataset
+import torch
 import torch.distributed as dist
-from torch.utils.data import DataLoader
+from gb.dataloaders.dataloader_2_25_degree import GBDataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 
 from gb.dataloaders.dataset_1_5_degree import (
     ERA5DatasetDownsampled,
     ERA5TwoTimestepsDatasetDownsampled,
-    WeatherTestDataset
+    WeatherTestDataset,
 )
-from gb.dataloaders.dataloader_2_25_degree import GBDataLoader
 
-def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train"):
+
+def get_dataloader(config_dict, dp_process_group, mode="train"):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
 
@@ -53,6 +54,7 @@ def get_dataloader(config_dict, dtp_process_group, dp_process_group, mode="train
     )
 
     return dataloader
+
 
 def get_test_dataloader(config, pg):
     dataset = WeatherTestDataset(config)

@@ -1,8 +1,5 @@
-import math
-
 import torch
 import torch.nn as nn
-import torch.nn.init as init
 
 from src.gb.model.expert import ExpertWeightingLayer
 
@@ -73,7 +70,7 @@ class TinyBellbeast(torch.nn.Module):
             device=self.device,
         )
 
-        self.upsample = torch.nn.Conv2d(
+        self.upsample = torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -85,7 +82,7 @@ class TinyBellbeast(torch.nn.Module):
             bias=True,
         )
 
-        self.patch_recovery = torch.nn.Conv2d(
+        self.patch_recovery = torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -106,7 +103,7 @@ class TinyBellbeast(torch.nn.Module):
                     output_dim=self.embed_dim,
                     heads=self.heads,
                     noise_dim=self.noise_dim,
-                    dropout=1e-3,  # dropout
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
                 ).to(self.device)
                 for i in torch.arange(
@@ -123,7 +120,7 @@ class TinyBellbeast(torch.nn.Module):
                     self.embed_dim * 2,
                     heads=self.heads,
                     noise_dim=self.noise_dim,
-                    dropout=1e-3,  # dropout
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[1])
@@ -135,22 +132,26 @@ class TinyBellbeast(torch.nn.Module):
         assert window_size_inner[0] % 2 == 0, "window[0] size must be divisible by 2"
         assert window_size_inner[1] % 2 == 0, "window[1] size must be divisible by 2"
 
-        self.roll_out = torch.roll(
+        self.roll_out = lambda x: torch.roll(
+            x,
             shifts=(window_size_outer[0] // 2, window_size_outer[1] // 2),
             dims=(-3, -2),
         )
 
-        self.unroll_out = torch.rolll(
+        self.unroll_out = lambda x: torch.roll(
+            x,
             shifts=(-window_size_outer[0] // 2, -window_size_outer[1] // 2),
             dims=(-3, -2),
         )
 
-        self.roll_in = torch.roll(
+        self.roll_in = lambda x: torch.roll(
+            x,
             shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
             dims=(-3, -2),
         )
 
-        self.unroll_in = torch.roll(
+        self.unroll_in = lambda x: torch.roll(
+            x,
             shifts=(-window_size_inner[0] // 2, -window_size_inner[1] // 2),
             dims=(-3, -2),
         )
@@ -336,7 +337,6 @@ class TinyBellbeast(torch.nn.Module):
 class NiceWindowedTransformerBlock(torch.nn.Module):
     def __init__(
         self,
-        x_features: int,
         embed_dim: int,
         output_dim: int,
         heads: int,
@@ -345,14 +345,12 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         device: torch.device,
     ):
         super().__init__()
-        self.x_features = x_features
         self.embed_dim = embed_dim
         self.heads = heads
         self.output_dim = output_dim
         self.noise_dim = noise_dim
 
         self.attention_block = WindowedAttention(
-            self.x_features,
             self.embed_dim,
             self.output_dim,
             self.heads,
@@ -385,7 +383,6 @@ class WindowedAttention(nn.Module):
 
     def __init__(
         self,
-        x_features,
         embed_dim,
         output_dim,
         heads,
@@ -393,7 +390,6 @@ class WindowedAttention(nn.Module):
         super().__init__()
 
         self.embed_dim = embed_dim
-        self.x_features = x_features
 
         # Initialize several operations
         # Should make sense to use dim*3 to generate the vectors for a qkv matrix
@@ -420,34 +416,34 @@ class WindowedAttention(nn.Module):
             of shape (n_batch * n_windows, n_patch_in_window, hidden_dim)
         """
 
-        # x shape: (B*n_windows, W0*W1*W2, C)
-        x_patches_local = x
-
         # reshape the data to calculate multi-head attention
-        qkv = self.qkv(x_patches_local).reshape(
+        qkv = self.qkv(x).reshape(
             (
                 x.shape[0],
                 x.shape[1],
                 3,
                 self.head_number,
-                self.dim // self.head_number,
+                self.embed_dim // self.head_number,
             )
         )
-        q, k, v = torch.tensor_split(qkv, 3, dim=-1)
+        q, k, v = torch.tensor_split(qkv, 3, dim=-3)
 
         # Scale the attention
-        q = q * self.scale
+        q = q.squeeze(dim=-3) * self.scale
 
         # Calculated the attention, a learnable bias is added to fix the nonuniformity of the grid.
         # Attention shape: nB * n_windows, nHeads, N, N (n_patch_in_window = W0*W1*W2)
-        attention = q @ k.transpose(-2, -1)  # @ denotes matrix multiplication
+        attention = q @ k.squeeze(dim=-3).transpose(
+            -2, -1
+        )  # @ denotes matrix multiplication
 
         if mask is not None:
             attention = attention + mask
 
         attention = self.softmax(attention)
 
-        values = attention @ v
+        values = attention @ v.squeeze(dim=-3)
+        ## TODO: head merging: Reshape so that head_dim and hidden_dim are one dim
         values = self.linear(values)
 
         return values
@@ -501,69 +497,14 @@ class NiceNorm(nn.Module):
         self.noise_dim = noise_dim
         self.shape = normalized_shape
 
-        self.activation = nn.GELU()
-
-        self.scale_weight1 = nn.Parameter(
-            torch.empty((normalized_shape, noise_dim), dtype=dtype, device=device)
-        )
-        self.scale_bias1 = nn.Parameter(
-            torch.empty(normalized_shape, dtype=dtype, device=device)
-        )
-        self.scale_weight2 = nn.Parameter(
-            torch.empty(
-                (normalized_shape, normalized_shape), dtype=dtype, device=device
-            )
-        )
-        self.scale_bias2 = nn.Parameter(
-            torch.empty(normalized_shape, dtype=dtype, device=device)
-        )
-
-        self.shift_weight1 = nn.Parameter(
-            torch.empty((normalized_shape, noise_dim), dtype=dtype, device=device)
-        )
-        self.shift_bias1 = nn.Parameter(
-            torch.empty(normalized_shape, dtype=dtype, device=device)
-        )
-        self.shift_weight2 = nn.Parameter(
-            torch.empty(
-                (normalized_shape, normalized_shape), dtype=dtype, device=device
-            )
-        )
-        self.shift_bias2 = nn.Parameter(
-            torch.empty(normalized_shape, dtype=dtype, device=device)
-        )
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        init.kaiming_uniform_(self.scale_weight1, a=math.sqrt(5))
-        init.kaiming_uniform_(self.scale_weight2, a=math.sqrt(5))
-        init.kaiming_uniform_(self.shift_weight1, a=math.sqrt(5))
-        init.kaiming_uniform_(self.shift_weight2, a=math.sqrt(5))
-
-        fan_in, _ = init._calculate_fan_in_and_fan_out(self.scale_weight1)
-        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-        init.uniform_(self.scale_bias1, -bound, bound)
-        init.uniform_(self.shift_bias1, -bound, bound)
-
-        fan_in, _ = init._calculate_fan_in_and_fan_out(self.scale_weight2)
-        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-        init.uniform_(self.scale_bias2, -bound, bound)
-        init.uniform_(self.shift_bias2, -bound, bound)
+        self.scale_mlp = MLP(self.noise_dim, self.shape, self.shape)
+        self.shift_mlp = MLP(self.noise_dim, self.shape, self.shape)
 
     def forward(self, x, noise):
         x = self.norm(x)
 
-        scale = torch.nn.functional.linear(noise, self.scale_weight1, self.scale_bias1)
-        scale = self.activation(scale)
-        scale = torch.nn.functional.linear(scale, self.scale_weight2, self.scale_bias2)
-        scale = scale.reshape(x.shape[0], *[1 for _ in x.shape[1:-1]], self.shape)
-
-        shift = torch.nn.functional.linear(noise, self.shift_weight1, self.shift_bias1)
-        shift = self.activation(shift)
-        shift = torch.nn.functional.linear(shift, self.shift_weight2, self.shift_bias2)
-        shift = shift.reshape(x.shape[0], *[1 for _ in x.shape[1:-1]], self.shape)
-
+        scale = self.scale_mlp(noise)
+        shift = self.shift_mlp(noise)
         x = scale * x + shift
 
         return x

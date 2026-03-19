@@ -13,6 +13,8 @@ import torch_blue.vi.distributions as vidist
 import xarray as xr
 from jigsaw import normalization, utils_init
 
+from gb.model.model_gb_tiny import NiceNorm
+
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
 
@@ -187,9 +189,11 @@ def convert_jigsaw_vi(
 ):
     torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(NiceNorm)
     torch_blue.vi.utils.convert.ban_convert(
         normalization.DistributedNICENorm, ban_mode="submodule"
     )
+    torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
     torch_blue.vi.convert_to_vimodule(
         module,
