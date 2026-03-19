@@ -439,11 +439,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
     training_dict = config_dict.get("training", {})
 
     # All global variables
-    """
-    all_s = config_dict["data"]["out_surface_variables"]
-    all_p = config_dict["data"]["out_pressure_variables"]
-    all_l = config_dict["data"]["out_pressure_levels"]
-    """
 
     all_s = [
         "mean_sea_level_pressure",
@@ -489,17 +484,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
         )
         target_p_levels = training_dict.get("plot_pressure_levels", ["850", "500"])
     else:
-        """
-        target_s_vars = training_dict.get(
-            "eval_surface_variables", config_dict["data"]["out_surface_variables"]
-        )
-        target_p_vars = training_dict.get(
-            "eval_pressure_variables", config_dict["data"]["out_pressure_variables"]
-        )
-        target_p_levels = training_dict.get(
-            "eval_pressure_levels", config_dict["data"]["out_pressure_levels"]
-        )
-        """
         target_s_vars = all_s.copy()
         target_p_vars = all_p.copy()
         target_p_levels = all_l.copy()
