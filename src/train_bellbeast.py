@@ -144,7 +144,7 @@ def training_loop(config_dict):
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(config_dict["mesh_dims"][2] + up_group.rank())
+    set_all_seeds(42 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
