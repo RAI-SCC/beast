@@ -2,6 +2,7 @@ import csv
 import os
 from datetime import datetime
 
+import netCDF4
 import numpy as np
 import pandas as pd
 import torch
@@ -12,6 +13,119 @@ from torch.utils.data import Dataset
 
 
 class ERA5DatasetDownsampled(Dataset):
+    """Define 3D dataset."""
+
+    def __init__(
+        self,
+        config,
+        mode,
+        normalize=True,
+        dt=None,
+    ):
+        """
+        Initialize.
+
+        params: Dict
+            configuration file
+        mode: String
+            of value 'training', 'testing', 'validation'
+        """
+        self.dt = config["data"]["dt"]
+        self.datapath = config["data"]["train_data_path"]
+        if mode == "train":  # training case, lite
+            self.years = config["data"]["train_time_range"]
+        elif mode == "validation":  # validation
+            self.years = config["data"]["valid_time_range"]
+        else:
+            self.years = None
+
+        self.normalize = normalize
+        self.batch_size = config["training"]["batch_size"]
+
+        self.xlat, self.xlon = config["data"]["xlat"], config["data"]["xlon"]
+        mask_path = config["data"]["constant_masks_path"]
+        mask_list = config["data"]["constant_masks"]
+
+        # Filter desired time points based on parameters and return file statistics.
+        self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
+        times = pd.to_datetime(self.zarr_data.time)
+        train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+        self.zarr_data = self.zarr_data.sel(time=train_years)
+
+        self.n_data_items = len(self.zarr_data["time"])
+        self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
+
+        self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+        self.num_masks = self.constant_masks.shape[0]
+
+        # normalization for pressure levels and standard deviation
+        self.norm = netCDF4.Dataset(f"{config['data']['normalization_dir']}/norms.nc")
+        self.norm_values = {
+            "mean": np.array(self.norm["mean"]).reshape(self.num_vars, 1, 1),
+            "std": np.array(self.norm["std"]).reshape(self.num_vars, 1, 1),
+        }
+
+        self.downsampler = torch.nn.AvgPool2d(6, stride=6)
+
+    def __len__(self):
+        """Return total number of samples."""
+        return self.n_data_items - self.dt
+
+    def __getitem__(self, idx):
+        """
+        Return single input, target.
+
+        idx: int
+                global index of item
+        """
+        target_idx = idx + self.dt
+        x = self.zarr_data.isel(time=idx)["fields"].values
+
+        x = (x - self.norm_values["mean"]) / self.norm_values["std"]
+
+        x = self.downsampler(torch.tensor(x))
+        input = torch.cat((x, self.get_constant_masks()), dim=0)
+
+        # Odd ranks load second half of variables, so they might have less masks
+        if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
+            input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, 1))
+
+        # Output data
+        y = self.zarr_data.isel(time=target_idx)["fields"].values
+        y = (y - self.norm_values["mean"]) / self.norm_values["std"]
+
+        target = self.downsampler(torch.tensor(y))
+
+        return input, target
+
+    def get_constant_masks(self):
+        mask = torch.tensor(self.constant_masks[:, : self.xlat, :]).to(torch.float32)
+        return mask
+
+    def _load_constant_mask_2d(self, folder_path, mask_list):
+        """
+        Load the constant masks applied in the patch embedding layer.
+
+        folder_path: String
+            Path to directory containing constant masks
+        mask_list: List[String]
+            List of constant masks
+
+        Returns
+        -------
+        mask: Tensor
+            of shape (num_masks, n_lat, n_lon)
+        """
+        # Load data from numpy files
+        data_files = [f for f in os.listdir(folder_path) if f in mask_list]
+        data = []
+        for file in data_files:
+            data.append(np.load(os.path.join(folder_path, file)))
+        masks = np.stack(data, axis=0)
+        return masks
+
+
+class ERA5Dataset15degree(Dataset):
     """Define 3D dataset."""
 
     def __init__(
@@ -238,7 +352,7 @@ class ERA5DatasetDownsampled(Dataset):
         return masks
 
 
-class ERA5TwoTimestepsDatasetDownsampled(ERA5DatasetDownsampled):
+class ERA5TwoTimestepsDataset15degree(ERA5DatasetDownsampled):
     def __init__(
         self,
         config,

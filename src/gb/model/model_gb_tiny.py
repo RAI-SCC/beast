@@ -40,6 +40,7 @@ class TinyBellbeast(torch.nn.Module):
         self.out_channels = out_channels
 
         self.noise_dim = noise_dim
+        self.activation = torch.nn.GELU()
 
         self.channel_group = channel_group  # hard coded, to avoid parsing through
 
@@ -85,6 +86,13 @@ class TinyBellbeast(torch.nn.Module):
             bias=True,
         )
 
+        self.upsample_mix = torch.nn.Linear(
+            self.embed_dim,
+            self.embed_dim,
+            bias=True,
+            device=device,
+        )
+
         self.patch_recovery = torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
@@ -98,19 +106,17 @@ class TinyBellbeast(torch.nn.Module):
         )
 
         self.n_full_blocks = n_full_blocks
-        self.transformer = torch.nn.ModuleList(
+        self.transformer_1 = torch.nn.ModuleList(
             [
                 NiceWindowedTransformerBlock(
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
-                    heads=self.heads,
+                    heads=self.heads[0],
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
                 ).to(self.device)
-                for i in torch.arange(
-                    2 * (self.n_full_blocks[0] + self.n_full_blocks[2])
-                )
+                for i in torch.arange(2 * self.n_full_blocks[0])
             ]
         )
 
@@ -119,7 +125,7 @@ class TinyBellbeast(torch.nn.Module):
                 NiceWindowedTransformerBlock(
                     self.embed_dim * 2,
                     self.embed_dim * 2,
-                    heads=self.heads,
+                    heads=self.heads[1],
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
@@ -128,6 +134,19 @@ class TinyBellbeast(torch.nn.Module):
             ]
         )
 
+        self.transformer_2 = torch.nn.ModuleList(
+            [
+                NiceWindowedTransformerBlock(
+                    embed_dim=self.embed_dim,
+                    output_dim=self.embed_dim,
+                    heads=self.heads[2],
+                    noise_dim=self.noise_dim,
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    device=self.device,
+                ).to(self.device)
+                for i in torch.arange(2 * self.n_full_blocks[2])
+            ]
+        )
         assert window_size_outer[0] % 2 == 0, "window[0] size must be divisible by 2"
         assert window_size_outer[1] % 2 == 0, "window[1] size must be divisible by 2"
         assert window_size_inner[0] % 2 == 0, "window[0] size must be divisible by 2"
@@ -247,7 +266,7 @@ class TinyBellbeast(torch.nn.Module):
 
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
 
-            x = self.transformer[i * 2](x, noise_transformer, mask=None)
+            x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
@@ -257,7 +276,7 @@ class TinyBellbeast(torch.nn.Module):
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
-            x = self.transformer[i * 2 + 1](x, noise_transformer, mask)
+            x = self.transformer_1[i * 2 + 1](x, noise_transformer, mask)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
@@ -296,19 +315,23 @@ class TinyBellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
             x = self.unroll_in(x)  # [B, lat, lon, channels]
+
         x = x.permute(0, 3, 1, 2).contiguous()
+
         x = self.upsample(x)  # TODO: second layer and non-linearity
 
         B, channels, xlat, xlon = x.shape
 
         x = x.permute(0, 2, 3, 1).contiguous()
+        x = self.activation(x)
+        x = self.upsample_mix(x)
+        x = x.reshape(B, xlat, xlon, channels)
+
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
             x = self._get_windows(x, self.window_size_outer)
-            x = self.transformer[i * 2 + 2 * self.n_full_blocks[0]](
-                x, noise=noise_transformer, mask=None
-            )
+            x = self.transformer_2[i * 2](x, noise=noise_transformer, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
@@ -319,19 +342,15 @@ class TinyBellbeast(torch.nn.Module):
                 1
             )  # unsqueeze for head dimension
             mask = mask.detach()
-            x = self.transformer[i * 2 + 2 * self.n_full_blocks[0] + 1](
-                x, noise_transformer, mask
-            )
+            x = self.transformer_2[i * 2 + 1](x, noise_transformer, mask)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
 
         B, xlat, xlon, channels = x.shape
-        x = x.view(B, xlat * xlon, channels)
+        x = x.permute(0, 3, 1, 2)
 
-        x = x.mT
-        x = x.view(B, channels, xlat, xlon).contiguous()
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))
 
         return x

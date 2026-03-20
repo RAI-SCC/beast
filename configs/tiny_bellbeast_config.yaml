@@ -3,32 +3,29 @@ data:
     train_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
     valid_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr"
     constant_masks_path: "constant_masks"
-    constant_masks : ["soil_type_121_240.npy", "geopotential_at_surface_121_240.npy", "land_sea_mask_121_240.npy"]
-    preprocessed: False
+    constant_masks : ["soil_type_121_240_normalized.npy", "topography_121_240_normalized.npy", "land_sea_mask_121_240.npy"]
     normalization_dir: "data/normalization"
     train_subset: -1
     valid_subset: -1
     train_time_range: ["1979-01-01", "2020-12-31"]
     valid_time_range: ["2021-01-01", "2022-12-31"]
     test_time_range: ["2021-01-01", "2022-12-31"]
-    dataset_subsampling: 1
-    target_subsampling: 6
     prefetch_factor: 2
     num_workers: 7
     xlat: 120
     xlon: 240
-    n_variables: 69
+    n_variables: 84
     n_in_timesteps: 1 #Can be 1 or 2, other not supported atm
 model:
-    n_input_channels: 72 #Will be overwritten internally to fit the data set specifications
-    embedding_dimension: 384
-    n_output_channels: 69
-    n_attn_heads: 6
+    n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
+    embedding_dimension: 1024
+    n_output_channels: 84
+    n_attn_heads: [32, 64, 32]
     patch_size: 2
     noise_dim: 32
-    window_size_outer: [6, 12]
-    window_size_inner: [6, 6]
-    n_attn_blocks: [3,2,3]
+    window_size_outer: [12, 30]
+    window_size_inner: [10, 15]
+    n_attn_blocks: [2,2,2]
     latent_rollout: 1
 training:
     tf32: True
