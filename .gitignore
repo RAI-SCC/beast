@@ -213,5 +213,8 @@ experiments/**/*.pt
 
 # log files
 logs/**/*.out
+logs/**/*
 results/**/*.txt
 results/**/*.txt
+results/**
+scaling_experiments/**

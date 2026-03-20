@@ -27,6 +27,7 @@ class Bellbeast(torch.nn.Module):
         up_group,
         bayesian,
         parallelism,
+        dtype,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -48,9 +49,9 @@ class Bellbeast(torch.nn.Module):
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_channels = out_channels
-
         self.bayesian = bayesian
         self.noise_dim = noise_dim
+        self.dtype = dtype
         self.activation = torch.nn.GELU()
 
         self.patch_embedding = convolutions.DistributedConv2D(
@@ -68,6 +69,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,  # either 4 or 8 (# GPUs in node)
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.downsample = convolutions.DistributedConv2D(
@@ -85,6 +87,7 @@ class Bellbeast(torch.nn.Module):
             parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.expert_layer = ExpertWeightingLayer(
@@ -92,6 +95,7 @@ class Bellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            dtype=self.dtype,
         )
 
         self.upsample = convolutions.DistributedConvTranspose2D(
@@ -109,6 +113,7 @@ class Bellbeast(torch.nn.Module):
             parallelism=self.parallelism,
             bias=True,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
         # each process would have weights: [embed //2 , embed]
         self.upsample_mix = linear.DistributedXWTSync(
@@ -138,6 +143,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.n_full_blocks = n_full_blocks
@@ -224,6 +230,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
 
         self.unroll_out = linear.DistributedRoll(
@@ -233,6 +240,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
         self.roll_in = linear.DistributedRoll(
             shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
@@ -241,6 +249,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
 
         self.unroll_in = linear.DistributedRoll(
@@ -250,6 +259,7 @@ class Bellbeast(torch.nn.Module):
             device=self.device,
             parallelism=self.parallelism,
             spatial_group=self.spatial_group,
+            dtype=dtype,
         )
         self.mask_out, self.mask_in = None, None
 

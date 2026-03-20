@@ -1,6 +1,5 @@
 import os
 
-import netCDF4
 import numpy as np
 import pandas as pd
 import torch
@@ -13,12 +12,7 @@ class ERA5DatasetDistributed(Dataset):
     """Define 3D dataset."""
 
     def __init__(
-        self,
-        config,
-        mode,
-        process_group,
-        normalize=True,
-        dt=None,
+        self, config, mode, process_group, normalize=True, dt=None, dtype=torch.float32
     ):
         """
         Initialize.
@@ -31,6 +25,7 @@ class ERA5DatasetDistributed(Dataset):
             DTP Process group
         """
         self.dt = config["data"]["dt"]
+        self.dtype = dtype
         self.process_group = process_group
         self.local_rank = process_group.rank()
         self.datapath = config["data"]["train_data_path"]
@@ -61,16 +56,13 @@ class ERA5DatasetDistributed(Dataset):
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
-        self.norm = netCDF4.Dataset(f"{config['data']['normalization_dir']}/norms.nc")
-        self.norm_values = {
-            "mean": np.array(self.norm["mean"]).reshape(self.num_vars, 1, 1),
-            "std": np.array(self.norm["std"]).reshape(self.num_vars, 1, 1),
-        }
-        # dummy norm values for code testing
-        # self.norm_values = {
-        #     "mean": np.ones((self.num_vars, 1, 1), dtype=np.float32),
-        #     "std": np.ones((self.num_vars, 1, 1), dtype=np.float32),
-        # }
+        self.norm_values = {}
+        self.norm_values["mean"] = np.load(
+            f"{config['data']['normalization_dir']}/norm_mean.npy"
+        )
+        self.norm_values["std"] = np.load(
+            f"{config['data']['normalization_dir']}/norm_std.npy"
+        )
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -116,7 +108,13 @@ class ERA5DatasetDistributed(Dataset):
             x - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
-        input = torch.cat((torch.tensor(x), self.get_constant_masks()), dim=0)
+        input = torch.cat(
+            (
+                torch.tensor(x, dtype=self.dtype),
+                self.get_constant_masks().to(self.dtype),
+            ),
+            dim=0,
+        )
 
         # Odd ranks load second half of variables, so they might have less masks
         if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
@@ -133,7 +131,7 @@ class ERA5DatasetDistributed(Dataset):
             y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
-        target = torch.tensor(y)
+        target = torch.tensor(y, dtype=self.dtype)
         return input, target
 
     def get_constant_masks(self):
@@ -143,7 +141,7 @@ class ERA5DatasetDistributed(Dataset):
                 : self.xlat,
                 self.in_out_xlon[0] : self.in_out_xlon[1],
             ]
-        ).to(torch.float32)
+        )
 
     def _load_constant_mask_2d(self, folder_path, mask_list):
         """
@@ -170,14 +168,11 @@ class ERA5DatasetDistributed(Dataset):
 
 class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
     def __init__(
-        self,
-        config,
-        mode,
-        process_group,
-        normalize=True,
-        dt=None,
+        self, config, mode, process_group, normalize=True, dt=None, dtype=torch.float32
     ):
-        super().__init__(config, mode, process_group, normalize=normalize, dt=dt)
+        super().__init__(
+            config, mode, process_group, normalize=normalize, dt=dt, dtype=dtype
+        )
         if dist.get_rank(group=None) == 0:
             print("Loading two timeframes as input...")
 
@@ -214,9 +209,14 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
         input = torch.cat(
-            (torch.tensor(x_t2), torch.tensor(x_t2 - x_t1), self.get_constant_masks()),
+            (
+                torch.tensor(x_t2, dtype=self.dtype),
+                torch.tensor(x_t2 - x_t1, dtype=self.dtype),
+                self.get_constant_masks(),
+            ),
             dim=0,
         )
+        input = input.to(self.dtype)
 
         # Odd ranks load second half of variables, so they might have less masks
         if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
@@ -233,5 +233,5 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
             y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
-        target = torch.tensor(y)
+        target = torch.tensor(y, dtype=self.dtype)
         return input, target

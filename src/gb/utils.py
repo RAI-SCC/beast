@@ -12,6 +12,7 @@ import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
 from jigsaw import normalization, utils_init
+from torch.utils.flop_counter import FlopCounterMode
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -108,6 +109,15 @@ def _create_process_mesh_dict(
             mesh_dims[3] * mesh_dims[4],
         ),
         mesh_dim_names=("Expert", "DDP", "DTP"),
+    )
+    alternative_mesh_ddp = dist.device_mesh.init_device_mesh(
+        device_type=device_type,
+        mesh_shape=(
+            mesh_dims[0],
+            mesh_dims[1] * mesh_dims[2] * mesh_dims[3],
+            mesh_dims[4],
+        ),
+        mesh_dim_names=("Expert", "DDP", "JChannel"),
     )
 
     alternative_mesh_ddp = dist.device_mesh.init_device_mesh(
@@ -246,7 +256,7 @@ def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
         if module is model:
             continue
         if hasattr(module, "get_parameter_count"):
-            total += module.get_parameter_count()
+            total += module.get_parameter_count() * 2
 
     return total * parallelism
 
@@ -260,3 +270,68 @@ def set_all_seeds(seed_value: int) -> None:
     # torch.backends.cudnn.deterministic = True  # use deterministic algorithms.
     # torch.backends.cudnn.benchmark = False  # disable to be deterministic.
     os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
+
+
+def set_dtype(dtype: str):
+    """set datatype from config file"""
+    match dtype:
+        case "float32":
+            return torch.float32
+        case "bfloat16":
+            return torch.bfloat16
+        case "float16":
+            return torch.float16
+        case _:
+            return torch.float32
+
+
+def count_flops(
+    model: torch.nn.Module,
+    dataloader: torch.utils.data.DataLoader,
+    loss_fn: callable,
+    n_samples: int,
+    device: torch.device,
+    dtp_group: dist.ProcessGroup,
+):
+    """
+    Count floating point operations [TFLOP] in forward and backward pass of the model.
+
+    FLOPs are accumulated over the entire group
+    """
+    x, y, _, _ = next(iter(dataloader))
+    x, y = x.to(device), y.to(device)
+    with FlopCounterMode(
+        display=False
+    ) as flop_counter:  # display=True breaks down by op
+        pred = model(x, samples=n_samples)
+
+    forward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
+    dist.all_reduce(forward_flops, group=dtp_group)
+
+    with FlopCounterMode(
+        display=False
+    ) as flop_counter:  # display=True breaks down by op
+        loss = loss_fn(pred, y)
+        loss.backward()
+
+    backward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
+    dist.all_reduce(backward_flops, group=dtp_group)
+
+    with FlopCounterMode(
+        display=False
+    ) as flop_counter:  # display=True breaks down by op
+        pred = model(x, samples=n_samples)
+        loss = loss_fn(pred, y)
+        loss.backward()
+
+    total_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
+    dist.all_reduce(total_flops, group=dtp_group)
+
+    if dist.get_rank(group=None) == 0:
+        print(f"Forward flops per iteration is {forward_flops / 1e12} TFLOP")
+        print(f"Backward flops per iteration is {backward_flops / 1e12} TFLOP")
+        print(
+            f"Total forward-backward flops per iteration is {total_flops / 1e12} TFLOP"
+        )
+
+    return forward_flops, backward_flops, total_flops
