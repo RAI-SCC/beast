@@ -15,13 +15,7 @@ from torch.utils.data import Dataset
 class ERA5DatasetDownsampled(Dataset):
     """Define 3D dataset."""
 
-    def __init__(
-        self,
-        config,
-        mode,
-        normalize=True,
-        dt=None,
-    ):
+    def __init__(self, config, mode, normalize=True, dt=None, dtype=torch.float32):
         """
         Initialize.
 
@@ -31,6 +25,7 @@ class ERA5DatasetDownsampled(Dataset):
             of value 'training', 'testing', 'validation'
         """
         self.dt = config["data"]["dt"]
+        self.dtype = dtype
         self.datapath = config["data"]["train_data_path"]
         if mode == "train":  # training case, lite
             self.years = config["data"]["train_time_range"]
@@ -83,8 +78,8 @@ class ERA5DatasetDownsampled(Dataset):
 
         x = (x - self.norm_values["mean"]) / self.norm_values["std"]
 
-        x = self.downsampler(torch.tensor(x))
-        input = torch.cat((x, self.get_constant_masks()), dim=0)
+        x = self.downsampler(torch.tensor(x, dtype=self.dtype))
+        input = torch.cat((x, self.get_constant_masks().to(self.dtype)), dim=0)
 
         # Odd ranks load second half of variables, so they might have less masks
         if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):
@@ -94,7 +89,7 @@ class ERA5DatasetDownsampled(Dataset):
         y = self.zarr_data.isel(time=target_idx)["fields"].values
         y = (y - self.norm_values["mean"]) / self.norm_values["std"]
 
-        target = self.downsampler(torch.tensor(y))
+        target = self.downsampler(torch.tensor(y, dtype=self.dtype))
 
         return input, target
 
@@ -128,13 +123,7 @@ class ERA5DatasetDownsampled(Dataset):
 class ERA5Dataset15degree(Dataset):
     """Define 3D dataset."""
 
-    def __init__(
-        self,
-        config,
-        mode,
-        normalize=True,
-        dt=None,
-    ):
+    def __init__(self, config, mode, normalize=True, dt=None, dtype=torch.float32):
         """
         Initialize.
 
@@ -144,6 +133,7 @@ class ERA5Dataset15degree(Dataset):
             of value 'training', 'testing', 'validation'
         """
         self.dt = config["data"]["dt"]
+        self.dtype = dtype
         self.datapath = config["data"]["train_data_path"]
         if mode == "train":  # training case, lite
             self.years = config["data"]["train_time_range"]
@@ -257,9 +247,9 @@ class ERA5Dataset15degree(Dataset):
 
         input = torch.cat(
             (
-                torch.tensor(input_surface),
-                torch.tensor(input_pressure),
-                self.get_constant_masks(),
+                torch.tensor(input_surface, dtype=self.dtype),
+                torch.tensor(input_pressure, dtype=self.dtype),
+                self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
         )
@@ -319,7 +309,11 @@ class ERA5Dataset15degree(Dataset):
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
 
         target = torch.cat(
-            (torch.tensor(target_pressure), torch.tensor(target_surface)), dim=0
+            (
+                torch.tensor(target_pressure, dtype=self.dtype),
+                torch.tensor(target_surface, dtype=self.dtype),
+            ),
+            dim=0,
         )
 
         return input, target
@@ -352,15 +346,9 @@ class ERA5Dataset15degree(Dataset):
         return masks
 
 
-class ERA5TwoTimestepsDataset15degree(ERA5DatasetDownsampled):
-    def __init__(
-        self,
-        config,
-        mode,
-        normalize=True,
-        dt=None,
-    ):
-        super().__init__(config, mode, normalize=normalize, dt=dt)
+class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
+    def __init__(self, config, mode, normalize=True, dt=None, dtype=torch.float32):
+        super().__init__(config, mode, normalize=normalize, dt=dt, dtype=dtype)
         if dist.get_rank(group=None) == 0:
             print("Loading two timeframes as input...")
 
@@ -484,11 +472,11 @@ class ERA5TwoTimestepsDataset15degree(ERA5DatasetDownsampled):
 
         input = torch.cat(
             (
-                torch.tensor(input_surface1),
-                torch.tensor(input_pressure1),
-                torch.tensor(input_surface2),
-                torch.tensor(input_pressure2),
-                self.get_constant_masks(),
+                torch.tensor(input_surface1, dtype=self.dtype),
+                torch.tensor(input_pressure1, dtype=self.dtype),
+                torch.tensor(input_surface2, dtype=self.dtype),
+                torch.tensor(input_pressure2, dtype=self.dtype),
+                self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
         )
@@ -547,7 +535,11 @@ class ERA5TwoTimestepsDataset15degree(ERA5DatasetDownsampled):
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
 
         target = torch.cat(
-            (torch.tensor(target_pressure), torch.tensor(target_surface)), dim=0
+            (
+                torch.tensor(target_pressure, dtype=self.dtype),
+                torch.tensor(target_surface, dtype=self.dtype),
+            ),
+            dim=0,
         )
 
         return input, target
@@ -556,13 +548,7 @@ class ERA5TwoTimestepsDataset15degree(ERA5DatasetDownsampled):
 class DummyDataset(Dataset):
     """Dataset in the shape of 1.5 degree data, filled with random numbers, for testing on systems without data"""
 
-    def __init__(
-        self,
-        config,
-        mode,
-        normalize=True,
-        dt=None,
-    ):
+    def __init__(self, config, mode, normalize=True, dt=None, dtype=torch.float32):
         """
         Initialize.
 
@@ -572,6 +558,7 @@ class DummyDataset(Dataset):
             of value 'training', 'testing', 'validation'
         """
         self.dt = config["data"]["dt"]
+        self.dtype = dtype
         self.datapath = config["data"]["train_data_path"]
         if mode == "train":  # training case, lite
             self.years = config["data"]["train_time_range"]
@@ -606,8 +593,8 @@ class DummyDataset(Dataset):
         shape_in = (total_vars, self.xlat, self.xlon)
         shape_out = (self.n_variables, self.xlat, self.xlon)
 
-        input = torch.rand(shape_in)
-        target = torch.rand(shape_out)
+        input = torch.rand(shape_in, dtype=self.dtype)
+        target = torch.rand(shape_out, dtype=self.dtype)
 
         return input, target
 

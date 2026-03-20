@@ -2,10 +2,9 @@ import argparse
 import os
 import time
 
+import pandas as pd
 import torch
 import torch.distributed as dist
-
-# torch blue imports
 import yaml
 
 # jigsaw imports
@@ -14,12 +13,14 @@ from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
 from evaluation import validate
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
+from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
 from gb.model.model_gb import Bellbeast
+from gb.model.model_gb_tiny import TinyBellbeast
 from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
@@ -40,6 +41,8 @@ def training_loop(config_dict):
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
 
+    time_log = []
+
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
 
@@ -52,33 +55,90 @@ def training_loop(config_dict):
     )
     set_all_seeds(initialization_rank)
 
-    model = Bellbeast(
-        xlat=config_dict["data"]["xlat"],
-        xlon=config_dict["data"]["xlon"],
-        in_channels=config_dict["model"]["n_input_channels"],
-        embed_dim=config_dict["model"]["embedding_dimension"],
-        out_channels=config_dict["model"]["n_output_channels"],
-        heads=config_dict["model"][
-            "n_attn_heads"
-        ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
-        noise_dim=config_dict["model"]["noise_dim"],
-        kernel_size=config_dict["model"]["patch_size"],
-        window_size_outer=config_dict["model"]["window_size_outer"],
-        window_size_inner=config_dict["model"]["window_size_inner"],
-        n_full_blocks=config_dict["model"][
-            "n_attn_blocks"
-        ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
-        dtp_rank=dtp_group.rank(),
-        device=device,
-        dtp_group=dtp_group,
-        spatial_group=spatial_group,
-        channel_group=channel_group,
-        ep_group=ep_group,
-        up_group=up_group,
-        bayesian=True,
-        parallelism=config_dict["model_parallel"]["parallelism"],
-        dtype=dtype,
-    )
+    ########### Tiny Bellbeast
+    if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
+        model = TinyBellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            device=device,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
+    ########### Grand Bellbeast
+    else:
+        model = Bellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            dtp_rank=dtp_group.rank(),
+            device=device,
+            dtp_group=dtp_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+            bayesian=True,
+            parallelism=config_dict["model_parallel"]["parallelism"],
+            dtype=dtype,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
 
     model = model.to(dtype).to(device)
 
@@ -101,22 +161,6 @@ def training_loop(config_dict):
         device_ids=[device_id],
         output_device=device_id,
         process_group=ddp_group,
-    )
-
-    # Get the data loaders
-    train_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="train",
-        dtype=dtype,
-    )
-
-    valid_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="validation",
     )
 
     validation_results_path = os.path.join(
@@ -181,9 +225,20 @@ def training_loop(config_dict):
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
-            # print(
-            #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
-            # )
+
+        if config_dict["training"]["timings"]:
+            time_df = pd.DataFrame(
+                time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
+            )
+            time_df.to_csv(
+                os.path.join(
+                    os.getenv("WORKDIR"),
+                    f"logs/timings_1_5_deg/timings_rank{dist.get_rank(group=None)}.csv",
+                ),
+                sep=";",
+                index=False,
+            )
+
         dist.barrier(group=None)
 
 
@@ -289,7 +344,7 @@ def main():
 
     # append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
-    if n_masks % 2 == 1:
+    if get_process_group("JChannel").size == 2 and n_masks % 2 == 1:
         n_masks += 1
 
     # default case: load only one timestep

@@ -212,11 +212,10 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
             (
                 torch.tensor(x_t2, dtype=self.dtype),
                 torch.tensor(x_t2 - x_t1, dtype=self.dtype),
-                self.get_constant_masks(),
+                self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
         )
-        input = input.to(self.dtype)
 
         # Odd ranks load second half of variables, so they might have less masks
         if (((self.num_vars + self.num_masks) % 2) == 1) and (self.local_rank % 2 == 1):

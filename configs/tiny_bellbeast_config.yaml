@@ -4,6 +4,7 @@ data:
     valid_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr"
     constant_masks_path: "constant_masks"
     constant_masks : ["soil_type_121_240_normalized.npy", "topography_121_240_normalized.npy", "land_sea_mask_121_240.npy"]
+    preprocessed: False
     normalization_dir: "data/normalization"
     train_subset: -1
     valid_subset: -1
@@ -24,7 +25,7 @@ model:
     patch_size: 2
     noise_dim: 32
     window_size_outer: [12, 30]
-    window_size_inner: [10, 15]
+    window_size_inner: [10, 20]
     n_attn_blocks: [2,2,2]
     latent_rollout: 1
 training:
@@ -32,6 +33,9 @@ training:
     n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 1
     batch_size: 1
+    dtype: float32
+    autocast: False
+    timings: False
 model_parallel:
     parallelism: 1
     type: jigsaw

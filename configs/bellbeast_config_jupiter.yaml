@@ -37,6 +37,7 @@ training:
     batch_size: 1
     dtype: float32
     autocast: False
+    timings: False
 model_parallel:
     parallelism: 4
     type: jigsaw

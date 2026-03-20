@@ -14,31 +14,24 @@ from gb.dataloaders.dataset_1_5_degree import (
 )
 
 
-def get_dataloader(config_dict, dp_process_group, mode="train"):
+def get_dataloader_1_5_deg(
+    config_dict, dtp_process_group, dp_process_group, mode="train", dtype=torch.float32
+):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
 
     if os.path.exists(config_dict["data"]["train_data_path"]):
         if config_dict["data"]["n_in_timesteps"] == 2:
             dataset = ERA5TwoTimestepsDataset15degree(
-                config_dict,
-                mode=mode,
-                normalize=True,
-                dt=dt,
+                config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
             )
         else:
             dataset = ERA5Dataset15degree(
-                config_dict,
-                mode=mode,
-                normalize=True,
-                dt=dt,
+                config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
             )
     else:
         dataset = DummyDataset(
-            config_dict,
-            mode=mode,
-            normalize=True,
-            dt=dt,
+            config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
         )
 
     if config_dict["data"]["train_subset"] > 0:
