@@ -21,7 +21,12 @@ class JLR(torch.autograd.Function):
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
 
         expert_x = [
-            torch.empty((B, channels, xlat, xlon), requires_grad=False, device=device)
+            torch.empty(
+                (B, channels, xlat, xlon),
+                requires_grad=False,
+                device=device,
+                dtype=x.dtype,
+            )
             for _ in range(num_experts)
         ]
         dist.all_gather(expert_x, x, group=ep_group)
@@ -94,7 +99,7 @@ class ExpertWeightingLayer(torch.nn.Module):
         self.device = device
         # shape is (experts, batch ,channels, 1 )
         self.weights = torch.nn.parameter.Parameter(
-            torch.empty(shape, device=device, dtype=torch.float32)
+            torch.empty(shape, device=device, dtype=dtype)
         )
         init.kaiming_uniform_(self.weights, a=math.sqrt(5))
 
@@ -131,9 +136,6 @@ class Expert(torch.nn.Module):
         )  # this is hard-coded to the 84 variables we have agreed on. Not pretty, but better than string comparisons
 
         match self.expert_group.rank():
-            case 0:
-                # universal expert, all variables; default
-                self.weights = torch.ones_like(self.weights)
             case 1:
                 # surface variable expert: 'mean_sea_level_pressure', '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_temperature', 'sea_surface_temperature','total_precipitation'
                 if self.channel_group.rank() == 0:
@@ -148,7 +150,6 @@ class Expert(torch.nn.Module):
                     self.weights[6:num_loc_variables] = 1.0
                 else:
                     self.weights[: (45 - num_loc_variables)] = 1.0
-
             case _:
                 # universal expert, all variables; default
                 self.weights = torch.ones_like(self.weights)

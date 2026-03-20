@@ -2,7 +2,6 @@ import argparse
 import os
 import time
 
-import pandas as pd
 import torch
 import torch.distributed as dist
 
@@ -23,10 +22,12 @@ from gb.model.expert import Expert
 from gb.model.model_gb import Bellbeast
 from gb.utils import (
     convert_jigsaw_vi,
+    count_flops,
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
     set_all_seeds,
+    set_dtype,
 )
 
 
@@ -39,13 +40,16 @@ def training_loop(config_dict):
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
 
-    time_log = []
+    dtype = set_dtype(config_dict["training"]["dtype"])
+    autocast = config_dict["training"]["autocast"]
 
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    initialization_rank = dtp_group.rank() + ep_group.rank() * dtp_group.size()
+    initialization_rank = (
+        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+    )
     set_all_seeds(initialization_rank)
 
     model = Bellbeast(
@@ -73,9 +77,10 @@ def training_loop(config_dict):
         up_group=up_group,
         bayesian=True,
         parallelism=config_dict["model_parallel"]["parallelism"],
+        dtype=dtype,
     )
 
-    model = model.to(torch.float32).to(device)
+    model = model.to(dtype).to(device)
 
     # Make model expert
     model = Expert(model, ep_group)
@@ -85,9 +90,6 @@ def training_loop(config_dict):
         print(
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
         )
-
-        if not os.path.exists(os.path.join(os.getenv("WORKDIR"), "logs/timings")):
-            os.makedirs(os.path.join(os.getenv("WORKDIR"), "logs/timings"))
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -107,6 +109,7 @@ def training_loop(config_dict):
         dtp_process_group=dtp_group,
         dp_process_group=dp_group,
         mode="train",
+        dtype=dtype,
     )
 
     valid_dataloader = get_dataloader(
@@ -134,6 +137,7 @@ def training_loop(config_dict):
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  ##Check if this works with Torch-blue
@@ -141,10 +145,16 @@ def training_loop(config_dict):
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
 
+    # Per-step forward, backward, and total flops
+    # These numbers are already summed across all ranks (not just the dtp group)
+    forward_flops, backward_flops, total_flops = count_flops(
+        model, train_dataloader, loss_fn, n_samples, device, dtp_group
+    )
+
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss, timings = train_one_epoch(
+        avg_loss = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -153,10 +163,10 @@ def training_loop(config_dict):
             loss_fn=loss_fn,
             device=device,
             dtp_group=dtp_group,
+            autocast=autocast,
         )
-
-        # data_fit_loss, prior_matching_loss = validate(
-        validate(
+        end_time = time.perf_counter()
+        data_fit_loss, prior_matching_loss = validate(
             config_dict=config_dict,
             model=model,
             expert_weights=expert_loss_weighting,
@@ -167,38 +177,19 @@ def training_loop(config_dict):
             results_path=validation_results_path,
         )
 
-        end_time = time.perf_counter()
-
-        for t in timings:
-            time_log.append(t)
-
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
             # print(
             #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
             # )
-
-    time_df = pd.DataFrame(
-        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
-    )
-    time_df.to_csv(
-        os.path.join(
-            os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
-        ),
-        sep=";",
-        index=False,
-    )
+        dist.barrier(group=None)
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
+    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
 ):
-    timings = []
-    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
-
     model.train()
     loss_sum = 0.0
 
@@ -206,14 +197,14 @@ def train_one_epoch(
         dataloader.sampler.set_epoch(epoch)
 
     for i, (x, y, start, end) in enumerate(dataloader):
-        timings.append((epoch, i, start, end))
-
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        pred = model(x, samples=n_samples)
-        loss = loss_fn(pred, y)
+        # x shape is [batch, channel, ]
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
+            pred = model(x, samples=n_samples)
+            loss = loss_fn(pred, y)
 
         # Backpropagation
         loss.backward()
@@ -223,25 +214,57 @@ def train_one_epoch(
         loss_sum = loss_sum + float(loss.detach())
 
         if i % 100 == 0:
-            # # Average loss over all four processes for exactness
+            # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
                 )
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-    return average_loss, timings
+    return average_loss
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--scaling", default=False)
+    parser.add_argument("--train_subset")
+    parser.add_argument("--embed_dim")
+    parser.add_argument("--n_attn_blocks")
+    parser.add_argument("--lbs")
+    parser.add_argument("--lsn")
+    parser.add_argument("--nodes", default=2)
+
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    # If we are performing a scaling experiment, read the command line arguments.
+    # Otherwise, the arguments will not be read.
+    if args.scaling:
+        if args.train_subset is not None:
+            config_dict["data"]["train_subset"] = int(args.train_subset)
+        if args.embed_dim is not None:
+            config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
+        if args.n_attn_blocks is not None:
+            config_dict["model"]["n_attn_blocks"] = [
+                int(args.n_attn_blocks),
+                int(args.n_attn_blocks),
+                int(args.n_attn_blocks),
+            ]
+        if args.lbs is not None:
+            config_dict["training"]["batch_size"] = int(args.lbs)
+            # If we are scaling across nodes and modifying the node count
+            config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
+            # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
+
+        if args.lsn is not None:
+            config_dict["training"]["n_samples"] = int(args.lsn)
+            # If we are scaling across nodes and modifying the node count
+            config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
