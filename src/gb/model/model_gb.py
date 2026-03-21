@@ -95,6 +95,7 @@ class Bellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -409,7 +410,6 @@ class Bellbeast(torch.nn.Module):
 
         # here comes the Latent Representation of the experts into play:
         x = self.expert_layer(x)  # does not change the shape of the data
-
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
 
@@ -462,5 +462,6 @@ class Bellbeast(torch.nn.Module):
         x = x.permute(0, 3, 1, 2).contiguous()
 
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
+        print(f"After Model: x.shape = {x.shape}")
 
         return x

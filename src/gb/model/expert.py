@@ -9,13 +9,16 @@ class JLR(torch.autograd.Function):
     """Autograd function for batched joint latent representation mixing distributed across n processes."""
 
     @staticmethod
-    def forward(x, w, ep_group, sp_group, device):
+    def forward(x, w, ep_group, sp_group, bayesian, device):
         num_experts = ep_group.size()
         num_samples = sp_group.size()
         B, channels, xlat, xlon = x.shape
-        num_loc_samples = w.shape[
-            0
-        ]  # TODO: will break for non-bayesian. Introduce boolean (default False)
+        if bayesian:
+            num_loc_samples = w.shape[
+                0
+            ]  # TODO: will break for non-bayesian. Introduce boolean (default False)
+        else:
+            num_loc_samples = 1
 
         x /= num_samples
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
@@ -34,14 +37,20 @@ class JLR(torch.autograd.Function):
         expert_x = torch.cat(expert_x, dim=0)
 
         # expert_x is of shape (num_experts, batch, channel, xlat, xlon)
-        expert_x = expert_x.view(1, num_experts, B, channels, xlat * xlon)
-        # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
+        expert_x = expert_x.view(num_experts, B, channels, xlat * xlon)
+        if bayesian:
+            expert_x = expert_x.unsqueeze(dim=0)
 
+        # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
         jlr = expert_x * w
         # jlr is of shape (samples, experts, batch, channel, xlat * xlon)
 
-        jlr = torch.sum(jlr, dim=1)
-        jlr = jlr.view(num_loc_samples, B, channels, xlat, xlon)
+        if bayesian:
+            jlr = torch.sum(jlr, dim=1)
+            jlr = jlr.view(num_loc_samples, B, channels, xlat, xlon)
+        else:
+            jlr = torch.sum(jlr, dim=0)
+            jlr = jlr.view(B, channels, xlat, xlon)
 
         return jlr, expert_x
 
@@ -77,25 +86,27 @@ class JLR(torch.autograd.Function):
         grad_weight = grad_weight.sum(dim=(-1, -3), keepdim=True)
         # grad_weight is of shape (samples, num_experts, 1, channel, 1)
 
-        return None, grad_weight, None, None, None
+        return None, grad_weight, None, None, None, None
 
     @staticmethod
-    def vmap(info, in_dims, x, w, ep_group, sp_group, device):
+    def vmap(info, in_dims, x, w, ep_group, sp_group, bayesian, device):
         lr = x.clone().detach()
         local_mean = lr.mean(dim=0)
-
-        out = JLR.apply(local_mean, w, ep_group, sp_group, device)
+        out = JLR.apply(local_mean, w, ep_group, sp_group, bayesian, device)
 
         # out has vmapped dimension at dim 0
         return out, 0
 
 
 class ExpertWeightingLayer(torch.nn.Module):
-    def __init__(self, shape, ep_group, sp_group, device=None, dtype=torch.float32):
+    def __init__(
+        self, shape, ep_group, sp_group, bayesian=True, device=None, dtype=torch.float32
+    ):
         super().__init__()
         self.ep_group = ep_group
         self.sp_group = sp_group
         self.ep_rank = self.ep_group.rank()
+        self.bayesian = bayesian
         self.device = device
         # shape is (experts, batch ,channels, 1 )
         self.weights = torch.nn.parameter.Parameter(
@@ -109,9 +120,9 @@ class ExpertWeightingLayer(torch.nn.Module):
 
     def forward(self, x):
         # x is of shape (batch, channel, xlat, xlon)
-        jlr = self.get_jlr(x, self.weights, self.ep_group, self.sp_group, self.device)[
-            0
-        ]
+        jlr = self.get_jlr(
+            x, self.weights, self.ep_group, self.sp_group, self.bayesian, self.device
+        )[0]
 
         return x + jlr
 
