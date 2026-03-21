@@ -328,7 +328,10 @@ def count_flops(
     with FlopCounterMode(
         display=False
     ) as flop_counter:  # display=True breaks down by op
-        pred = model(x, samples=n_samples)
+        if bayesian:
+            pred = model(x, samples=n_samples)
+        else:
+            pred = model(x)
         loss = loss_fn(pred, y)
         loss.backward()
 

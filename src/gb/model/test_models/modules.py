@@ -11,7 +11,7 @@ class WindowedAttention(nn.Module):
 
     def __init__(
         self,
-        x_features
+        x_features,
         embed_dim,
         output_dim,
         heads,
@@ -32,7 +32,7 @@ class WindowedAttention(nn.Module):
         # Store several attributes
         self.heads = heads
         self.scale = (embed_dim // heads) ** -0.5
-     
+
 
     def forward(self, x, mask):
         """
@@ -217,7 +217,7 @@ class NICEWindowedTransformerBlock(torch.nn.Module):
 
         self.layer_norm1 = NICENorm(output_dim, self.noise_dim, device).to(device)
         self.layer_norm2 = NICENorm(output_dim, self.noise_dim, device).to(device)
-        
+
         self.MLP = MLP(
             output_dim,
             output_dim,
@@ -229,5 +229,5 @@ class NICEWindowedTransformerBlock(torch.nn.Module):
     def forward(self, x: torch.tensor, noise: torch.tensor, mask=None):
         x = self.attention_block(self.layer_norm1(x, noise), mask) + x
         x = self.MLP(self.layer_norm2(x, noise)) + x
-        
+
         return x
