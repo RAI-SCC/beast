@@ -296,6 +296,7 @@ def count_flops(
     n_samples: int,
     device: torch.device,
     dtp_group: dist.ProcessGroup,
+    bayesian=True,
 ):
     """
     Count floating point operations [TFLOP] in forward and backward pass of the model.
@@ -307,7 +308,10 @@ def count_flops(
     with FlopCounterMode(
         display=False
     ) as flop_counter:  # display=True breaks down by op
-        pred = model(x, samples=n_samples)
+        if bayesian:
+            pred = model(x, samples=n_samples)
+        else:
+            pred = model(x)
 
     forward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
     dist.all_reduce(forward_flops, group=dtp_group)

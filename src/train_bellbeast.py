@@ -178,6 +178,7 @@ def training_loop(config_dict):
         dp_group,
         ep_group,
     )
+
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -256,7 +257,7 @@ def train_one_epoch(
         y = y.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        # x shape is [batch, channel, ]
+
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x, samples=n_samples)
             loss = loss_fn(pred, y)
@@ -344,7 +345,7 @@ def main():
 
     # append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
-    if get_process_group("JChannel").size == 2 and n_masks % 2 == 1:
+    if get_process_group("JChannel").size() == 2 and n_masks % 2 == 1:
         n_masks += 1
 
     # default case: load only one timestep
@@ -358,6 +359,7 @@ def main():
     # we'll set this automatically, to avoid confusion when defining the config,
     # as n_input_channels depends on how many timesteps we use as concatenated input
     config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
+
     config_dict["model"]["embedding_dimension"] = (
         config_dict["model"]["embedding_dimension"]
         * config_dict["data"]["n_in_timesteps"]

@@ -370,7 +370,6 @@ class Bellbeast(torch.nn.Module):
         return self.mask_out, self.mask_in
 
     def forward(self, x):
-
         # noise has shape [(sample), batch, noise_dim]
         noise = torch.randn(x.shape[0], self.noise_dim, device=self.device)
 

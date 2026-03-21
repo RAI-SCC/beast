@@ -21,16 +21,16 @@ model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 1024
     n_output_channels: 84
-    n_attn_heads: [32, 64, 32]
+    n_attn_heads: [16,32,16]
     patch_size: 2
     noise_dim: 32
     window_size_outer: [12, 30]
     window_size_inner: [10, 20]
-    n_attn_blocks: [2,2,2]
+    n_attn_blocks: [2,3,2]
     latent_rollout: 1
 training:
     tf32: True
-    n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_samples: 4 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 1
     batch_size: 1
     dtype: float32
@@ -39,4 +39,4 @@ training:
 model_parallel:
     parallelism: 1
     type: jigsaw
-mesh_dims: [1,2,2,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
+mesh_dims: [2,2,2,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
