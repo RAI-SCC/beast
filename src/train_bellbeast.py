@@ -142,14 +142,14 @@ def training_loop(config_dict):
 
     model = model.to(dtype).to(device)
 
+    if dist.get_rank(group=None) == 0:
+        print(
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
+        )
+
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
-
-    if dist.get_rank(group=None) == 0:
-        print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
-        )
 
     # Make model Bayesian
     convert_jigsaw_vi(model)

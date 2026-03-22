@@ -253,16 +253,26 @@ def convert_jigsaw_vi(
             utils_init.average_weights_module(m, get_process_group("JSpatial"))
 
 
-def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
-    total = 0
-    for module in model.modules():
-        # Skip the top-level model itself if it has the method
-        if module is model:
-            continue
-        if hasattr(module, "get_parameter_count"):
-            total += module.get_parameter_count() * 2
+def count_model_parameters(
+    model: torch.nn.Module, parallelism: int, bayesian: bool
+) -> int:
+    if parallelism == 1:
+        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        param_sum = 0
+        for module in model.modules():
+            # Skip the top-level model itself if it has the method
+            if module is model:
+                continue
+            if hasattr(module, "get_parameter_count"):
+                param_sum += module.get_parameter_count()
 
-    return total * parallelism
+        total = param_sum * parallelism
+
+    if bayesian:
+        total = total * 2  # Count every parameter twice, if bayesian
+
+    return total
 
 
 def set_all_seeds(seed_value: int) -> None:
