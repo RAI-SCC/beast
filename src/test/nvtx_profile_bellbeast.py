@@ -259,17 +259,29 @@ def training_loop(config_dict, prof=None):
         ## For testing purposes, we only run one epoch, to not generate too much data for the NVTX profiling.
         break
 
-    time_df = pd.DataFrame(
-        time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
-    )
-    time_df.to_csv(
-        os.path.join(
-            os.getenv("WORKDIR"),
-            f"logs/timings/timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
-        ),
-        sep=";",
-        index=False,
-    )
+    if config_dict["timings"]:
+        timings_path = os.path.join(results_path, "timings")
+        time_df = pd.DataFrame(
+            time_log,
+            columns=[
+                "#epoch",
+                "#batch",
+                "step_start",
+                "data_loading_start",
+                "data_loading_end",
+                "gpu_time",
+                "step_end",
+            ],
+        )
+        time_df.to_csv(
+            os.path.join(
+                timings_path,
+                f"timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+            ),
+            sep=";",
+            index=False,
+        )
+        dist.barrier(group=None)
 
 
 def train_one_epoch(
