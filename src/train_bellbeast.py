@@ -5,8 +5,6 @@ import time
 import pandas as pd
 import torch
 import torch.distributed as dist
-
-# torch blue imports
 import yaml
 
 # jigsaw imports
@@ -16,12 +14,16 @@ from torch.nn.parallel import DistributedDataParallel
 # Import evaluation
 from evaluation import validate
 from gb.config import setup_config_dict
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+
+# Import Dataloaders
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
+from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
 from gb.model.model_gb import Bellbeast
+from gb.model.model_gb_tiny import TinyBellbeast
 from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
@@ -54,44 +56,101 @@ def training_loop(config_dict, prof=None):
     )
     set_all_seeds(initialization_rank)
 
-    model = Bellbeast(
-        xlat=config_dict["data"]["xlat"],
-        xlon=config_dict["data"]["xlon"],
-        in_channels=config_dict["model"]["n_input_channels"],
-        embed_dim=config_dict["model"]["embedding_dimension"],
-        out_channels=config_dict["model"]["n_output_channels"],
-        heads=config_dict["model"][
-            "n_attn_heads"
-        ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
-        noise_dim=config_dict["model"]["noise_dim"],
-        kernel_size=config_dict["model"]["patch_size"],
-        window_size_outer=config_dict["model"]["window_size_outer"],
-        window_size_inner=config_dict["model"]["window_size_inner"],
-        n_full_blocks=config_dict["model"][
-            "n_attn_blocks"
-        ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
-        dtp_rank=dtp_group.rank(),
-        device=device,
-        dtp_group=dtp_group,
-        spatial_group=spatial_group,
-        channel_group=channel_group,
-        ep_group=ep_group,
-        up_group=up_group,
-        bayesian=True,
-        parallelism=config_dict["model_parallel"]["parallelism"],
-        dtype=dtype,
-    )
+    ########### Tiny Bellbeast
+    if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
+        model = TinyBellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            device=device,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
+    ########### Grand Bellbeast
+    else:
+        model = Bellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            dtp_rank=dtp_group.rank(),
+            device=device,
+            dtp_group=dtp_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+            bayesian=True,
+            parallelism=config_dict["model_parallel"]["parallelism"],
+            dtype=dtype,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
 
     model = model.to(dtype).to(device)
+
+    if dist.get_rank(group=None) == 0:
+        print(
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
+        )
 
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
-
-    if dist.get_rank(group=None) == 0:
-        print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
-        )
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -105,31 +164,22 @@ def training_loop(config_dict, prof=None):
         process_group=ddp_group,
     )
 
-    # Get the data loaders
-    train_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="train",
-        dtype=dtype,
-    )
-
-    valid_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="validation",
+    validation_results_path = os.path.join(
+        os.getenv("WORKDIR"),
+        "results",
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID"),
     )
 
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
         len(train_dataloader.dataset),
-        dtp_group,
         up_group,
         dp_group,
         ep_group,
     )
+
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
@@ -139,7 +189,7 @@ def training_loop(config_dict, prof=None):
     )  ##Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(config_dict["mesh_dims"][2] + up_group.rank())
+    set_all_seeds(42 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -147,12 +197,17 @@ def training_loop(config_dict, prof=None):
         model, train_dataloader, loss_fn, n_samples, device, dtp_group
     )
 
-    ### Validation and timings
+    ## Validation and timings
     results_path = os.path.join(
         os.getenv("OUTPUT_DIR"),
         os.getenv("SLURM_JOB_PARTITION"),
         os.getenv("SLURM_JOB_ID", "interactive"),
     )
+    # results_path = os.path.join( ## TODO QUICK FIX; CHANGE THIS ONCE PERMISSIONS ARE SET!!!
+    #     os.getenv("WORKDIR"),
+    #     "results",
+    #     os.getenv("SLURM_JOB_PARTITION"),
+    # )
 
     validation_results_path = os.path.join(results_path, "validation")
     if dist.get_rank(group=None) == 0:
@@ -200,9 +255,6 @@ def training_loop(config_dict, prof=None):
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
-            # print(
-            #     f"Validation loss components: Data fitting: {data_fit_loss}, Prior matching: {prior_matching_loss}"
-            # )
 
     if config_dict["timings"]:
         timings_path = os.path.join(results_path, "timings")
@@ -226,11 +278,21 @@ def training_loop(config_dict, prof=None):
             sep=";",
             index=False,
         )
+
         dist.barrier(group=None)
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast, prof=None
+    epoch,
+    dataloader,
+    model,
+    n_samples,
+    optimizer,
+    loss_fn,
+    device,
+    dtp_group,
+    autocast,
+    prof=None,
 ):
     timings = []
 
@@ -247,7 +309,7 @@ def train_one_epoch(
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
-        # x shape is [batch, channel, ]
+
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x, samples=n_samples)
             loss = loss_fn(pred, y)
@@ -305,28 +367,27 @@ def main():
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
-    if config_dict["profile"] and global_rank==3:
+    if config_dict["profile"] and global_rank == 3:
         import torch.profiler as tprofiler
+
         def trace_handler(p):
             # Export in Chrome trace format (Perfetto can open this)
             path = os.getenv("PROFILE_DIR")
             os.makedirs(path, exist_ok=True)
-            p.export_chrome_trace(f'{path}/trace-{global_rank}.json')
+            p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
         with tprofiler.profile(
-                activities=[tprofiler.ProfilerActivity.CPU, tprofiler.ProfilerActivity.CUDA],
-                #record_shapes=True,
-                #profile_memory=True,
-                schedule=tprofiler.schedule(
-                    skip_first=1,
-                    wait=2,
-                    warmup=2,
-                    active=3
-                ),
-                #with_stack=True,
-                #with_flops=True,
-                on_trace_ready=trace_handler
-                ) as prof:
+            activities=[
+                tprofiler.ProfilerActivity.CPU,
+                tprofiler.ProfilerActivity.CUDA,
+            ],
+            # record_shapes=True,
+            # profile_memory=True,
+            schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
+            # with_stack=True,
+            # with_flops=True,
+            on_trace_ready=trace_handler,
+        ) as prof:
             training_loop(config_dict, prof)
 
     else:

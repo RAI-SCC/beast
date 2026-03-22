@@ -12,7 +12,6 @@ class JLR(torch.autograd.Function):
     def forward(x, w, ep_group, sp_group, device):
         num_experts = ep_group.size()
         num_samples = sp_group.size()
-
         B, channels, xlat, xlon = x.shape
         num_loc_samples = w.shape[
             0
@@ -137,21 +136,20 @@ class Expert(torch.nn.Module):
         )  # this is hard-coded to the 84 variables we have agreed on. Not pretty, but better than string comparisons
 
         match self.expert_group.rank():
-            case 0:
+            case 1:
                 # surface variable expert: 'mean_sea_level_pressure', '10m_u_component_of_wind', '10m_v_component_of_wind', '2m_temperature', 'sea_surface_temperature','total_precipitation'
                 if self.channel_group.rank() == 0:
                     self.weights[0:6] = 1.0
-            case 1:
+            case 2:
                 # wind expert: u, v and w at all pressure levels
                 if self.channel_group.rank() == 1:
                     self.weights[(45 - num_loc_variables) :] = 1.0
-            case 2:
+            case 3:
                 # thermodynamic expert: geopotential, temperature and specific humidity at all pressure levels
                 if self.channel_group.rank() == 0:
                     self.weights[6:num_loc_variables] = 1.0
                 else:
                     self.weights[: (45 - num_loc_variables)] = 1.0
-
             case _:
                 # universal expert, all variables; default
                 self.weights = torch.ones_like(self.weights)

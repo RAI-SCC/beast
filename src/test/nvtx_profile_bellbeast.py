@@ -1,6 +1,7 @@
 import sys
 
 sys.path.append("./src/")
+
 import argparse
 import os
 import time
@@ -8,8 +9,6 @@ import time
 import pandas as pd
 import torch
 import torch.distributed as dist
-
-# torch blue imports
 import yaml
 
 # jigsaw imports
@@ -17,22 +16,31 @@ from jigsaw import utils
 from torch.cuda import nvtx
 from torch.nn.parallel import DistributedDataParallel
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+# Import evaluation
+from evaluation import validate
+from gb.config import setup_config_dict
+
+# Import Dataloaders
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
+from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
 from gb.model.model_gb import Bellbeast
+from gb.model.model_gb_tiny import TinyBellbeast
 from gb.utils import (
     convert_jigsaw_vi,
+    count_flops,
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
     set_all_seeds,
+    set_dtype,
 )
 
 
-def training_loop(config_dict):
+def training_loop(config_dict, prof=None):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
@@ -43,49 +51,112 @@ def training_loop(config_dict):
 
     time_log = []
 
+    dtype = set_dtype(config_dict["training"]["dtype"])
+    autocast = config_dict["training"]["autocast"]
+
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
     # Define the Model
-    set_all_seeds(dtp_group.rank())
-
-    model = Bellbeast(
-        xlat=config_dict["data"]["xlat"],
-        xlon=config_dict["data"]["xlon"],
-        in_channels=config_dict["model"]["n_input_channels"],
-        embed_dim=config_dict["model"]["embedding_dimension"],
-        out_channels=config_dict["model"]["n_output_channels"],
-        heads=config_dict["model"][
-            "n_attn_heads"
-        ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
-        noise_dim=config_dict["model"]["noise_dim"],
-        kernel_size=config_dict["model"]["patch_size"],
-        window_size_outer=config_dict["model"]["window_size_outer"],
-        window_size_inner=config_dict["model"]["window_size_inner"],
-        n_full_blocks=config_dict["model"][
-            "n_attn_blocks"
-        ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
-        dtp_rank=dtp_group.rank(),
-        device=device,
-        dtp_group=dtp_group,
-        spatial_group=spatial_group,
-        channel_group=channel_group,
-        ep_group=ep_group,
-        up_group=up_group,
-        bayesian=True,
-        parallelism=config_dict["model_parallel"]["parallelism"],
+    initialization_rank = (
+        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
     )
+    set_all_seeds(initialization_rank)
+
+    ########### Tiny Bellbeast
+    if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
+        model = TinyBellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            device=device,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_1_5_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
+    ########### Grand Bellbeast
+    else:
+        model = Bellbeast(
+            xlat=config_dict["data"]["xlat"],
+            xlon=config_dict["data"]["xlon"],
+            in_channels=config_dict["model"]["n_input_channels"],
+            embed_dim=config_dict["model"]["embedding_dimension"],
+            out_channels=config_dict["model"]["n_output_channels"],
+            heads=config_dict["model"][
+                "n_attn_heads"
+            ],  # Extend this to also configure Transformer hidden dimension; Currently embed_dim is kept
+            noise_dim=config_dict["model"]["noise_dim"],
+            kernel_size=config_dict["model"]["patch_size"],
+            window_size_outer=config_dict["model"]["window_size_outer"],
+            window_size_inner=config_dict["model"]["window_size_inner"],
+            n_full_blocks=config_dict["model"][
+                "n_attn_blocks"
+            ],  # Change to List of ints of the numbers of blocks in the outer - inner - outer SWIN
+            dtp_rank=dtp_group.rank(),
+            device=device,
+            dtp_group=dtp_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
+            ep_group=ep_group,
+            up_group=up_group,
+            bayesian=True,
+            parallelism=config_dict["model_parallel"]["parallelism"],
+            dtype=dtype,
+        )
+        # Get the data loaders
+        train_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="train",
+            dtype=dtype,
+        )
+
+        valid_dataloader = get_dataloader_0_25_deg(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            mode="validation",
+            dtype=dtype,
+        )
 
     model = model.to(torch.float32).to(device)
+    if dist.get_rank(group=None) == 0:
+        print(
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
+        )
 
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
-
-    if dist.get_rank(group=None) == 0:
-        print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
-        )
 
     # Make model Bayesian
     convert_jigsaw_vi(model)
@@ -99,19 +170,17 @@ def training_loop(config_dict):
         process_group=ddp_group,
     )
 
-    # Get the data loaders
-    train_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="train",
+    validation_results_path = os.path.join(
+        os.getenv("WORKDIR"),
+        "results",
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID"),
     )
 
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
         len(train_dataloader.dataset),
-        dtp_group,
         up_group,
         dp_group,
         ep_group,
@@ -126,6 +195,28 @@ def training_loop(config_dict):
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
 
+    # Per-step forward, backward, and total flops
+    # These numbers are already summed across all ranks (not just the dtp group)
+    forward_flops, backward_flops, total_flops = count_flops(
+        model, train_dataloader, loss_fn, n_samples, device, dtp_group
+    )
+
+    ### Validation and timings
+    results_path = os.path.join(
+        os.getenv("OUTPUT_DIR"),
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID", "interactive"),
+    )
+
+    validation_results_path = os.path.join(results_path, "validation")
+    if dist.get_rank(group=None) == 0:
+        os.makedirs(validation_results_path, exist_ok=True)
+        with open(f"{results_path}/config.yaml", "w") as file:
+            yaml.dump(config_dict, file)
+
+        timings_path = os.path.join(results_path, "timings")
+        os.makedirs(timings_path, exist_ok=True)
+
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         nvtx.range_push(f"Epoch {epoch}")
@@ -139,10 +230,24 @@ def training_loop(config_dict):
             loss_fn=loss_fn,
             device=device,
             dtp_group=dtp_group,
+            autocast=autocast,
+            prof=prof,
         )
 
         end_time = time.perf_counter()
         nvtx.range_pop()
+
+        if not config_dict["skip_validation"]:
+            data_fit_loss, prior_matching_loss = validate(
+                config_dict=config_dict,
+                model=model,
+                expert_weights=expert_loss_weighting,
+                n_samples=n_samples,
+                dataloader=valid_dataloader,
+                device=device,
+                epoch=epoch,
+                results_path=validation_results_path,
+            )
 
         for t in timings:
             time_log.append(t)
@@ -168,7 +273,16 @@ def training_loop(config_dict):
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group
+    epoch,
+    dataloader,
+    model,
+    n_samples,
+    optimizer,
+    loss_fn,
+    device,
+    dtp_group,
+    autocast,
+    prof=None,
 ):
     timings = []
     timings.append((epoch, -1, time.time_ns(), time.time_ns()))
@@ -179,16 +293,17 @@ def train_one_epoch(
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y, start, end) in enumerate(dataloader):
-        timings.append((epoch, i, start, end))
-
+    step_start = time.time_ns()
+    for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
+        gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
         nvtx.range_push(f"E{epoch}B{i} - Forward")
-        pred = model(x, samples=n_samples)
-        loss = loss_fn(pred, y)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
+            pred = model(x, samples=n_samples)
+            loss = loss_fn(pred, y)
         nvtx.range_pop()
 
         # Backpropagation
@@ -201,6 +316,8 @@ def train_one_epoch(
         nvtx.range_pop()
 
         loss_sum = loss_sum + float(loss.detach())
+        step_end = time.time_ns()
+        timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
 
         if i == 10:
             # For testing purposes, we only run a few steps, to not generate too much data for the NVTX profiling.
@@ -213,6 +330,9 @@ def train_one_epoch(
                 print(
                     f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
                 )
+        step_start = time.time_ns()
+        if prof:
+            prof.step()
 
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
@@ -223,10 +343,17 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--skip_validation", action="store_true")
+    parser.add_argument("--timings", action="store_true")
+    parser.add_argument("--profile", action="store_true")
+    parser.add_argument("configargs", nargs="*")
+
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    config_dict = setup_config_dict(config_dict, args)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
@@ -234,46 +361,6 @@ def main():
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)
-
-    ### Data Stuff ###
-    WORKDIR = os.getenv("WORKDIR")
-
-    if os.getenv("DATA_DIR") is not None:
-        config_dict["data"]["train_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
-        )
-        config_dict["data"]["valid_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
-        )
-        config_dict["data"]["constant_masks_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
-        )
-
-    # append n_masks for odd number of masks (the dataset does this, too)
-    n_masks = len(config_dict["data"]["constant_masks"])
-    if n_masks % 2 == 1:
-        n_masks += 1
-
-    # default case: load only one timestep
-    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
-        config_dict["data"]["n_in_timesteps"] = 1
-
-    n_input_vars = (
-        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
-    )
-
-    # we'll set this automatically, to avoid confusion when defining the config,
-    # as n_input_channels depends on how many timesteps we use as concatenated input
-    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
-    config_dict["model"]["embedding_dimension"] = (
-        config_dict["model"]["embedding_dimension"]
-        * config_dict["data"]["n_in_timesteps"]
-    )
-
-    if "normalization_dir" in config_dict["data"]:
-        config_dict["data"]["normalization_dir"] = (
-            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
-        )
 
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
@@ -284,7 +371,32 @@ def main():
             "RUNNING NVTX PROFILED TRAINING, WILL ONLY RUN A FEW STEPS. To change this, change the loop exit settings in in the training loop."
         )
 
-    training_loop(config_dict)
+    if config_dict["profile"] and global_rank == 3:
+        print("Profiling with torch.profiler")
+        import torch.profiler as tprofiler  # can this be on file top?
+
+        def trace_handler(p):
+            # Export in Chrome trace format (Perfetto can open this)
+            path = os.getenv("PROFILE_DIR")
+            os.makedirs(path, exist_ok=True)
+            p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
+
+        with tprofiler.profile(
+            activities=[
+                tprofiler.ProfilerActivity.CPU,
+                tprofiler.ProfilerActivity.CUDA,
+            ],
+            # record_shapes=True,
+            # profile_memory=True,
+            schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
+            # with_stack=True,
+            # with_flops=True,
+            on_trace_ready=trace_handler,
+        ) as prof:
+            training_loop(config_dict, prof)
+
+    else:
+        training_loop(config_dict)
 
     dist.destroy_process_group()
 
