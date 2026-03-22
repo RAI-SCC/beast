@@ -3,13 +3,15 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:4
-#SBATCH --time=30:00
+#SBATCH --time=00:30:00
 #SBATCH --job-name='gb_run'
 #SBATCH --output='logs/%x_%j.out'
 
 echo "$0 $@"
 
 perun=false
+profsys=false
+profcu=false
 function print_help() {
     cat <<EOF
 Usage: $0 [OPTIONS] <system_env> <python_script> [ARGS...]
@@ -21,6 +23,8 @@ Arguments:
 
 Options:
   --perun          Enable Perun monitoring
+  --profsys        Enable Nsight Systems profiling/rocprof-systems
+  --profcu         Enable Nsight Compute profiling/rocprof-compute
   -h, --help       Display this help message
 
 EOF
@@ -34,6 +38,14 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --perun)
             perun=true
+            shift
+            ;;
+        --profsys)
+            profsys=true
+            shift
+            ;;
+        --profcu)
+            profcu=true
             shift
             ;;
         *)
@@ -68,12 +80,20 @@ setup_system
 export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
+# Validate that only one profiling tool is enabled
+if [[ ($profsys == true && $perun == true) || ($profcu == true && $perun == true) || ($profcu == true && $profsys == true) ]]; then
+    echo "Error: Cannot enable multiple profiling tools at the same time" >&2
+    exit 1
+fi
 
 if [[ $perun == true ]]; then
     PYTHON_CMD="perun --log_file=logs/perun_${SCRIPT_FILE}_${SYSTEM_ENV_FILE}_${SLURM_JOB_ID}.log monitor"
 else
     PYTHON_CMD="python -u"
 fi
+
+export PROFSYS=$profsys
+export PROFCU=$profcu
 
 echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"

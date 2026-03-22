@@ -13,6 +13,9 @@ from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
 from evaluation import validate
+from gb.config import setup_config_dict
+
+# Import Dataloaders
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
 from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
 from gb.model.expert import Expert
@@ -30,7 +33,7 @@ from gb.utils import (
 )
 
 
-def training_loop(config_dict):
+def training_loop(config_dict, prof=None):
     spatial_group = get_process_group("JSpatial")
     channel_group = get_process_group("JChannel")
     dtp_group = get_process_group("DTP")
@@ -38,8 +41,6 @@ def training_loop(config_dict):
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
-
-    time_log = []
 
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
@@ -140,14 +141,14 @@ def training_loop(config_dict):
 
     model = model.to(dtype).to(device)
 
+    if dist.get_rank(group=None) == 0:
+        print(
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=False)}"
+        )
+
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
-
-    if dist.get_rank(group=None) == 0:
-        print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'])}"
-        )
 
     # Make model data parallel
     model = DistributedDataParallel(
@@ -166,7 +167,7 @@ def training_loop(config_dict):
 
     loss_fn = torch.nn.MSELoss()  # Bayesian version: UP_AllGaussLoss
 
-    n_samples = config_dict["training"]["n_samples"]
+    n_samples = 1
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
@@ -189,10 +190,28 @@ def training_loop(config_dict):
         bayesian=False,  # Non-Bayesian version
     )
 
+    ## Validation and timings
+    results_path = os.path.join(
+        os.getenv("OUTPUT_DIR"),
+        os.getenv("SLURM_JOB_PARTITION"),
+        os.getenv("SLURM_JOB_ID", "interactive"),
+    )
+
+    validation_results_path = os.path.join(results_path, "validation")
+    if dist.get_rank(group=None) == 0:
+        os.makedirs(validation_results_path, exist_ok=True)
+        with open(f"{results_path}/config.yaml", "w") as file:
+            yaml.dump(config_dict, file)
+
+        timings_path = os.path.join(results_path, "timings")
+        os.makedirs(timings_path, exist_ok=True)
+
+    time_log = []
+
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
-        avg_loss = train_one_epoch(
+        avg_loss, timings = train_one_epoch(
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -202,55 +221,83 @@ def training_loop(config_dict):
             device=device,
             dtp_group=dtp_group,
             autocast=autocast,
+            prof=prof,
         )
         end_time = time.perf_counter()
-        data_fit_loss, prior_matching_loss = validate(
-            config_dict=config_dict,
-            model=model,
-            expert_weights=expert_loss_weighting,
-            n_samples=n_samples,
-            dataloader=valid_dataloader,
-            device=device,
-            epoch=epoch,
-            results_path=validation_results_path,
-        )
+        if not config_dict["skip_validation"]:
+            data_fit_loss, prior_matching_loss = validate(
+                config_dict=config_dict,
+                model=model,
+                expert_weights=expert_loss_weighting,
+                n_samples=n_samples,
+                dataloader=valid_dataloader,
+                device=device,
+                epoch=epoch,
+                results_path=validation_results_path,
+            )
+
+        for t in timings:
+            time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
                 f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
-        if config_dict["training"]["timings"]:
-            time_df = pd.DataFrame(
-                time_log, columns=["#epoch", "#batch", "batch_start", "batch_end"]
-            )
-            time_df.to_csv(
-                os.path.join(
-                    os.getenv("WORKDIR"),
-                    f"logs/timings_1_5_deg/timings_rank{dist.get_rank(group=None)}.csv",
-                ),
-                sep=";",
-                index=False,
-            )
+    if config_dict["timings"]:
+        timings_path = os.path.join(results_path, "timings")
+        time_df = pd.DataFrame(
+            time_log,
+            columns=[
+                "#epoch",
+                "#batch",
+                "step_start",
+                "data_loading_start",
+                "data_loading_end",
+                "gpu_time",
+                "step_end",
+            ],
+        )
+        time_df.to_csv(
+            os.path.join(
+                timings_path,
+                f"timings_rank{dist.get_rank(group=None)}_gpu{dtp_group.rank()}.csv",
+            ),
+            sep=";",
+            index=False,
+        )
 
         dist.barrier(group=None)
 
 
 def train_one_epoch(
-    epoch, dataloader, model, n_samples, optimizer, loss_fn, device, dtp_group, autocast
+    epoch,
+    dataloader,
+    model,
+    n_samples,
+    optimizer,
+    loss_fn,
+    device,
+    dtp_group,
+    autocast,
+    prof=None,
 ):
+    timings = []
+
     model.train()
     loss_sum = 0.0
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
-    for i, (x, y, start, end) in enumerate(dataloader):
+    step_start = time.time_ns()
+    for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
+        gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
-        # x shape is [batch, channel, ]
+
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x)  # Bayesian version: pred = model(x, samples=n_samples)
             loss = loss_fn(pred, y)
@@ -261,23 +308,42 @@ def train_one_epoch(
         optimizer.step()
 
         loss_sum = loss_sum + float(loss.detach())
+        step_end = time.time_ns()
+        timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
 
         if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. rmse loss: {float(loss.detach())}"
                 )
+
+        if i == 200:
+            break
+
+        step_start = time.time_ns()
+        if prof:
+            prof.step()
+
+        if i == 20:
+            break
+
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-    return average_loss
+    return average_loss, timings
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+
+    parser.add_argument("--skip_validation", action="store_true")
+    parser.add_argument("--timings", action="store_true")
+    parser.add_argument("--profile", action="store_true")
+    parser.add_argument("configargs", nargs="*")
+
     parser.add_argument("--scaling", default=False)
     parser.add_argument("--train_subset")
     parser.add_argument("--embed_dim")
@@ -290,6 +356,8 @@ def main():
 
     with open(f"{args.config_file}", "r") as f:
         config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    config_dict = setup_config_dict(config_dict, args)
 
     # If we are performing a scaling experiment, read the command line arguments.
     # Otherwise, the arguments will not be read.
@@ -322,53 +390,39 @@ def main():
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)
 
-    ### Data Stuff ###
-    WORKDIR = os.getenv("WORKDIR")
-
-    if os.getenv("DATA_DIR") is not None:
-        config_dict["data"]["train_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
-        )
-        config_dict["data"]["valid_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
-        )
-        config_dict["data"]["constant_masks_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
-        )
-
-    # append n_masks for odd number of masks (the dataset does this, too)
-    n_masks = len(config_dict["data"]["constant_masks"])
-    if get_process_group("JChannel").size() == 2 and n_masks % 2 == 1:
-        n_masks += 1
-
-    # default case: load only one timestep
-    if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
-        config_dict["data"]["n_in_timesteps"] = 1
-
-    n_input_vars = (
-        config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
-    )
-
-    # we'll set this automatically, to avoid confusion when defining the config,
-    # as n_input_channels depends on how many timesteps we use as concatenated input
-    config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
-
-    config_dict["model"]["embedding_dimension"] = (
-        config_dict["model"]["embedding_dimension"]
-        * config_dict["data"]["n_in_timesteps"]
-    )
-
-    if "normalization_dir" in config_dict["data"]:
-        config_dict["data"]["normalization_dir"] = (
-            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
-        )
-
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Valid data path: {config_dict['data']['valid_data_path']}")
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
-    training_loop(config_dict)
+    if config_dict["profile"] and global_rank == 3:
+        import torch.profiler as tprofiler
+
+        def trace_handler(p):
+            # Export in Chrome trace format (Perfetto can open this)
+            path = os.getenv("PROFILE_DIR")
+            os.makedirs(path, exist_ok=True)
+            p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
+
+        with tprofiler.profile(
+            activities=[
+                tprofiler.ProfilerActivity.CPU,
+                tprofiler.ProfilerActivity.CUDA,
+            ],
+            # record_shapes=True,
+            # profile_memory=True,
+            schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
+            # with_stack=True,
+            # with_flops=True,
+            on_trace_ready=trace_handler,
+        ) as prof:
+            training_loop(config_dict, prof)
+
+    else:
+        training_loop(config_dict)
+
+    if dist.get_rank(group=None) == 0:
+        print("FINITE!")
 
     dist.destroy_process_group()
 

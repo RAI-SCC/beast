@@ -11,13 +11,11 @@
         - ``norms.nc`` : normalization values for Bellbeast dataset with 84 variables
 - ``experiments/`` : bash scripts (srun/sbatch, data download, ...)
     - ``run_gb_script.sh`` : your main bash script to launch jobs (system independent)
-- ``logs/``: Slurm output logs, debugging logs, training logs, timings; Good for debugging, sanity check, etc.; Can be large, consider cleaning up periodically
-- ``results/`` : pkl files, checkpoints, anything plotable; mlflow
+- ``logs/``: Default directory where slurm outputs will appear.
 - ``src/`` : main source code
     - ``data/`` : scripts regarding data download (1.5 degree) and conversion, nomalization calculation, etc.
     - ``libs/`` : external libraries
         - jigsaw
-        - torch_blue
     - ``test/`` : test training scripts for sub-models and developments
     - ``gb/:`` Bellbeast codes
         - ``dataloaders/`` : all code regarding data IO
@@ -35,6 +33,11 @@
     - ``train_bellbeast.py`` : **training script to train the Bellbeast (model_gb)**
 - ``systems/`` : System specific container setups (mostly env variables, convenient for accounts, reservations, special container configurations)
 - ``utils/`` : bash utility scripts (Download data, setup environment, print info, etc.)
+
+
+> [!WARNING]
+> ``logs`` and any other output from the runs will be moved to a directory indicated on the system files as ``OUTPUT_DIR``, as the home directory in some systems is limited, and this allows us to share results with everyone involved.
+> Log files will have to be moved manually after each successfull run.
 
 ## Setup
 
