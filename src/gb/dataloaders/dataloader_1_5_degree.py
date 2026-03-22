@@ -8,8 +8,8 @@ from torch.utils.data.distributed import DistributedSampler
 from gb.dataloaders.dataloader_0_25_degree import GBDataLoader
 from gb.dataloaders.dataset_1_5_degree import (
     DummyDataset,
-    ERA5Dataset15degree,
-    ERA5TwoTimestepsDataset15degree,
+    ERA5PreprocessedDataset15degree,
+    ERA5TwoTimestepsPreprocessedDataset15degree,
     WeatherTestDataset,
 )
 
@@ -22,14 +22,16 @@ def get_dataloader_1_5_deg(
 
     if os.path.exists(config_dict["data"]["train_data_path"]):
         if config_dict["data"]["n_in_timesteps"] == 2:
-            dataset = ERA5TwoTimestepsDataset15degree(
+            dataset = ERA5TwoTimestepsPreprocessedDataset15degree(
                 config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
             )
         else:
-            dataset = ERA5Dataset15degree(
+            dataset = ERA5PreprocessedDataset15degree(
                 config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
             )
     else:
+        if dist.get_rank(group=None) == 0:
+            print("train_data_path not found. Running Dummy Dataset")
         dataset = DummyDataset(
             config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
         )

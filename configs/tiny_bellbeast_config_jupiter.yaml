@@ -1,7 +1,7 @@
 data:
     dt: 6
-    train_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
-    valid_data_path: "1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr"
+    train_data_path: "era5_hourly_1.5deg.zarr" # era5_hourly_1.5deg.zarr on jupiter, 1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr on horeka
+    valid_data_path: "era5_hourly_1.5deg.zarr" # era5_hourly_1.5deg.zarr on jupiter, 1959-2022-1h-240x121_equiangular_with_poles_conservative.zarr on horeka
     constant_masks_path: "constant_masks"
     constant_masks : ["soil_type_121_240_normalized.npy", "topography_121_240_normalized.npy", "land_sea_mask_121_240.npy"]
     preprocessed: False
@@ -39,4 +39,4 @@ training:
 model_parallel:
     parallelism: 1
     type: jigsaw
-mesh_dims: [2,2,2,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
+mesh_dims: [1,64,1,1,1] # experts, dp, up, jigsaw spatial, jigsaw channels
