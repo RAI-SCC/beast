@@ -462,6 +462,5 @@ class Bellbeast(torch.nn.Module):
         x = x.permute(0, 3, 1, 2).contiguous()
 
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
-        print(f"After Model: x.shape = {x.shape}")
 
         return x

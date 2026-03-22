@@ -44,6 +44,11 @@ export NCCL_IB_HCA="mlx5"
 export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
 
+# For Stable Runs, Provided by a.herten
+export NCCL_IB_TIMEOUT=50
+export UCX_RC_TIMEOUT=4s
+export NCCL_IB_RETRY_CNT=10
+
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
 
