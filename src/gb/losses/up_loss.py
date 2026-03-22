@@ -13,7 +13,6 @@ class UP_AllGaussLoss(nn.Module):
         model,
         loss_weights,
         dataset_size,
-        dtp_group,
         up_group,
         dp_group,
         ep_group,
@@ -22,7 +21,6 @@ class UP_AllGaussLoss(nn.Module):
     ):
         super().__init__()
 
-        self.dtp_group = dtp_group
         self.up_group = up_group
         self.dp_group = dp_group
         self.ep_group = ep_group

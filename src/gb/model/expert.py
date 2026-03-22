@@ -12,7 +12,6 @@ class JLR(torch.autograd.Function):
     def forward(x, w, ep_group, sp_group, device):
         num_experts = ep_group.size()
         num_samples = sp_group.size()
-
         B, channels, xlat, xlon = x.shape
         num_loc_samples = w.shape[
             0
@@ -151,7 +150,6 @@ class Expert(torch.nn.Module):
                     self.weights[6:num_loc_variables] = 1.0
                 else:
                     self.weights[: (45 - num_loc_variables)] = 1.0
-
             case _:
                 # universal expert, all variables; default
                 self.weights = torch.ones_like(self.weights)

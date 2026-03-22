@@ -29,7 +29,7 @@ class GBDataLoader(DataLoader):
         return GBDataLoaderIter(self)
 
 
-def get_dataloader(
+def get_dataloader_0_25_deg(
     config_dict, dtp_process_group, dp_process_group, mode="train", dtype=torch.float32
 ):
     dt = config_dict["data"]["dt"]

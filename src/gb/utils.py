@@ -14,6 +14,8 @@ import xarray as xr
 from jigsaw import normalization, utils_init
 from torch.utils.flop_counter import FlopCounterMode
 
+from gb.model.model_gb_tiny import NiceNorm
+
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
 
@@ -207,9 +209,11 @@ def convert_jigsaw_vi(
 ):
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    torch_blue.vi.utils.convert.ban_convert(NiceNorm)
     torch_blue.vi.utils.convert.ban_convert(
         normalization.DistributedNICENorm, ban_mode="submodule"
     )
+    torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
     torch_blue.vi.convert_to_vimodule(
         module,
@@ -249,16 +253,26 @@ def convert_jigsaw_vi(
             utils_init.average_weights_module(m, get_process_group("JSpatial"))
 
 
-def count_model_parameters(model: torch.nn.Module, parallelism: int) -> int:
-    total = 0
-    for module in model.modules():
-        # Skip the top-level model itself if it has the method
-        if module is model:
-            continue
-        if hasattr(module, "get_parameter_count"):
-            total += module.get_parameter_count() * 2
+def count_model_parameters(
+    model: torch.nn.Module, parallelism: int, bayesian: bool
+) -> int:
+    if parallelism == 1:
+        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        param_sum = 0
+        for module in model.modules():
+            # Skip the top-level model itself if it has the method
+            if module is model:
+                continue
+            if hasattr(module, "get_parameter_count"):
+                param_sum += module.get_parameter_count()
 
-    return total * parallelism
+        total = param_sum * parallelism
+
+    if bayesian:
+        total = total * 2  # Count every parameter twice, if bayesian
+
+    return total
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -292,6 +306,7 @@ def count_flops(
     n_samples: int,
     device: torch.device,
     dtp_group: dist.ProcessGroup,
+    bayesian=True,
 ):
     """
     Count floating point operations [TFLOP] in forward and backward pass of the model.
@@ -303,7 +318,10 @@ def count_flops(
     with FlopCounterMode(
         display=False
     ) as flop_counter:  # display=True breaks down by op
-        pred = model(x, samples=n_samples)
+        if bayesian:
+            pred = model(x, samples=n_samples)
+        else:
+            pred = model(x)
 
     forward_flops = torch.tensor(flop_counter.get_total_flops(), device=device)
     dist.all_reduce(forward_flops, group=dtp_group)
