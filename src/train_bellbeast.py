@@ -201,6 +201,7 @@ def training_loop(config_dict, prof=None):
     validation_results_path = os.path.join(results_path, "validation")
     checkpoint_path = os.path.join(results_path, "checkpoints")
     timings_path = os.path.join(results_path, "timings")
+    profile_dir = os.getenv("PROFILE_DIR")
     if dist.get_rank(group=None) == 0:
         os.makedirs(validation_results_path, exist_ok=True)
         with open(f"{results_path}/config.yaml", "w") as file:
@@ -208,6 +209,7 @@ def training_loop(config_dict, prof=None):
 
         os.makedirs(timings_path, exist_ok=True)
         os.makedirs(checkpoint_path, exist_ok=True)
+        os.makedirs(profile_dir, exist_ok=True)
 
     time_log = []
 
@@ -388,7 +390,6 @@ def main():
         def trace_handler(p):
             # Export in Chrome trace format (Perfetto can open this)
             path = os.getenv("PROFILE_DIR")
-            os.makedirs(path, exist_ok=True)
             p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
         with tprofiler.profile(
