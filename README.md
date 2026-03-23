@@ -155,7 +155,7 @@ All parameters in the yaml configuration file can be overridden using the comman
 ... --config_file configs/bellbeast_config.yaml training_n_epochs=10 data_train_subset=2000 mesh_dims=1,1,2,2,2
 ```
 
-Arrays are passed as comma-separated values, e.g. for the mesh dimensions. Mesh dimensions should always have 5 values, corresponding to the 5 dimensions of the process mesh (Expert, DP, SP, JSpatial, JChannel), even if some of them are 1 (i.e. no parallelism in that dimension). If a value of -1 is passed, it will be automatically inferred from the number of nodes and gpus per node, e.g. if mesh_dims is set to ``-1,1,1,2,2`` and the job is launched with 4 nodes and 4 gpus per node (16 gpus in total), the first dimension (Expert) will be inferred to be 2, since 2*1*1*2*2 = 16.
+Arrays are passed as comma-separated values, e.g. for the mesh dimensions. Mesh dimensions should always have 5 values, corresponding to the 5 dimensions of the process mesh (Expert, DP, SP, JSpatial, JChannel), even if some of them are 1 (i.e. no parallelism in that dimension). If a value of -1 is passed, it will be automatically inferred from the number of nodes and gpus per node, e.g. if mesh_dims is set to ``-1,1,1,2,2`` and the job is launched with 4 nodes and 4 gpus per node (16 gpus in total), the first dimension (Expert) will be inferred to be 4, since $4\times1\times1\times2\times2 = 16$.
 
 ### Performance monitoring
 
