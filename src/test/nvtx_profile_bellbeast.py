@@ -35,6 +35,7 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    save_checkpoint,
     set_all_seeds,
     set_dtype,
 )
@@ -48,8 +49,6 @@ def training_loop(config_dict, prof=None):
     dp_group = get_process_group("DP")
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
-
-    time_log = []
 
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
@@ -148,7 +147,8 @@ def training_loop(config_dict, prof=None):
             dtype=dtype,
         )
 
-    model = model.to(torch.float32).to(device)
+    model = model.to(dtype).to(device)
+
     if dist.get_rank(group=None) == 0:
         print(
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
@@ -170,13 +170,6 @@ def training_loop(config_dict, prof=None):
         process_group=ddp_group,
     )
 
-    validation_results_path = os.path.join(
-        os.getenv("WORKDIR"),
-        "results",
-        os.getenv("SLURM_JOB_PARTITION"),
-        os.getenv("SLURM_JOB_ID"),
-    )
-
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
@@ -185,12 +178,14 @@ def training_loop(config_dict, prof=None):
         dp_group,
         ep_group,
     )
+
     n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
     utils.setup_precision(
         config_dict["training"]["tf32"]
-    )  ##Check if this works with Torch-blue
+    )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
@@ -201,7 +196,7 @@ def training_loop(config_dict, prof=None):
         model, train_dataloader, loss_fn, n_samples, device, dtp_group
     )
 
-    ### Validation and timings
+    ## Validation, profiling and timings
     results_path = os.path.join(
         os.getenv("OUTPUT_DIR"),
         os.getenv("SLURM_JOB_PARTITION"),
@@ -209,19 +204,26 @@ def training_loop(config_dict, prof=None):
     )
 
     validation_results_path = os.path.join(results_path, "validation")
+    checkpoint_path = os.path.join(results_path, "checkpoints")
+    timings_path = os.path.join(results_path, "timings")
+    profile_dir = os.getenv("PROFILE_DIR")
     if dist.get_rank(group=None) == 0:
         os.makedirs(validation_results_path, exist_ok=True)
         with open(f"{results_path}/config.yaml", "w") as file:
             yaml.dump(config_dict, file)
 
-        timings_path = os.path.join(results_path, "timings")
         os.makedirs(timings_path, exist_ok=True)
+        os.makedirs(checkpoint_path, exist_ok=True)
+        os.makedirs(profile_dir, exist_ok=True)
+
+    time_log = []
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
         nvtx.range_push(f"Epoch {epoch}")
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
+            config_dict=config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -231,9 +233,9 @@ def training_loop(config_dict, prof=None):
             device=device,
             dtp_group=dtp_group,
             autocast=autocast,
+            checkpoint_path=checkpoint_path,
             prof=prof,
         )
-
         end_time = time.perf_counter()
         nvtx.range_pop()
 
@@ -249,15 +251,23 @@ def training_loop(config_dict, prof=None):
                 results_path=validation_results_path,
             )
 
+            # Save checkpoint after validation to have the validation loss in the checkpoint
+            save_checkpoint(
+                validation_results_path,
+                model,
+                optimizer,
+                epoch,
+                step=None,
+                loss=data_fit_loss,
+            )
+
         for t in timings:
             time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
-        ## For testing purposes, we only run one epoch, to not generate too much data for the NVTX profiling.
-        break
 
     if config_dict["timings"]:
         timings_path = os.path.join(results_path, "timings")
@@ -281,10 +291,12 @@ def training_loop(config_dict, prof=None):
             sep=";",
             index=False,
         )
+
         dist.barrier(group=None)
 
 
 def train_one_epoch(
+    config_dict,
     epoch,
     dataloader,
     model,
@@ -294,10 +306,10 @@ def train_one_epoch(
     device,
     dtp_group,
     autocast,
+    checkpoint_path,
     prof=None,
 ):
     timings = []
-    timings.append((epoch, -1, time.time_ns(), time.time_ns()))
 
     model.train()
     loss_sum = 0.0
@@ -331,17 +343,24 @@ def train_one_epoch(
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
 
-        if i == 10:
-            # For testing purposes, we only run a few steps, to not generate too much data for the NVTX profiling.
-            break
+        if i % config_dict["training"]["checkpoint_interval"] == 0:
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                epoch,
+                i,
+                loss_sum,
+            )
 
         if i % 100 == 0:
-            # # Average loss over all four processes for exactness
+            # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
                 )
+
         step_start = time.time_ns()
         if prof:
             prof.step()
@@ -359,7 +378,6 @@ def main():
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("configargs", nargs="*")
-
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
@@ -384,13 +402,11 @@ def main():
         )
 
     if config_dict["profile"] and global_rank == 3:
-        print("Profiling with torch.profiler")
-        import torch.profiler as tprofiler  # can this be on file top?
+        import torch.profiler as tprofiler
 
         def trace_handler(p):
             # Export in Chrome trace format (Perfetto can open this)
             path = os.getenv("PROFILE_DIR")
-            os.makedirs(path, exist_ok=True)
             p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
         with tprofiler.profile(

@@ -66,7 +66,6 @@ profsys_cmd=(
     --cudabacktrace=all
     --python-backtrace=cuda
     --python-sampling=true
-    --delay=60
 )
 export PROFSYS_CMD="${profsys_cmd[@]}"
 
