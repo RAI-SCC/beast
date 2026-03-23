@@ -11,7 +11,6 @@ echo "$0 $@"
 
 perun=false
 profsys=false
-profcu=false
 function print_help() {
     cat <<EOF
 Usage: $0 [OPTIONS] <system_env> <python_script> [ARGS...]
