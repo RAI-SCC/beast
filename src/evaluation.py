@@ -800,7 +800,7 @@ class ExpertAggregation(nn.Module):
 
 
 def gather_global_ranks(process_group, device):
-    gather_tensor = torch.tensor([dist.get_rank()], device=device, dtype=torch.uint8)
+    gather_tensor = torch.tensor([dist.get_rank()], device=device, dtype=torch.uint16)
 
     gathered = [
         torch.zeros_like(gather_tensor)
