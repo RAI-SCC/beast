@@ -27,7 +27,6 @@ def validate(
 ):
     # get group information
     channel_group = get_process_group("JChannel")
-    spatial_group = get_process_group("JSpatial")
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
     up_group = get_process_group("SP")
@@ -45,7 +44,7 @@ def validate(
 
     dist.barrier()  # needed for checkpoint_path creation
     if (
-        ddp_rank == 0 and up_group.rank() == 0 and spatial_group.rank() == 0
+        ddp_rank == 0
     ):  # TODO Check of this is correct... means we only get two model files.
         print(f"Checkpoint Path is {checkpoint_path}")
         model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}.pth"

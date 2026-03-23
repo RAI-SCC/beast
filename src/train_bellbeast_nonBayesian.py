@@ -319,15 +319,11 @@ def train_one_epoch(
                     f"{epoch}, after Step {i}/{len(dataloader)}. rmse loss: {float(loss.detach())}"
                 )
 
-        if i == 200:
-            break
-
         step_start = time.time_ns()
         if prof:
             prof.step()
-
-        if i == 20:
-            break
+            if i == 10:  # If we are profiling, we don't want to do too many steps..
+                break
 
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
@@ -404,6 +400,7 @@ def main():
             os.makedirs(path, exist_ok=True)
             p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
+        print("Profiling ... Please wait")
         with tprofiler.profile(
             activities=[
                 tprofiler.ProfilerActivity.CPU,

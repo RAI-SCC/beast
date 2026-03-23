@@ -273,8 +273,6 @@ def training_loop(config_dict, prof=None):
             index=False,
         )
 
-        dist.barrier(group=None)
-
 
 def train_one_epoch(
     epoch,
@@ -328,9 +326,6 @@ def train_one_epoch(
         step_start = time.time_ns()
         if prof:
             prof.step()
-
-        if i == 20:
-            break
 
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
@@ -389,6 +384,7 @@ def main():
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
     init_gb_process_group(mesh_dims)
+    dist.barrier(group=None)
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)
@@ -427,6 +423,8 @@ def main():
 
     if dist.get_rank(group=None) == 0:
         print("FINITE!")
+
+    dist.barrier(group=None)
     dist.destroy_process_group()
 
 
