@@ -24,7 +24,6 @@ Arguments:
 Options:
   --perun          Enable Perun monitoring
   --profsys        Enable Nsight Systems profiling/rocprof-systems
-  --profcu         Enable Nsight Compute profiling/rocprof-compute
   -h, --help       Display this help message
 
 EOF
@@ -42,10 +41,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --profsys)
             profsys=true
-            shift
-            ;;
-        --profcu)
-            profcu=true
             shift
             ;;
         *)
@@ -81,7 +76,7 @@ export MASTER_PORT=12342
 master_addr=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 # Validate that only one profiling tool is enabled
-if [[ ($profsys == true && $perun == true) || ($profcu == true && $perun == true) || ($profcu == true && $profsys == true) ]]; then
+if [[ ($profsys == true && $perun == true) ]]; then
     echo "Error: Cannot enable multiple profiling tools at the same time" >&2
     exit 1
 fi
@@ -93,7 +88,6 @@ else
 fi
 
 export PROFSYS=$profsys
-export PROFCU=$profcu
 
 echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"

@@ -48,17 +48,13 @@ export NCCL_NET_GDR_LEVEL="PHB"
 export PROFILE_DIR="${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles"
 
 profsys_cmd=(
-    rocprofv3 
+    rocprofv3
     --sys-trace
     --output-format pftrace
     -d "$PROFILE_DIR"
     --
 )
 export PROFSYS_CMD="${profsys_cmd[@]}"
-
-profcu_cmd=(
-)
-export PROFCU_CMD="${profcu_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration

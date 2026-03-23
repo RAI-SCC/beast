@@ -30,6 +30,7 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    save_checkpoint,
     set_all_seeds,
     set_dtype,
 )
@@ -164,13 +165,6 @@ def training_loop(config_dict, prof=None):
         process_group=ddp_group,
     )
 
-    validation_results_path = os.path.join(
-        os.getenv("WORKDIR"),
-        "results",
-        os.getenv("SLURM_JOB_PARTITION"),
-        os.getenv("SLURM_JOB_ID"),
-    )
-
     loss_fn = UP_AllGaussLoss(
         model,
         expert_loss_weighting,
@@ -186,7 +180,7 @@ def training_loop(config_dict, prof=None):
 
     utils.setup_precision(
         config_dict["training"]["tf32"]
-    )  ##Check if this works with Torch-blue
+    )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
     set_all_seeds(42 + up_group.rank())
@@ -197,26 +191,23 @@ def training_loop(config_dict, prof=None):
         model, train_dataloader, loss_fn, n_samples, device, dtp_group
     )
 
-    ## Validation and timings
+    ## Validation, profiling and timings
     results_path = os.path.join(
         os.getenv("OUTPUT_DIR"),
         os.getenv("SLURM_JOB_PARTITION"),
         os.getenv("SLURM_JOB_ID", "interactive"),
     )
-    # results_path = os.path.join( ## TODO QUICK FIX; CHANGE THIS ONCE PERMISSIONS ARE SET!!!
-    #     os.getenv("WORKDIR"),
-    #     "results",
-    #     os.getenv("SLURM_JOB_PARTITION"),
-    # )
 
     validation_results_path = os.path.join(results_path, "validation")
+    checkpoint_path = os.path.join(results_path, "checkpoints")
+    timings_path = os.path.join(results_path, "timings")
     if dist.get_rank(group=None) == 0:
         os.makedirs(validation_results_path, exist_ok=True)
         with open(f"{results_path}/config.yaml", "w") as file:
             yaml.dump(config_dict, file)
 
-        timings_path = os.path.join(results_path, "timings")
         os.makedirs(timings_path, exist_ok=True)
+        os.makedirs(checkpoint_path, exist_ok=True)
 
     time_log = []
 
@@ -224,6 +215,7 @@ def training_loop(config_dict, prof=None):
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
+            config_dict=config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -233,6 +225,7 @@ def training_loop(config_dict, prof=None):
             device=device,
             dtp_group=dtp_group,
             autocast=autocast,
+            checkpoint_path=checkpoint_path,
             prof=prof,
         )
         end_time = time.perf_counter()
@@ -246,6 +239,16 @@ def training_loop(config_dict, prof=None):
                 device=device,
                 epoch=epoch,
                 results_path=validation_results_path,
+            )
+
+            # Save checkpoint after validation to have the validation loss in the checkpoint
+            save_checkpoint(
+                validation_results_path,
+                model,
+                optimizer,
+                epoch,
+                step=None,
+                loss=data_fit_loss,
             )
 
         for t in timings:
@@ -283,6 +286,7 @@ def training_loop(config_dict, prof=None):
 
 
 def train_one_epoch(
+    config_dict,
     epoch,
     dataloader,
     model,
@@ -292,6 +296,7 @@ def train_one_epoch(
     device,
     dtp_group,
     autocast,
+    checkpoint_path,
     prof=None,
 ):
     timings = []
@@ -322,6 +327,16 @@ def train_one_epoch(
         loss_sum = loss_sum + float(loss.detach())
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
+
+        if i % config_dict["training"]["checkpoint_interval"] == 0:
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                epoch,
+                i,
+                loss_sum,
+            )
 
         if i % 100 == 0:
             # Average loss over all four processes for exactness
