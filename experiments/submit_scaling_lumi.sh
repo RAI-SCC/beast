@@ -50,8 +50,9 @@ set -euo pipefail
 # ---------------------------
 
 EXP_NAME="lsn_multinode"
-VAR_NAME="lsn"
+VAR_NAME="training_n_samples"
 VARS=(1)
+MESH_STRING="1,2,-1,4,2"
 NODES=(16 32 64 128 256 512)
 EMBED_DIM=2048
 X_AXIS_NAME="nodes"
@@ -99,7 +100,7 @@ done
 REPO_ROOT="$(pwd)"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-EXPERIMENT_DIR="${REPO_ROOT}/logs/${SYSTEM_NAME}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
+EXPERIMENT_DIR="${PROJECT_DIR}/output/${SYSTEM_NAME}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
 CONFIG_DIR="${EXPERIMENT_DIR}/configs"
 LOG_DIR="${EXPERIMENT_DIR}/logs"
 ANALYSIS_DIR="${REPO_ROOT}/results/${SYSTEM_NAME}"
@@ -148,11 +149,11 @@ EOF
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config.yaml" \
-        --train_subset ${SUBSET_SIZE} \
-        --embed_dim ${EMBED_DIM} \
-        --"${VAR_NAME}" ${VAR} \
-        --scaling True \
-        --nodes "${NODE}" )
+        --skip_validation \
+        data_train_subset=${SUBSET_SIZE} \
+        model_embedding_dimension=${EMBED_DIM} \
+        ${VAR_NAME}=${VAR} \
+        mesh_dims=$MESH_STRING )
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
     JOB_IDS+=("$JOB_ID")

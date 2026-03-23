@@ -11,13 +11,11 @@
         - ``norms.nc`` : normalization values for Bellbeast dataset with 84 variables
 - ``experiments/`` : bash scripts (srun/sbatch, data download, ...)
     - ``run_gb_script.sh`` : your main bash script to launch jobs (system independent)
-- ``logs/``: Slurm output logs, debugging logs, training logs, timings; Good for debugging, sanity check, etc.; Can be large, consider cleaning up periodically
-- ``results/`` : pkl files, checkpoints, anything plotable; mlflow
+- ``logs/``: Default directory where slurm outputs will appear.
 - ``src/`` : main source code
     - ``data/`` : scripts regarding data download (1.5 degree) and conversion, nomalization calculation, etc.
     - ``libs/`` : external libraries
         - jigsaw
-        - torch_blue
     - ``test/`` : test training scripts for sub-models and developments
     - ``gb/:`` Bellbeast codes
         - ``dataloaders/`` : all code regarding data IO
@@ -35,6 +33,11 @@
     - ``train_bellbeast.py`` : **training script to train the Bellbeast (model_gb)**
 - ``systems/`` : System specific container setups (mostly env variables, convenient for accounts, reservations, special container configurations)
 - ``utils/`` : bash utility scripts (Download data, setup environment, print info, etc.)
+
+
+> [!WARNING]
+> ``logs`` and any other output from the runs will be moved to a directory indicated on the system files as ``OUTPUT_DIR``, as the home directory in some systems is limited, and this allows us to share results with everyone involved.
+> Log files will have to be moved manually after each successfull run.
 
 ## Setup
 
@@ -141,32 +144,45 @@ sbatch -A project_462001248 -p standard-g --nodes <N_NODES> --tasks-per-node 4 -
 Go grab a cup of coffe and stare at loss values
 
 
-## Other Example commands
+## Additional functionalities
 
-### Testing distributed process group
 
-**Don't forget to adjust the mesh inside the ```src/test_process_mesh.py``` to match the number of nodes and gpus per node.**
+### Overriding the configuration using the command line
 
-```console
-sbatch -A hk-project-pai00058 -p accelerated --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/hk_container.sh src/test_process_mesh.py
-```
-
-On lumi:
-```console
-sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/lumi_singularity.sh src/test_process_mesh.py
-```
-
-On jupiter:
-```console
-sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/jupiter_container.sh src/test_process_mesh.py
-```
-
-### Performance monitoring with Perun
+All parameters in the yaml configuration file can be overridden using the command line. The syntax is ``<root_category>_<parameter_name>=<value>``, where ``<root_category>`` is the first level category in the yaml file, e.g. ``training``, ``model``, etc. For example, to change the number of epochs to 10 and the learning rate to 1e-4, you can add the following to the command line after all the `--` arguments:
 
 ```console
-sbatch -A jureap1 -p booster --nodes 2 --tasks-per-node 4 --gres=gpu:4 -t 30:00 --job-name=exact_up_dp_SWIN experiments/run_gb_script.sh --perun systems/jupiter_container.sh src/test_exact_up_dp_SWIN.py --config_file configs/up_dp_SWIN_config.yaml
+... --config_file configs/bellbeast_config.yaml training_n_epochs=10 data_train_subset=2000 mesh_dims=1,1,2,2,2
 ```
 
+Arrays are passed as comma-separated values, e.g. for the mesh dimensions. Mesh dimensions should always have 5 values, corresponding to the 5 dimensions of the process mesh (Expert, DP, SP, JSpatial, JChannel), even if some of them are 1 (i.e. no parallelism in that dimension). If a value of -1 is passed, it will be automatically inferred from the number of nodes and gpus per node, e.g. if mesh_dims is set to ``-1,1,1,2,2`` and the job is launched with 4 nodes and 4 gpus per node (16 gpus in total), the first dimension (Expert) will be inferred to be 2, since 2*1*1*2*2 = 16.
+
+### Performance monitoring
+
+We have four ways to profile and monitor the performance of the model during training.
+
+#### Data loading timings
+
+Simplest form of monitoring, which is implemented in the training loop. It will log the time taken to load the data, the forward and backward pass, and data movement to the gpu. The timings will be written to csv files in the output directory ( ${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/timings/ ), and can be easily plotted using the provided `experiments/plot_dl_timings.py` script.
+
+Timings can be activated by passing the `--timings` flag to `src/train_bellbeast.py`, before the `--config_file` argument.
+
+#### PyTorch profiler
+
+PyTorch profiler can be used to get a more detailed view of the performance of the model, including GPU utilization, memory usage, and kernel execution times. It can be activated by passing the `--profile` flag to `src/train_bellbeast.py` (before the `--config_file` argument). The profiler will save the results in the output directory ( `${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles/` ), and can be visualized using [Perfetto](https://ui.perfetto.dev/).
+
+
+#### NVIDIA Nsight Systems/Rocprofv3
+
+NVIDIA Nsight Systems (for Jupiter) and Rocprofv3 (for LUMI) are powerful profiling tools that can be used to analyze the performance of the model at a very detailed level, including GPU utilization, memory usage, and kernel execution times. They can be activated by passing the `--profsys` flag to `experiments/run_gb_script.sh` (before the system script), which will then run the training script with the profiler on rank 3. The profiler will save the results in the output directory ( `${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles/` ), and can be visualized using the respective tools.
+
+#### Perun
+
+If you ever want to feel bad, add the `--perun` flag to `experiments/run_gb_script.sh` (before the system script), and run the training script with Perun. Gaze upon the `${WORKDIR}/results/perun_results` directory to come face to face with the staggering amount of energy that your training run has consumed, and the carbon emissions it has generated. Not for the faint of heart.
+
+**TODO**: Find the PUE of the systems and add it to the configurations.
+**TODO**: Find the energy to carbon conversion for Jupiter and LUMI and add it to the configurations.
+**TODO**: Test on larger node counts to see if Perun can handle it (I belive in you).
 
 ## Wiki
 
@@ -188,3 +204,36 @@ See `src/util.py` for implementation details.
 ### Model Library
 
 For the list and descriptions of currently implemented models, see the [model documentation](src/gb/model/README.md)
+
+### Checkpoints
+
+Checkpoints are stored using `torch.save`, and are a dictionary with the following keys:
+    - model_state_dict: the state dict of the model
+    - optimizer_state_dict: the state dict of the optimizer
+    - epoch: the current epoch
+    - step: the current step (global)
+    - ep_group_rank: the rank of the expert parallel group
+    - channel_group_rank: the rank of the channel parallel group
+    - loss: the loss value at the time of saving
+    - format: the format of the checkpoint (currently : 1), but can be used to distinguish between different checkpoint formats in the future, e.g. if we want to save additional information or change the way we save the model state dict (e.g. using sharded checkpoints for larger models)
+
+## Outdated documentation
+
+(To be updated or deleted)
+### Testing distributed process group
+
+**Don't forget to adjust the mesh inside the ```src/test_process_mesh.py``` to match the number of nodes and gpus per node.**
+
+```console
+sbatch -A hk-project-pai00058 -p accelerated --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/hk_container.sh src/test_process_mesh.py
+```
+
+On lumi:
+```console
+sbatch -A project_462001248 -p standard-g --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/lumi_singularity.sh src/test_process_mesh.py
+```
+
+On jupiter:
+```console
+sbatch -A jureap1 -p booster --nodes 4 --tasks-per-node 4 --gres=gpu:4 --job-name=test_pg experiments/run_gb_script.sh systems/jupiter_container.sh src/test_process_mesh.py
+```

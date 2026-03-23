@@ -13,6 +13,7 @@ export WORKDIR="$( pwd )" # For source code
 
 #export DATA_DIR="${PROJECT_DIR}/data"
 export DATA_DIR="/e/scratch/jureap1/GrandBellbeast/data/"
+export OUTPUT_DIR="${PROJECT_DIR}/output"
 
 # =============================================================================
 # Environment configuration
@@ -44,8 +45,30 @@ export NCCL_IB_HCA="mlx5"
 export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
 
+# Timeout configurations
+export NCCL_IB_TIMEOUT=50
+export UCX_RC_TIMEOUT=4s
+export NCCL_IB_RETRY_CNT=10
+
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
+
+# =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles"
+
+profsys_cmd=(
+    nsys profile
+    --output "${PROFILE_DIR}/profile_%q{SLURM_NODEID}_%q{SLURM_PROCID}"
+    --trace=cuda,cudnn,cublas,osrt,nvtx
+    --cudabacktrace=all
+    --python-backtrace=cuda
+    --python-sampling=true
+    --delay=60
+)
+export PROFSYS_CMD="${profsys_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration

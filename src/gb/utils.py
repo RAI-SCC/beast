@@ -353,3 +353,64 @@ def count_flops(
         )
 
     return forward_flops, backward_flops, total_flops
+
+
+def save_checkpoint(
+    results_path: str,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    step: int | None,
+    loss: float,
+):
+    checkpoint_path = os.path.join(results_path, "checkpoints")
+    if dist.get_rank() == 0:
+        os.makedirs(checkpoint_path, exist_ok=True)
+    dist.barrier()
+
+    channel_group = get_process_group("JChannel")
+    ep_group = get_process_group("Expert")
+
+    # rank = dist.get_rank()
+    ddp_rank = get_process_group("DDP").rank()
+
+    if ddp_rank == 0:
+        cp = {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "epoch": epoch,
+            "step": step,
+            "ep_group_rank": ep_group.rank(),
+            "channel_group_rank": channel_group.rank(),
+            "loss": loss,
+            "format": 1,
+        }
+        if step:
+            model_name = f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        else:
+            model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        torch.save(cp, checkpoint_path + f"/{model_name}.pt")
+
+
+def load_checkpoint(
+    checkpoint_path: str, map_location="cpu"
+) -> tuple[dict, dict, int, int | None, int, int, float]:
+    """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, expert group rank, and channel group rank."""
+    checkpoint = torch.load(checkpoint_path, map_location=map_location)
+    model_state_dict = checkpoint["model_state_dict"]
+    optimizer_state_dict = checkpoint["optimizer_state_dict"]
+    epoch = checkpoint["epoch"]
+    step = checkpoint.get("step", None)
+    ep_group_rank = checkpoint["ep_group_rank"]
+    channel_group_rank = checkpoint["channel_group_rank"]
+    loss = checkpoint["loss"]
+
+    return (
+        model_state_dict,
+        optimizer_state_dict,
+        epoch,
+        step,
+        ep_group_rank,
+        channel_group_rank,
+        loss,
+    )

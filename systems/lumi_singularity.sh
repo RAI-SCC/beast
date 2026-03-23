@@ -12,6 +12,7 @@ export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
 
 export DATA_DIR=$SCRATCH_DIR/data/
+export OUTPUT_DIR=$PROJECT_DIR/output
 
 # =============================================================================
 # Environment configuration
@@ -30,7 +31,7 @@ export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
 # RCCL Configuration
 export RCCL_DEBUG="${RCCL_DEBUG:-INFO}"
 export NCCL_SOCKET_IFNAME="hsn0,hsn1,hsn2,hsn3"
-export NCCL_NET_GDR_LEVEL=3
+export NCCL_NET_GDR_LEVEL="PHB"
 
 # Libfabric/CXI for Slingshot
 # export FI_CXI_ATS=0
@@ -39,6 +40,21 @@ export NCCL_NET_GDR_LEVEL=3
 
 # ROCm / HIP Settings
 # export ROCM_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"  # 8 GCDs per node
+#
+# =============================================================================
+# Profiling configuration
+# =============================================================================
+
+export PROFILE_DIR="${OUTPUT_DIR}/${SLURM_JOB_PARTITION}/${SLURM_JOB_ID}/profiles"
+
+profsys_cmd=(
+    rocprofv3
+    --sys-trace
+    --output-format pftrace
+    -d "$PROFILE_DIR"
+    --
+)
+export PROFSYS_CMD="${profsys_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration
@@ -59,7 +75,7 @@ export NCCL_NET_GDR_LEVEL=3
 CPU_BIND_MASKS="0x00fe000000000000,0xfe00000000000000,0x0000000000fe0000,0x00000000fe000000,0x00000000000000fe,0x000000000000fe00,0x000000fe00000000,0x0000fe0000000000"
 
 export SYSTEM_SLURM_PARAMS=(
-    --cpu-bind="v,mask_cpu=$CPU_BIND_MASKS"
+    --cpu-bind="mask_cpu=$CPU_BIND_MASKS"
     --cpus-per-task=7
     --mpi=pmi2
     singularity
@@ -70,7 +86,7 @@ export SYSTEM_SLURM_PARAMS=(
 )
 
 setup_system(){
-#    module purge
+    # module purge
     echo "Setting up LUMI-G environment..."
     module use /appl/local/containers/ai-modules
     module load singularity-AI-bindings
@@ -90,11 +106,11 @@ setup_system(){
 
 init_system(){
     module use /appl/local/containers/ai-modules
-	module load singularity-AI-bindings
-	singularity exec $SIF python -m venv $VENV_DIR --system-site-packages
-	singularity exec $SIF systems/venv_entry.sh pip install --upgrade pip
-	singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
-	singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
-	singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
-	singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
+    module load singularity-AI-bindings
+    singularity exec $SIF python -m venv $VENV_DIR --system-site-packages
+    singularity exec $SIF systems/venv_entry.sh pip install --upgrade pip
+    singularity exec $SIF systems/venv_entry.sh pip install -r requirements.txt
+    singularity exec $SIF systems/venv_entry.sh pip install --upgrade h5py
+    singularity exec $SIF systems/venv_entry.sh pip install --force-reinstall aiter
+    singularity exec $SIF systems/venv_entry.sh python -c 'import aiter'
 }
