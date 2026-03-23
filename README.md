@@ -180,9 +180,11 @@ NVIDIA Nsight Systems (for Jupiter) and Rocprofv3 (for LUMI) are powerful profil
 
 If you ever want to feel bad, add the `--perun` flag to `experiments/run_gb_script.sh` (before the system script), and run the training script with Perun. Gaze upon the `${WORKDIR}/results/perun_results` directory to come face to face with the staggering amount of energy that your training run has consumed, and the carbon emissions it has generated. Not for the faint of heart.
 
-**TODO**: Find the PUE of the systems and add it to the configurations.
-**TODO**: Find the energy to carbon conversion for Jupiter and LUMI and add it to the configurations.
-**TODO**: Test on larger node counts to see if Perun can handle it (I belive in you).
+
+**TODO**
+- Find the PUE of the systems and add it to the configurations.
+- Find the energy to carbon conversion for Jupiter and LUMI and add it to the configurations.
+- Test on larger node counts to see if Perun can handle it (I belive in you).
 
 ## Wiki
 
@@ -208,14 +210,14 @@ For the list and descriptions of currently implemented models, see the [model do
 ### Checkpoints
 
 Checkpoints are stored using `torch.save`, and are a dictionary with the following keys:
-    - model_state_dict: the state dict of the model
-    - optimizer_state_dict: the state dict of the optimizer
-    - epoch: the current epoch
-    - step: the current step (global)
-    - ep_group_rank: the rank of the expert parallel group
-    - channel_group_rank: the rank of the channel parallel group
-    - loss: the loss value at the time of saving
-    - format: the format of the checkpoint (currently : 1), but can be used to distinguish between different checkpoint formats in the future, e.g. if we want to save additional information or change the way we save the model state dict (e.g. using sharded checkpoints for larger models)
+- model_state_dict: the state dict of the model
+- optimizer_state_dict: the state dict of the optimizer
+- epoch: the current epoch
+- step: the current step (global)
+- ep_group_rank: the rank of the expert parallel group
+- channel_group_rank: the rank of the channel parallel group
+- loss: the loss value at the time of saving
+- format: the format of the checkpoint (currently : 1), but can be used to distinguish between different checkpoint formats in the future, e.g. if we want to save additional information or change the way we save the model state dict (e.g. using sharded checkpoints for larger models)
 
 ## Outdated documentation
 
