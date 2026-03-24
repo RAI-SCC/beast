@@ -13,7 +13,11 @@ from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
 from evaluation import validate
+
+# Import utility functions
 from gb.config import setup_config_dict
+
+# Import Dataloaders
 from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
 from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
 from gb.losses.up_loss import UP_AllGaussLoss
@@ -50,7 +54,7 @@ def training_loop(config_dict, prof=None):
 
     # Define the Model
     initialization_rank = (
-        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -343,11 +347,8 @@ def main():
     parser.add_argument("configargs", nargs="*")
 
     parser.add_argument("--scaling", default=False)
-    parser.add_argument("--train_subset")
-    parser.add_argument("--embed_dim")
-    parser.add_argument("--n_attn_blocks")
-    parser.add_argument("--lbs")
-    parser.add_argument("--lsn")
+    parser.add_argument("--dp_processes")
+    parser.add_argument("--up_processes")
     parser.add_argument("--nodes", default=2)
 
     args = parser.parse_args()
@@ -357,34 +358,10 @@ def main():
 
     config_dict = setup_config_dict(config_dict, args)
 
-    # If we are performing a scaling experiment, read the command line arguments.
-    # Otherwise, the arguments will not be read.
-    if args.scaling:
-        if args.train_subset is not None:
-            config_dict["data"]["train_subset"] = int(args.train_subset)
-        if args.embed_dim is not None:
-            config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
-        if args.n_attn_blocks is not None:
-            config_dict["model"]["n_attn_blocks"] = [
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-            ]
-        if args.lbs is not None:
-            config_dict["training"]["batch_size"] = int(args.lbs)
-            # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
-            # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
-
-        if args.lsn is not None:
-            config_dict["training"]["n_samples"] = int(args.lsn)
-            # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
-
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
     init_gb_process_group(mesh_dims)
-    dist.barrier(group=None)
+    # dist.barrier(group=None)
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)

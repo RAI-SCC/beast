@@ -12,7 +12,9 @@ from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
-from evaluation import validate
+from evaluation import validate_deterministic
+
+# Import utility functions
 from gb.config import setup_config_dict
 
 # Import Dataloaders
@@ -50,7 +52,7 @@ def training_loop(config_dict, prof=None):
 
     # Define the Model
     initialization_rank = (
-        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -225,11 +227,10 @@ def training_loop(config_dict, prof=None):
         )
         end_time = time.perf_counter()
         if not config_dict["skip_validation"]:
-            data_fit_loss, prior_matching_loss = validate(
+            val_loss = validate_deterministic(
                 config_dict=config_dict,
                 model=model,
                 expert_weights=expert_loss_weighting,
-                n_samples=n_samples,
                 dataloader=valid_dataloader,
                 device=device,
                 epoch=epoch,
@@ -241,7 +242,7 @@ def training_loop(config_dict, prof=None):
 
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, validation loss {val_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
     if config_dict["timings"]:

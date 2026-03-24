@@ -47,10 +47,11 @@ def setup_config_dict(
     if config_dict["data"]["n_in_timesteps"] not in [1, 2]:
         config_dict["data"]["n_in_timesteps"] = 1
 
-    # append n_masks for odd number of masks (the dataset does this, too)
+    # Only for GrandBellbeast: append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
-    if n_masks % 2 == 1:
-        n_masks += 1
+    if config_dict["model_parallel"]["parallelism"] > 1:
+        if n_masks % 2 == 1:
+            n_masks += 1
 
     n_input_vars = (
         config_dict["data"]["n_in_timesteps"] * config_dict["data"]["n_variables"]
