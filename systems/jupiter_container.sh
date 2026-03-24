@@ -6,7 +6,7 @@ export PROJECT_DIR="${PROJECT_jureap1}/GBB"
 
 export VENV_DIR="${HOME}/.venvs/gbb"
 export CONTAINER_HOME="${PROJECT_DIR}/images"
-export SIF="${CONTAINER_HOME}/pytorch25.06.sif"
+export SIF="${CONTAINER_HOME}/pytorch26.01.sif"
 
 # Container mnt points
 export WORKDIR="$( pwd )" # For source code
