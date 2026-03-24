@@ -122,16 +122,6 @@ def _create_process_mesh_dict(
         mesh_dim_names=("Expert", "DDP", "JChannel"),
     )
 
-    alternative_mesh_ddp = dist.device_mesh.init_device_mesh(
-        device_type=device_type,
-        mesh_shape=(
-            mesh_dims[0],
-            mesh_dims[1] * mesh_dims[2] * mesh_dims[3],
-            mesh_dims[4],
-        ),
-        mesh_dim_names=("Expert", "DDP", "JChannel"),
-    )
-
     _process_group_dict["DTP"] = alternative_mesh.get_group("DTP")
     _process_group_dict["DDP"] = alternative_mesh_ddp.get_group("DDP")
 
