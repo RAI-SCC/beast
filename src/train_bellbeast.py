@@ -9,6 +9,7 @@ import yaml
 
 # jigsaw imports
 from jigsaw import utils
+from torch.cuda import nvtx
 from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
@@ -215,6 +216,7 @@ def training_loop(config_dict, prof=None):
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
+        nvtx.range_push(f"Epoch {epoch}")
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
             config_dict=config_dict,
@@ -231,6 +233,8 @@ def training_loop(config_dict, prof=None):
             prof=prof,
         )
         end_time = time.perf_counter()
+        nvtx.range_pop()
+
         if not config_dict["skip_validation"]:
             data_fit_loss, prior_matching_loss = validate(
                 config_dict=config_dict,
@@ -316,15 +320,20 @@ def train_one_epoch(
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
-
+        nvtx.range_push(f"E{epoch}B{i} - Forward")
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x, samples=n_samples)
             loss = loss_fn(pred, y)
+        nvtx.range_pop()
 
         # Backpropagation
+        nvtx.range_push(f"E{epoch}B{i} - Backward")
         loss.backward()
+        nvtx.range_pop()
 
+        nvtx.range_push(f"E{epoch}B{i} - Optimizer Step")
         optimizer.step()
+        nvtx.range_pop()
 
         loss_sum = loss_sum + float(loss.detach())
         step_end = time.time_ns()
