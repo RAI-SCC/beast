@@ -80,6 +80,8 @@ def training_loop(config_dict, prof=None):
             channel_group=channel_group,
             ep_group=ep_group,
             up_group=up_group,
+            bayesian=True,
+            dtype=dtype,
         )
         # Get the data loaders
         train_dataloader = get_dataloader_1_5_deg(
@@ -299,6 +301,7 @@ def train_one_epoch(
         dataloader.sampler.set_epoch(epoch)
 
     step_start = time.time_ns()
+    cum_batch_time = 0
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
@@ -318,14 +321,16 @@ def train_one_epoch(
         loss_sum = loss_sum + float(loss.detach())
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
+        cum_batch_time += step_end - step_start
 
         if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 100000000} ms"
                 )
+            cum_batch_time = 0
 
         step_start = time.time_ns()
         if prof:
@@ -401,7 +406,6 @@ def main():
     if dist.get_rank(group=None) == 0:
         print("FINITE!")
 
-    dist.barrier(group=None)
     dist.destroy_process_group()
 
 

@@ -22,6 +22,8 @@ class TinyBellbeast(torch.nn.Module):
         channel_group,
         ep_group,
         up_group,
+        bayesian,
+        dtype,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -38,8 +40,9 @@ class TinyBellbeast(torch.nn.Module):
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_channels = out_channels
-
+        self.bayesian = bayesian
         self.noise_dim = noise_dim
+        self.dtype = dtype
         self.activation = torch.nn.GELU()
 
         self.channel_group = channel_group  # hard coded, to avoid parsing through
@@ -54,7 +57,9 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             bias=True,
             device=self.device,
+            dtype=self.dtype,
         )
+
         self.downsample = torch.nn.Conv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
@@ -65,6 +70,7 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             device=self.device,
             bias=True,
+            dtype=self.dtype,
         )
 
         self.expert_layer = ExpertWeightingLayer(
@@ -72,6 +78,8 @@ class TinyBellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.upsample = torch.nn.ConvTranspose2d(
@@ -84,6 +92,7 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             device=self.device,
             bias=True,
+            dtype=self.dtype,
         )
 
         self.upsample_mix = torch.nn.Linear(
@@ -91,6 +100,7 @@ class TinyBellbeast(torch.nn.Module):
             self.embed_dim,
             bias=True,
             device=device,
+            dtype=self.dtype,
         )
 
         self.patch_recovery = torch.nn.ConvTranspose2d(
@@ -103,6 +113,7 @@ class TinyBellbeast(torch.nn.Module):
             bias=True,
             groups=1,
             device=self.device,
+            dtype=self.dtype,
         )
 
         self.n_full_blocks = n_full_blocks

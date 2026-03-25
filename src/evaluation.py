@@ -226,6 +226,7 @@ def validate(
     return data_fit_loss, prior_matching_loss
 
 
+@torch.no_grad()
 def validate_deterministic(
     config_dict: dict,
     model: torch.nn.Module,
@@ -251,6 +252,7 @@ def validate_deterministic(
         os.makedirs(checkpoint_path, exist_ok=True)
 
     dist.barrier()  # needed for checkpoint_path creation
+
     if (
         ddp_rank == 0
     ):  # TODO Check of this is correct... means we only get two model files.
@@ -730,6 +732,7 @@ def aggregate_crps(
     return mae_part - spread_part
 
 
+@torch.no_grad()
 def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
 
     training_dict = config_dict.get("training", {})
@@ -824,6 +827,7 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
     return torch.tensor(indices, dtype=torch.long), names
 
 
+@torch.no_grad()
 def get_spatial_weights(config_dict, device):
     n_lat = config_dict["data"]["xlat"]
     latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
@@ -833,6 +837,7 @@ def get_spatial_weights(config_dict, device):
     return weight.view(1, 1, n_lat, 1)
 
 
+@torch.no_grad()
 def load_climatology(config_dict, rank, device):
     # TODO: hardcode the variables, "unhardcode" fixed xlat / xlon
 
@@ -877,6 +882,7 @@ def load_climatology(config_dict, rank, device):
     return local_climatology
 
 
+@torch.no_grad()
 def gather_spatial_for_plot(gather_tensor, spatial_group):
     if dist.get_world_size(spatial_group) == 1:
         return gather_tensor
@@ -889,6 +895,7 @@ def gather_spatial_for_plot(gather_tensor, spatial_group):
     return torch.cat(gathered, dim=3)
 
 
+@torch.no_grad()
 def gather_vars_for_plot(gather_tensor, local_names, channel_group):
     if dist.get_world_size(channel_group) == 1:
         return gather_tensor, local_names
@@ -1148,6 +1155,7 @@ def generate_distributed_plots(
             print(f"Saved plot: {save_path}")
 
 
+@torch.no_grad()
 def log_epoch_to_hdf5(epoch_results, global_names, epoch, filepath, config_dict=None):
     filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)

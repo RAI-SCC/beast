@@ -78,6 +78,8 @@ def training_loop(config_dict, prof=None):
             channel_group=channel_group,
             ep_group=ep_group,
             up_group=up_group,
+            bayesian=False,  # Bayesian version: bayesian=True
+            dtype=dtype,
         )
         # Get the data loaders
         train_dataloader = get_dataloader_1_5_deg(
@@ -236,13 +238,17 @@ def training_loop(config_dict, prof=None):
                 epoch=epoch,
                 results_path=validation_results_path,
             )
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, validation loss {val_loss}"
+                )
 
         for t in timings:
             time_log.append(t)
 
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, validation loss {val_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
     if config_dict["timings"]:
@@ -329,6 +335,7 @@ def train_one_epoch(
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
+
     return average_loss, timings
 
 

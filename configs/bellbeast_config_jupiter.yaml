@@ -6,7 +6,7 @@ data:
     constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
     preprocessed: False
     normalization_dir: "data/normalization"
-    train_subset: 64000
+    train_subset: -1
     valid_subset: 100
     train_time_range: ["1979-01-01", "2020-12-31"]
     valid_time_range: ["2021-01-01", "2022-12-31"]
@@ -33,7 +33,7 @@ model:
 training:
     tf32: True
     n_samples: 1 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
-    n_epochs: 50
+    n_epochs: 2
     batch_size: 1
     dtype: float32
     autocast: False
