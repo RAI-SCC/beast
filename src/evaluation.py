@@ -30,6 +30,7 @@ def validate(
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
     up_group = get_process_group("SP")
+
     global_up_ranks = gather_global_ranks(up_group, device).cpu()
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
@@ -1225,12 +1226,43 @@ class ExpertAggregation(nn.Module):
         return y
 
 
-def gather_global_ranks(process_group, device):
-    gather_tensor = torch.tensor([dist.get_rank()], device=device)
+# def gather_global_ranks(process_group, device):
+#     gather_tensor = torch.tensor([dist.get_rank()], device=device)
 
-    gathered = [
-        torch.zeros_like(gather_tensor)
-        for _ in range(dist.get_world_size(process_group))
+#     gathered = [
+#         torch.zeros_like(gather_tensor)
+#         for _ in range(dist.get_world_size(process_group))
+#     ]
+#     dist.all_gather(gathered, gather_tensor, group=process_group)
+#     return torch.cat(gathered, dim=0).to(torch.int32)
+
+
+def gather_global_ranks():
+    channel_group = get_process_group("JChannel")
+    spatial_group = get_process_group("JSpatial")
+    dtp_group = get_process_group("DTP")
+    up_group = get_process_group("SP")
+    dp_group = get_process_group("DP")
+    ep_group = get_process_group("Expert")
+
+    mesh_dims = [
+        ep_group.size(),
+        dp_group.size(),
+        up_group.size(),
+        spatial_group.size(),
+        channel_group.size(),
     ]
-    dist.all_gather(gathered, gather_tensor, group=process_group)
-    return torch.cat(gathered, dim=0).to(torch.int32)
+
+    gathered = torch.zeros((up_group.size(),), dtype=torch.int32)
+    up_stride = torch.prod(torch.tensor(mesh_dims[-2:]))
+    dp_stride = torch.prod(torch.tensor(mesh_dims[-3:]))
+    ep_stride = torch.prod(torch.tensor(mesh_dims[-4:]))
+    for i in range(up_group.size()):
+        gathered[i] = (
+            i * up_stride
+            + dtp_group.rank()
+            + dp_group.rank() * dp_stride
+            + ep_group.rank() * ep_stride
+        )
+
+    return gathered
