@@ -387,11 +387,6 @@ def main():
     if config_dict["profile"] and global_rank == 3:
         import torch.profiler as tprofiler
 
-        def trace_handler(p):
-            # Export in Chrome trace format (Perfetto can open this)
-            path = os.getenv("PROFILE_DIR")
-            p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
-
         with tprofiler.profile(
             activities=[
                 tprofiler.ProfilerActivity.CPU,
@@ -399,10 +394,12 @@ def main():
             ],
             # record_shapes=True,
             # profile_memory=True,
-            schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
+            schedule=tprofiler.schedule(skip_first=1, wait=1, warmup=2, active=4),
             # with_stack=True,
             # with_flops=True,
-            on_trace_ready=trace_handler,
+            on_trace_ready=tprofiler.tensorboard_trace_handler(
+                os.getenv("PROFILE_DIR")
+            ),
         ) as prof:
             training_loop(config_dict, prof)
 
