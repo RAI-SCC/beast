@@ -34,7 +34,7 @@ training:
     n_epochs: 1
     batch_size: 1
     dtype: float32
-    autocast: False
+    autocast: True
     timings: False
 model_parallel:
     parallelism: 1

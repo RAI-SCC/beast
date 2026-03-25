@@ -31,7 +31,6 @@ def validate(
     ep_group = get_process_group("Expert")
     up_group = get_process_group("SP")
     global_up_ranks = gather_global_ranks(up_group, device).cpu()
-
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
     dtp_worldsize = get_process_group("DTP").size()
@@ -65,7 +64,7 @@ def validate(
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
 
-    # extract means and std for evaluation
+    # # extract means and std for evaluation
     try:
         data_means = torch.from_numpy(dataloader.dataset.norm_values["mean"]).to(device)
         data_std = torch.from_numpy(dataloader.dataset.norm_values["std"]).to(device)
@@ -443,12 +442,14 @@ def calculate_aggregate_metrics(
     target = target[:, indices]
     samples = samples[:, :, indices]
 
-    local_var_slice = slice(0, len(data_mean) // 2)
-    if channel_group.rank() > 0:
-        local_var_slice = slice(len(data_mean) // 2, None)
+    if channel_group.size() > 1:
+        local_var_slice = slice(0, len(data_mean) // 2)
+        if channel_group.rank() > 0:
+            local_var_slice = slice(len(data_mean) // 2, None)
 
-    data_mean = data_mean[local_var_slice]
-    data_std = data_std[local_var_slice]
+        data_mean = data_mean[local_var_slice]
+        data_std = data_std[local_var_slice]
+
     data_mean = data_mean[indices]
     data_std = data_std[indices]
 
@@ -563,12 +564,14 @@ def calculate_metrics(
     target = target[:, indices]
     pred = pred[:, indices]
 
-    local_var_slice = slice(0, len(data_mean) // 2)
-    if channel_group.rank() > 0:
-        local_var_slice = slice(len(data_mean) // 2, None)
+    if channel_group.size() > 1:
+        local_var_slice = slice(0, len(data_mean) // 2)
+        if channel_group.rank() > 0:
+            local_var_slice = slice(len(data_mean) // 2, None)
 
-    data_mean = data_mean[local_var_slice]
-    data_std = data_std[local_var_slice]
+        data_mean = data_mean[local_var_slice]
+        data_std = data_std[local_var_slice]
+
     data_mean = data_mean[indices]
     data_std = data_std[indices]
 
@@ -936,12 +939,13 @@ def generate_distributed_deterministic_plots(
         local_pred = pred[:, plot_indices]
         local_target = target[:, plot_indices]
 
-        local_var_slice = slice(0, len(data_mean) // 2)
-        if channel_group.rank() > 0:
-            local_var_slice = slice(len(data_mean) // 2, None)
+        if channel_group.size() > 1:
+            local_var_slice = slice(0, len(data_mean) // 2)
+            if channel_group.rank() > 0:
+                local_var_slice = slice(len(data_mean) // 2, None)
+            data_mean = data_mean[local_var_slice]
+            data_std = data_std[local_var_slice]
 
-        data_mean = data_mean[local_var_slice]
-        data_std = data_std[local_var_slice]
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
 
@@ -1059,12 +1063,13 @@ def generate_distributed_plots(
             local_samples, up_group, expert_weights[plot_indices]
         )
 
-        local_var_slice = slice(0, len(data_mean) // 2)
-        if channel_group.rank() > 0:
-            local_var_slice = slice(len(data_mean) // 2, None)
+        if channel_group.size() > 1:
+            local_var_slice = slice(0, len(data_mean) // 2)
+            if channel_group.rank() > 0:
+                local_var_slice = slice(len(data_mean) // 2, None)
 
-        data_mean = data_mean[local_var_slice]
-        data_std = data_std[local_var_slice]
+            data_mean = data_mean[local_var_slice]
+            data_std = data_std[local_var_slice]
         local_mean = data_mean[plot_indices].view(1, -1, 1, 1)
         local_std = data_std[plot_indices].view(1, -1, 1, 1)
 
