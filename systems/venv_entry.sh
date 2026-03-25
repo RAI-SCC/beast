@@ -12,10 +12,6 @@ if [[ "$SLURM_PROCID" -eq 3 ]]; then
         echo "Enabling program tracing (PROF_TRACE=true) for process $SLURM_PROCID"
         echo "Profiling command: $PROFSYS_CMD $@"
         $PROFSYS_CMD $@
-    elif [[ ${PROFCU} == true ]]; then
-        echo "Enabling kernel profiling (PROF_KERNEL=true) for process $SLURM_PROCID"
-        echo "Profiling command: $PROFCU_CMD $@"
-        $PROFCU_CMD $@
     else
         exec "$@"
     fi

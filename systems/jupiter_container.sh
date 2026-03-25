@@ -66,20 +66,8 @@ profsys_cmd=(
     --cudabacktrace=all
     --python-backtrace=cuda
     --python-sampling=true
-    --delay=60
 )
 export PROFSYS_CMD="${profsys_cmd[@]}"
-
-profcu_cmd=(
-    ncu
-    --set
-    roofline
-    --nvtx
-    --target-processes
-    all
-    --export ${PROFILE_DIR}/ncu_report_${SLURM_JOB_ID}_${SLURM_NODEID}_${SLURM_PROCID}.ncu-rep
-)
-export PROFCU_CMD="${profcu_cmd[@]}"
 
 # =============================================================================
 # Slurm configuration

@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import h5py
@@ -30,28 +29,13 @@ def validate(
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
     up_group = get_process_group("SP")
-
     global_up_ranks = gather_global_ranks(up_group, device).cpu()
+
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
     dtp_worldsize = get_process_group("DTP").size()
-    ddp_rank = get_process_group("DDP").rank()
-
-    # Checkpoints
-    checkpoint_path = os.path.join(results_path, "checkpoints")
-    if dist.get_rank() == 0:
-        os.makedirs(checkpoint_path, exist_ok=True)
-
-    dist.barrier()  # needed for checkpoint_path creation
-    if (
-        ddp_rank == 0
-    ):  # TODO Check of this is correct... means we only get two model files.
-        model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}.pth"
-        torch.save(model.state_dict(), checkpoint_path + f"/{model_name}.pth")
-        print(f"Model {model_name} saved in {checkpoint_path}")
 
     # Expert masks
-
     global_expert_mask, _ = gather_vars_for_plot(
         expert_weights.unsqueeze(dim=0), [""], channel_group
     )
@@ -244,24 +228,8 @@ def validate_deterministic(
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
     dtp_worldsize = get_process_group("DTP").size()
-    ddp_rank = get_process_group("DDP").rank()
-
-    # Checkpoints
-    checkpoint_path = os.path.join(results_path, "checkpoints")
-    if dist.get_rank() == 0:
-        os.makedirs(checkpoint_path, exist_ok=True)
-
-    dist.barrier()  # needed for checkpoint_path creation
-
-    if (
-        ddp_rank == 0
-    ):  # TODO Check of this is correct... means we only get two model files.
-        model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}.pth"
-        torch.save(model.state_dict(), checkpoint_path + f"/{model_name}.pth")
-        print(f"Model {model_name} saved in {checkpoint_path}")
 
     # Expert masks
-
     global_expert_mask, _ = gather_vars_for_plot(
         expert_weights.unsqueeze(dim=0), [""], channel_group
     )

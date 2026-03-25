@@ -38,6 +38,7 @@ training:
     dtype: float32
     autocast: True
     timings: False
+    checkpoint_interval: 1000
 model_parallel:
     parallelism: 4
     type: jigsaw
