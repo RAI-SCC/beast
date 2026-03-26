@@ -216,7 +216,7 @@ def training_loop(config_dict, prof=None):
 
     ### Run Training
     for epoch in range(config_dict["training"]["n_epochs"]):
-        nvtx.range_push(f"Epoch {epoch}")
+        nvtx.range_push("Epoch")
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
             config_dict=config_dict,
@@ -320,18 +320,20 @@ def train_one_epoch(
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
-        nvtx.range_push(f"E{epoch}B{i} - Forward")
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
+            nvtx.range_push("Forward")
             pred = model(x, samples=n_samples)
+            nvtx.range_pop()
+            nvtx.range_push("Loss")
             loss = loss_fn(pred, y)
-        nvtx.range_pop()
+            nvtx.range_pop()
 
         # Backpropagation
-        nvtx.range_push(f"E{epoch}B{i} - Backward")
+        nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
 
-        nvtx.range_push(f"E{epoch}B{i} - Optimizer Step")
+        nvtx.range_push("Optimizer Step")
         optimizer.step()
         nvtx.range_pop()
 

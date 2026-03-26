@@ -4,9 +4,11 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch_blue.vi as vi
+from torch.cuda import nvtx
 from torch_blue.vi.distributions import MeanFieldNormal
 
 
+# @torch.compile(fullgraph=True, dynamic=True)
 class UP_AllGaussLoss(nn.Module):
     def __init__(
         self,
@@ -53,15 +55,22 @@ class UP_AllGaussLoss(nn.Module):
         return data_fit
 
     def forward(self, model_output, target):
+
+        nvtx.range_push("Prior Matching")
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
+        nvtx.range_pop()
         expert_output = model_output * self.loss_weights
         expert_target = target * self.loss_weights
 
+        nvtx.range_push("Aggregate Statistics")
         mean, std = self.aggregate_statistics(
             expert_output, self.up_group, self.loss_weights
         )
+        nvtx.range_pop()
 
+        nvtx.range_push("Data Fitting")
         data_fit = self.data_fitting(mean, std, expert_target)
+        nvtx.range_pop()
 
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
