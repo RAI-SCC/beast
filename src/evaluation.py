@@ -28,8 +28,7 @@ def validate(
     channel_group = get_process_group("JChannel")
     dp_group = get_process_group("DP")
     ep_group = get_process_group("Expert")
-    up_group = get_process_group("SP")
-    global_up_ranks = gather_global_ranks(up_group, device).cpu()
+    global_up_ranks = gather_global_ranks().cpu()
 
     # rank = dist.get_rank()
     dtp_rank = get_process_group("DTP").rank()
@@ -1220,17 +1219,13 @@ def gather_global_ranks():
         spatial_group.size(),
         channel_group.size(),
     ]
-
-    gathered = torch.zeros((up_group.size(),), dtype=torch.int32)
     up_stride = torch.prod(torch.tensor(mesh_dims[-2:]))
     dp_stride = torch.prod(torch.tensor(mesh_dims[-3:]))
     ep_stride = torch.prod(torch.tensor(mesh_dims[-4:]))
-    for i in range(up_group.size()):
-        gathered[i] = (
-            i * up_stride
-            + dtp_group.rank()
-            + dp_group.rank() * dp_stride
-            + ep_group.rank() * ep_stride
-        )
+
+    gathered = torch.arange(0, up_group.size() * up_stride, up_stride)
+    gathered += (
+        dtp_group.rank() + dp_group.rank() * dp_stride + ep_group.rank() * ep_stride
+    )
 
     return gathered

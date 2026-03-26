@@ -24,20 +24,15 @@ def my_gather_global_ranks(group_dict):
         spatial_group.size(),
         channel_group.size(),
     ]
-    print(f"Mesh_dim {mesh_dims}")
-    gathered = torch.zeros((up_group.size(),))
-    up_stride = torch.prod(torch.tensor(mesh_dims[-2:]))
+    up_stride = mesh_dims[-1] * mesh_dims[-2]
     dp_stride = torch.prod(torch.tensor(mesh_dims[-3:]))
     ep_stride = torch.prod(torch.tensor(mesh_dims[-4:]))
-    for i in range(up_group.size()):
-        gathered[i] = (
-            i * up_stride
-            + dtp_group.rank()
-            + dp_group.rank() * dp_stride
-            + ep_group.rank() * ep_stride
-        )
+    gathered = torch.arange(0, up_group.size() * up_stride, up_stride)
+    gathered += (
+        dtp_group.rank() + dp_group.rank() * dp_stride + ep_group.rank() * ep_stride
+    )
 
-    return gathered
+    return gathered.to(torch.int32)
 
 
 def test_gather_global_ranks(mesh_dims: list[int]):
@@ -60,4 +55,4 @@ def test_gather_global_ranks(mesh_dims: list[int]):
 
 
 if __name__ == "__main__":
-    test_gather_global_ranks([2, 2, 4, 1, 1])
+    test_gather_global_ranks([1, 2, 8, 2, 2])
