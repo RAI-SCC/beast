@@ -5,3 +5,4 @@
 [submodule "torch_blue"]
 	path = src/libs/torch_blue
 	url = git@github.com:RAI-SCC/torch_blue.git
+	branch = feat/vectorized_prior_matching
