@@ -398,7 +398,6 @@ def main():
         def trace_handler(p):
             # Export in Chrome trace format (Perfetto can open this)
             path = os.getenv("PROFILE_DIR")
-            os.makedirs(path, exist_ok=True)
             p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
         print("Profiling ... Please wait")
