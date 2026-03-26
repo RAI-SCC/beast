@@ -7,7 +7,7 @@ data:
     preprocessed: False
     normalization_dir: "data/normalization"
     train_subset: -1
-    valid_subset: 100
+    valid_subset: -1
     train_time_range: ["1979-01-01", "2020-12-31"]
     valid_time_range: ["2021-01-01", "2022-12-31"]
     test_time_range: ["2021-01-01", "2022-12-31"]
@@ -36,10 +36,10 @@ training:
     n_epochs: 2
     batch_size: 1
     dtype: float32
-    autocast: True
+    autocast: False
     timings: False
     checkpoint_interval: 1000
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1, 64, 32, 2, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
+mesh_dims: [1, 2, 2, 2, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
