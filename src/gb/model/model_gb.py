@@ -1,5 +1,6 @@
 import torch
 from jigsaw import attention, convolutions, linear
+from torch.cuda import nvtx
 
 from gb.model.expert import ExpertWeightingLayer
 
@@ -164,6 +165,7 @@ class Bellbeast(torch.nn.Module):
                     spatial_group=self.spatial_group,
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[0])
             ]
@@ -185,6 +187,7 @@ class Bellbeast(torch.nn.Module):
                     spatial_group=self.spatial_group,
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[1])
             ]
@@ -206,6 +209,7 @@ class Bellbeast(torch.nn.Module):
                     spatial_group=self.spatial_group,
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[2])
             ]
@@ -324,18 +328,18 @@ class Bellbeast(torch.nn.Module):
         # (n_windows, window sequence length, window sequence length)
         attention_mask = attention_mask.masked_fill(attention_mask != 0, -100000.0)
 
-        if self.channel_group.rank() == 0:
-            attention_mask = attention_mask[
-                ..., : ((window_size[0] * window_size[1]) // 2)
-            ]
-        elif self.channel_group.rank() == 1:
-            attention_mask = attention_mask[
-                ..., ((window_size[0] * window_size[1]) // 2) :
-            ]
-        else:
-            assert self.channel_group.size() == 2, (
-                "No current implementation for case where channel group has more than 2 ranks."
-            )
+        # if self.channel_group.rank() == 0:
+        #     attention_mask = attention_mask[
+        #         ..., : ((window_size[0] * window_size[1]) // 2)
+        #     ]
+        # elif self.channel_group.rank() == 1:
+        #     attention_mask = attention_mask[
+        #         ..., ((window_size[0] * window_size[1]) // 2) :
+        #     ]
+        # else:
+        #     assert self.channel_group.size() == 2, (
+        #         "No current implementation for case where channel group has more than 2 ranks."
+        #     )
 
         # save attention mask here
         # This assumes constant batch dimension within a run (restarting a job is ok)
@@ -372,19 +376,28 @@ class Bellbeast(torch.nn.Module):
 
     def forward(self, x):
         # noise has shape [(sample), batch, noise_dim]
-        noise = torch.randn(x.shape[0], self.noise_dim, device=self.device)
+        noise = torch.randn(x.shape[0], self.noise_dim, device=self.device).to(
+            self.dtype
+        )
 
         # Define masks once upon initialization (dependent on batch dimension)
         self.mask_out, self.mask_in = self._define_masks(x.shape)
+        self.mask_out, self.mask_in = (
+            self.mask_out.to(torch.bfloat16),
+            self.mask_in.to(torch.bfloat16),
+        )  # hard-coded to bfloat16 if we use torch scaled_dot_product_attention
 
         # x has global shape (B, xlat, xlon, channels)
+        nvtx.range_push("Patch Embedding")
         x = self.patch_embedding(x)
+        nvtx.range_pop()
         x_res = x.clone()
         B, channels, xlat, xlon = x.shape
         x = x.reshape(B, channels, xlat * xlon).mT.view(B, xlat, xlon, channels)
 
         # attention
         for i in range(self.n_full_blocks[0]):
+            nvtx.range_push(f"Attn block 0-{i}")
             x = self._get_windows(x, self.window_size_outer)
             # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
             n_windows = x.shape[0] // B
@@ -401,19 +414,26 @@ class Bellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
 
         x_res2 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous()
         # (B, channels, lat, lon)
+        nvtx.range_push("Downsample")
         x = self.downsample(x)
+        nvtx.range_pop()
         # (B, 2*channels, lat/2, lon/2)
 
         # here comes the Latent Representation of the experts into play:
+        nvtx.range_push("Expert Layer")
         x = self.expert_layer(x)  # does not change the shape of the data
+        nvtx.range_pop()
+
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
 
         for i in range(self.n_full_blocks[1]):
+            nvtx.range_push(f"Attn block 1-{i}")
             x = self._get_windows(x, self.window_size_inner)
             n_windows = x.shape[0] // B
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
@@ -430,21 +450,27 @@ class Bellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
             x = self.unroll_in(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
 
         x = x.permute(0, 3, 1, 2).contiguous()
 
+        nvtx.range_push("Upsample")
         x = self.upsample(x)
+        nvtx.range_pop()
 
         B, channels, xlat, xlon = x.shape
 
         x = x.permute(0, 2, 3, 1).flatten(start_dim=1, end_dim=2).contiguous()
+        nvtx.range_push("Activation + Upsample Mix")
         x = self.activation(x)
         x = self.upsample_mix(x)
+        nvtx.range_pop()
         x = x.reshape(B, xlat, xlon, channels)
 
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
+            nvtx.range_push(f"Attn block 2-{i}")
             x = self._get_windows(x, self.window_size_outer)
             x = self.transformer_2[i * 2](x, noise=noise_transformer, mask=None)
             x = self._reverse_windows(
@@ -457,10 +483,12 @@ class Bellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
-
+            nvtx.range_pop()
         B, xlat, xlon, channels = x.shape
         x = x.permute(0, 3, 1, 2).contiguous()
 
+        nvtx.range_push("Patch Recovery")
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
+        nvtx.range_pop()
 
         return x
