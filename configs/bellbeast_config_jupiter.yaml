@@ -6,11 +6,11 @@ data:
     constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
     preprocessed: False
     normalization_dir: "data/normalization"
-    train_subset: 50
-    valid_subset: 50
+    train_subset: -1
+    valid_subset: -1
     train_time_range: ["1979-01-01", "2020-12-31"]
-    valid_time_range: ["2021-01-01", "2022-12-31"]
-    test_time_range: ["2021-01-01", "2022-12-31"]
+    valid_time_range: ["2021-01-01", "2021-12-31"]
+    test_time_range: ["2022-01-01", "2022-12-31"]
     dataset_subsampling: 1
     target_subsampling: 6
     prefetch_factor: 2
