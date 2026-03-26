@@ -321,7 +321,7 @@ def train_one_epoch(
             pred = model(x)  # Bayesian version: pred = model(x, samples=n_samples)
             loss = loss_fn(pred.float(), y)
 
-        dist.all_reduce(loss, group=dtp_group)
+        dist.nn.functional.all_reduce(loss, group=dtp_group)
         nvtx.range_pop()
 
         # Backpropagation
