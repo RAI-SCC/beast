@@ -9,6 +9,7 @@ import yaml
 
 # jigsaw imports
 from jigsaw import utils
+from torch.cuda import nvtx
 from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
@@ -30,6 +31,7 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    save_checkpoint,
     set_all_seeds,
     set_dtype,
 )
@@ -162,13 +164,6 @@ def training_loop(config_dict, prof=None):
         process_group=ddp_group,
     )
 
-    validation_results_path = os.path.join(
-        os.getenv("WORKDIR"),
-        "results",
-        os.getenv("SLURM_JOB_PARTITION"),
-        os.getenv("SLURM_JOB_ID"),
-    )
-
     loss_fn = torch.nn.MSELoss()  # Bayesian version: UP_AllGaussLoss
 
     n_samples = 1
@@ -194,7 +189,7 @@ def training_loop(config_dict, prof=None):
         bayesian=False,  # Non-Bayesian version
     )
 
-    ## Validation and timings
+    ## Validation, profiling and timings
     results_path = os.path.join(
         os.getenv("OUTPUT_DIR"),
         os.getenv("SLURM_JOB_PARTITION"),
@@ -202,13 +197,17 @@ def training_loop(config_dict, prof=None):
     )
 
     validation_results_path = os.path.join(results_path, "validation")
+    checkpoint_path = os.path.join(results_path, "checkpoints")
+    timings_path = os.path.join(results_path, "timings")
+    profile_dir = os.getenv("PROFILE_DIR")
     if dist.get_rank(group=None) == 0:
         os.makedirs(validation_results_path, exist_ok=True)
         with open(f"{results_path}/config.yaml", "w") as file:
             yaml.dump(config_dict, file)
 
-        timings_path = os.path.join(results_path, "timings")
         os.makedirs(timings_path, exist_ok=True)
+        os.makedirs(checkpoint_path, exist_ok=True)
+        os.makedirs(profile_dir, exist_ok=True)
 
     time_log = []
 
@@ -216,6 +215,7 @@ def training_loop(config_dict, prof=None):
     for epoch in range(config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
+            config_dict=config_dict,
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
@@ -225,9 +225,12 @@ def training_loop(config_dict, prof=None):
             device=device,
             dtp_group=dtp_group,
             autocast=autocast,
+            checkpoint_path=checkpoint_path,
             prof=prof,
         )
         end_time = time.perf_counter()
+        nvtx.range_pop()
+
         if not config_dict["skip_validation"]:
             val_loss = validate_deterministic(
                 config_dict=config_dict,
@@ -242,6 +245,16 @@ def training_loop(config_dict, prof=None):
                 print(
                     f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, validation loss {val_loss}"
                 )
+
+            # Save checkpoint after validation to have the validation loss in the checkpoint
+            save_checkpoint(
+                validation_results_path,
+                model,
+                optimizer,
+                epoch,
+                step=None,
+                loss=val_loss,
+            )
 
         for t in timings:
             time_log.append(t)
@@ -274,10 +287,9 @@ def training_loop(config_dict, prof=None):
             index=False,
         )
 
-        dist.barrier(group=None)
-
 
 def train_one_epoch(
+    config_dict,
     epoch,
     dataloader,
     model,
@@ -287,6 +299,7 @@ def train_one_epoch(
     device,
     dtp_group,
     autocast,
+    checkpoint_path,
     prof=None,
 ):
     timings = []
@@ -304,20 +317,34 @@ def train_one_epoch(
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
-
+        nvtx.range_push(f"E{epoch}B{i} - Forward")
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x)  # Bayesian version: pred = model(x, samples=n_samples)
             loss = loss_fn(pred, y)
+        nvtx.range_pop()
 
         # Backpropagation
+        nvtx.range_push(f"E{epoch}B{i} - Backward")
         loss.backward()
+        nvtx.range_pop()
 
+        nvtx.range_push(f"E{epoch}B{i} - Optimizer Step")
         optimizer.step()
+        nvtx.range_pop()
 
         loss_sum = loss_sum + float(loss.detach())
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
 
+        if i % config_dict["training"]["checkpoint_interval"] == 0:
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                epoch,
+                i,
+                loss_sum,
+            )
         if i % 100 == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
@@ -329,13 +356,10 @@ def train_one_epoch(
         step_start = time.time_ns()
         if prof:
             prof.step()
-            if i == 10:  # If we are profiling, we don't want to do too many steps..
-                break
 
     loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
     dist.all_reduce(loss_sum_all, group=dtp_group)
     average_loss = loss_sum_all.item() / max(1, len(dataloader))
-
     return average_loss, timings
 
 
@@ -348,14 +372,6 @@ def main():
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("configargs", nargs="*")
 
-    parser.add_argument("--scaling", default=False)
-    parser.add_argument("--train_subset")
-    parser.add_argument("--embed_dim")
-    parser.add_argument("--n_attn_blocks")
-    parser.add_argument("--lbs")
-    parser.add_argument("--lsn")
-    parser.add_argument("--nodes", default=2)
-
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
@@ -363,33 +379,10 @@ def main():
 
     config_dict = setup_config_dict(config_dict, args)
 
-    # If we are performing a scaling experiment, read the command line arguments.
-    # Otherwise, the arguments will not be read.
-    if args.scaling:
-        if args.train_subset is not None:
-            config_dict["data"]["train_subset"] = int(args.train_subset)
-        if args.embed_dim is not None:
-            config_dict["model"]["embedding_dimension"] = int(args.embed_dim)
-        if args.n_attn_blocks is not None:
-            config_dict["model"]["n_attn_blocks"] = [
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-                int(args.n_attn_blocks),
-            ]
-        if args.lbs is not None:
-            config_dict["training"]["batch_size"] = int(args.lbs)
-            # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][1] = int(args.nodes) // config_dict["mesh_dims"][2]
-            # This scales the dataset size when increasing lbs - only valid for scaling experiments, not for regular training
-
-        if args.lsn is not None:
-            config_dict["training"]["n_samples"] = int(args.lsn)
-            # If we are scaling across nodes and modifying the node count
-            config_dict["mesh_dims"][2] = int(args.nodes) // config_dict["mesh_dims"][1]
-
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
     init_gb_process_group(mesh_dims)
+    dist.barrier(group=None)
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)

@@ -250,6 +250,10 @@ def training_loop(config_dict, prof=None):
                 epoch=epoch,
                 results_path=validation_results_path,
             )
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, validation losses {data_fit_loss}, {prior_matching_loss}"
+                )
 
             # Save checkpoint after validation to have the validation loss in the checkpoint
             save_checkpoint(
@@ -381,11 +385,6 @@ def main():
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("configargs", nargs="*")
 
-    parser.add_argument("--scaling", default=False)
-    parser.add_argument("--dp_processes")
-    parser.add_argument("--up_processes")
-    parser.add_argument("--nodes", default=2)
-
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
@@ -396,7 +395,7 @@ def main():
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
     init_gb_process_group(mesh_dims)
-    # dist.barrier(group=None)
+    dist.barrier(group=None)
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)

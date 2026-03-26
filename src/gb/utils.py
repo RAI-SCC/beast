@@ -135,11 +135,6 @@ def get_process_group(name: str) -> dist.ProcessGroup:
     return _process_group_dict[name]
 
 
-def get_process_group_dict():  # TODO Not sure if this is needed, if pg_dict can be accessed differently from outside
-    """Get the entire process group mesh dict."""
-    return get_process_group_dict
-
-
 def download_1_5_degree_data(data_path):
     # data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
 
