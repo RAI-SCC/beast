@@ -124,6 +124,7 @@ def training_loop(config_dict, prof=None):
             bayesian=True,
             parallelism=config_dict["model_parallel"]["parallelism"],
             dtype=dtype,
+            flash_attn=config_dict["training"]["flash_attn"],
         )
         # Get the data loaders
         train_dataloader = get_dataloader_0_25_deg(

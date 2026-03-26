@@ -6,8 +6,8 @@ data:
     constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
     preprocessed: False
     normalization_dir: "data/normalization"
-    train_subset: -1
-    valid_subset: -1
+    train_subset: 50
+    valid_subset: 50
     train_time_range: ["1979-01-01", "2020-12-31"]
     valid_time_range: ["2021-01-01", "2022-12-31"]
     test_time_range: ["2021-01-01", "2022-12-31"]
@@ -23,11 +23,11 @@ model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
     embedding_dimension: 1024
     n_output_channels: 84
-    n_attn_heads: [16,32,16]
+    n_attn_heads: [16, 32, 16]
     patch_size: 2
     noise_dim: 32
-    window_size_outer: [12, 30]
-    window_size_inner: [12, 18]
+    window_size_outer: [24, 40] # will work on JUPITER, not lumi due to divisibility
+    window_size_inner: [18, 30]
     n_attn_blocks: [2,3,2]
     latent_rollout: 1
 training:
@@ -36,10 +36,11 @@ training:
     n_epochs: 2
     batch_size: 1
     dtype: float32
-    autocast: False
+    autocast: True
     timings: False
     checkpoint_interval: 1000
+    flash_attn: True
 model_parallel:
     parallelism: 4
     type: jigsaw
-mesh_dims: [1, 2, 2, 2, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
+mesh_dims: [1, 1, 2, 2, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
