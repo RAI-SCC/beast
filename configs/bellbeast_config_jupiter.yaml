@@ -29,6 +29,7 @@ model:
     window_size_outer: [24, 40] # will work on JUPITER, not lumi due to divisibility
     window_size_inner: [18, 30]
     n_attn_blocks: [2,3,2]
+    bayesian: True
     latent_rollout: 1
 training:
     tf32: True
