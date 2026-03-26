@@ -293,9 +293,9 @@ def count_flops(
     model: torch.nn.Module,
     dataloader: torch.utils.data.DataLoader,
     loss_fn: callable,
-    n_samples: int,
     device: torch.device,
     dtp_group: dist.ProcessGroup,
+    n_samples: int = 1,
     bayesian=True,
 ):
     """

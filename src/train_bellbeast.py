@@ -194,7 +194,7 @@ def training_loop(config_dict, prof=None):
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
     forward_flops, backward_flops, total_flops = count_flops(
-        model, train_dataloader, loss_fn, n_samples, device, dtp_group
+        model, train_dataloader, loss_fn, device, dtp_group, n_samples
     )
 
     ## Validation, profiling and timings
@@ -315,7 +315,9 @@ def train_one_epoch(
     timings = []
 
     model.train()
-    loss_sum = 0.0
+    loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
+
+    print_every_i_steps = 100
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
@@ -343,7 +345,7 @@ def train_one_epoch(
         optimizer.step()
         nvtx.range_pop()
 
-        loss_sum = loss_sum + float(loss.detach())
+        loss_sum = loss_sum + loss.detach()
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
@@ -358,29 +360,28 @@ def train_one_epoch(
                 loss_sum,
             )
 
-        if i % 100 == 0:
+        if i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 100000000} ms"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
                 )
             cum_batch_time = 0
 
         step_start = time.time_ns()
+
         if prof:
             prof.step()
 
-    loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
-    dist.all_reduce(loss_sum_all, group=dtp_group)
-    average_loss = loss_sum_all.item() / max(1, len(dataloader))
+    dist.all_reduce(loss_sum, group=dtp_group)
+    average_loss = loss_sum.item() / max(1, len(dataloader))
     return average_loss, timings
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
-
     parser.add_argument("--skip_validation", action="store_true")
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
