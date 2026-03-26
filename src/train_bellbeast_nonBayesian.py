@@ -127,6 +127,7 @@ def training_loop(config_dict, prof=None):
             bayesian=False,  # Bayesian version: bayesian=True
             parallelism=config_dict["model_parallel"]["parallelism"],
             dtype=dtype,
+            flash_attn=config_dict["training"]["flash_attn"],
         )
         # Get the data loaders
         train_dataloader = get_dataloader_0_25_deg(
@@ -166,8 +167,6 @@ def training_loop(config_dict, prof=None):
 
     loss_fn = torch.nn.MSELoss()  # Bayesian version: UP_AllGaussLoss
 
-    n_samples = 1
-
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     utils.setup_precision(
@@ -183,7 +182,6 @@ def training_loop(config_dict, prof=None):
         model,
         train_dataloader,
         loss_fn,
-        n_samples,
         device,
         dtp_group,
         bayesian=False,  # Non-Bayesian version
@@ -219,7 +217,6 @@ def training_loop(config_dict, prof=None):
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
-            n_samples=n_samples,
             optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
@@ -293,7 +290,6 @@ def train_one_epoch(
     epoch,
     dataloader,
     model,
-    n_samples,
     optimizer,
     loss_fn,
     device,
@@ -305,12 +301,15 @@ def train_one_epoch(
     timings = []
 
     model.train()
-    loss_sum = 0.0
+    loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
+
+    print_every_i_steps = 100
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
     step_start = time.time_ns()
+    cum_batch_time = 0
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
@@ -320,7 +319,9 @@ def train_one_epoch(
         nvtx.range_push(f"E{epoch}B{i} - Forward")
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             pred = model(x)  # Bayesian version: pred = model(x, samples=n_samples)
-            loss = loss_fn(pred, y)
+            loss = loss_fn(pred.float(), y)
+
+        dist.nn.functional.all_reduce(loss, group=dtp_group)
         nvtx.range_pop()
 
         # Backpropagation
@@ -332,9 +333,10 @@ def train_one_epoch(
         optimizer.step()
         nvtx.range_pop()
 
-        loss_sum = loss_sum + float(loss.detach())
+        loss_sum = loss_sum + loss.detach()
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
+        cum_batch_time += step_end - step_start
 
         if i % config_dict["training"]["checkpoint_interval"] == 0:
             save_checkpoint(
@@ -345,21 +347,22 @@ def train_one_epoch(
                 i,
                 loss_sum,
             )
-        if i % 100 == 0:
+        if i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. rmse loss: {float(loss.detach())}"
+                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
                 )
+            cum_batch_time = 0
 
         step_start = time.time_ns()
+
         if prof:
             prof.step()
 
-    loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
-    dist.all_reduce(loss_sum_all, group=dtp_group)
-    average_loss = loss_sum_all.item() / max(1, len(dataloader))
+    dist.all_reduce(loss_sum, group=dtp_group)
+    average_loss = loss_sum.item() / max(1, len(dataloader))
     return average_loss, timings
 
 
