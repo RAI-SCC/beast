@@ -4,6 +4,7 @@ import random
 import types
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
@@ -407,3 +408,14 @@ def load_checkpoint(
         channel_group_rank,
         loss,
     )
+
+
+@torch.no_grad()
+def get_spatial_weights(config_dict, device):
+    n_lat = config_dict["data"]["xlat"]
+    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
+    cossum = np.sum(np.cos(latitude))
+    weight = torch.tensor(n_lat * np.cos(latitude) / cossum, device=device).to(
+        torch.float32
+    )
+    return weight.view(1, 1, n_lat, 1)

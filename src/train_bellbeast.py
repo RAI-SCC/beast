@@ -32,6 +32,7 @@ from gb.utils import (
     count_flops,
     count_model_parameters,
     get_process_group,
+    get_spatial_weights,
     init_gb_process_group,
     save_checkpoint,
     set_all_seeds,
@@ -344,13 +345,15 @@ def train_one_epoch(
     model.train()
     loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
 
-    print_every_i_steps = 100
+    print_every_i_steps = 50
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
     step_start = time.time_ns()
     cum_batch_time = 0
+
+    spatial_weights = get_spatial_weights(config_dict, device)
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
@@ -365,7 +368,7 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-            loss = loss_fn(pred, y)
+            loss = loss_fn(pred * spatial_weights, y * spatial_weights)
             nvtx.range_pop()
 
         # Backpropagation

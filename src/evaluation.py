@@ -10,7 +10,7 @@ import torch_blue
 from torch import nn
 
 from gb.losses.up_loss import GaussianAggregation
-from gb.utils import get_process_group
+from gb.utils import get_process_group, get_spatial_weights
 
 
 @torch.no_grad()
@@ -796,16 +796,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
                         names.append(f"{pressure_var}_{level}")
 
     return torch.tensor(indices, dtype=torch.long), names
-
-
-@torch.no_grad()
-def get_spatial_weights(config_dict, device):
-    n_lat = config_dict["data"]["xlat"]
-    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
-    cossum = np.sum(np.cos(latitude))
-    weight = torch.tensor(n_lat * np.cos(latitude) / cossum, device=device).float()
-
-    return weight.view(1, 1, n_lat, 1)
 
 
 @torch.no_grad()
