@@ -32,6 +32,9 @@ from gb.utils import (
     count_model_parameters,
     get_process_group,
     init_gb_process_group,
+    load_configuration_yaml,
+    load_latest_model_states,
+    load_state_dict,
     save_checkpoint,
     set_all_seeds,
     set_dtype,
@@ -55,6 +58,23 @@ def training_loop(config_dict, prof=None):
 
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
+
+    # Get the data loaders
+    train_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="train",
+        dtype=dtype,
+    )
+
+    valid_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="validation",
+        dtype=dtype,
+    )
 
     # Define the Model
     initialization_rank = (
@@ -87,7 +107,6 @@ def training_loop(config_dict, prof=None):
             bayesian=bayesian,
             dtype=dtype,
         )
-
     ########### Grand Bellbeast
     else:
         model = Bellbeast(
@@ -118,53 +137,72 @@ def training_loop(config_dict, prof=None):
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
-
-    # Get the data loaders
-    train_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="train",
-        dtype=dtype,
-    )
-
-    valid_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        mode="validation",
-        dtype=dtype,
-    )
-
     model = model.to(dtype).to(device)
 
     if dist.get_rank(group=None) == 0:
         print(
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
         )
+    if config_dict["resume_path"] is None:
+        # Needs to happen here, before model is wrapped over and over again
+        optimizer = torch.optim.AdamW(
+            [
+                {
+                    "params": model.params.low_lr.parameters(),
+                    "lr": config_dict["training"]["low_lr"],
+                },
+                {
+                    "params": model.params.normal_lr.parameters(),
+                    "lr": config_dict["training"]["normal_lr"],
+                },
+            ],
+            lr=config_dict["training"]["normal_lr"],
+        )
+        # Make model expert
+        model = Expert(model, ep_group)
+        expert_loss_weighting = model.get_loss_weights()
 
-    optimizer = torch.optim.AdamW(
-        [
-            {
-                "params": model.params.low_lr.parameters(),
-                "lr": config_dict["training"]["low_lr"],
-            },
-            {
-                "params": model.params.normal_lr.parameters(),
-                "lr": config_dict["training"]["normal_lr"],
-            },
-        ],
-        lr=config_dict["training"]["normal_lr"],
-    )
+        # Make model Bayesian
+        if bayesian:
+            convert_jigsaw_vi(model)
+            model.return_log_probs = False
 
-    # Make model expert
-    model = Expert(model, ep_group)
-    expert_loss_weighting = model.get_loss_weights()
+        # Make model data parallel
+        model = DistributedDataParallel(
+            model,
+            device_ids=[device_id],
+            output_device=device_id,
+            process_group=ddp_group,
+            gradient_as_bucket_view=True,
+            static_graph=True,
+            bucket_cap_mb=200,
+        )
+        start_epoch = 0
+    else:
+        # Make model expert
+        model = Expert(model, ep_group)
+        expert_loss_weighting = model.get_loss_weights()
 
-    # Make model Bayesian
+        (
+            model_state_dict,
+            optimizer_state_dict,
+            start_epoch,
+            step,
+            ep_group_rank,
+            channel_group_rank,
+            loss,
+        ) = load_latest_model_states(str(config_dict["resume_path"]))
+
+        model, optimizer, start_epoch = load_state_dict(
+            model,
+            model_state_dict,
+            optimizer_state_dict,
+            start_epoch,
+            device_id,
+            bayesian=bayesian,
+        )
+
     if bayesian:
-        convert_jigsaw_vi(model)
-        model.return_log_probs = False
         loss_fn = UP_AllGaussLoss(
             model,
             expert_loss_weighting,
@@ -175,17 +213,6 @@ def training_loop(config_dict, prof=None):
         )
     else:
         loss_fn = torch.nn.MSELoss()
-
-    # Make model data parallel
-    model = DistributedDataParallel(
-        model,
-        device_ids=[device_id],
-        output_device=device_id,
-        process_group=ddp_group,
-        gradient_as_bucket_view=True,
-        static_graph=True,
-        bucket_cap_mb=200,
-    )
 
     # LR Scheduler
     if config_dict["training"]["lr_scheduler"]:
@@ -237,7 +264,7 @@ def training_loop(config_dict, prof=None):
     time_log = []
 
     ### Run Training
-    for epoch in range(config_dict["training"]["n_epochs"]):
+    for epoch in range(start_epoch, config_dict["training"]["n_epochs"]):
         nvtx.range_push("Epoch")
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
@@ -290,7 +317,7 @@ def training_loop(config_dict, prof=None):
 
             # Save checkpoint after validation to have the validation loss in the checkpoint
             save_checkpoint(
-                validation_results_path,
+                checkpoint_path,
                 model,
                 optimizer,
                 epoch,
@@ -434,15 +461,22 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--resume")
     parser.add_argument("--skip_validation", action="store_true")
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
+
     parser.add_argument("configargs", nargs="*")
 
     args = parser.parse_args()
 
-    with open(f"{args.config_file}", "r") as f:
-        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+    resume_dir = None if args.resume is None else f"{args.resume}"
+
+    if args.config_file is not None:
+        with open(f"{args.config_file}", "r") as f:
+            config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+    else:
+        config_dict = load_configuration_yaml(resume_dir)
 
     config_dict = setup_config_dict(config_dict, args)
 

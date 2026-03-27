@@ -1,6 +1,7 @@
 import math
 import os
 import random
+import re
 import types
 from collections.abc import Sequence
 
@@ -11,7 +12,9 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
+import yaml
 from jigsaw import normalization, utils_init
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.flop_counter import FlopCounterMode
 
 from gb.model.model_gb_tiny import NiceNorm
@@ -349,17 +352,17 @@ def count_flops(
 
 
 def save_checkpoint(
-    results_path: str,
+    checkpoint_path: str,
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     epoch: int,
     step: int | None,
     loss: float,
 ):
-    checkpoint_path = os.path.join(results_path, "checkpoints")
-    if dist.get_rank() == 0:
-        os.makedirs(checkpoint_path, exist_ok=True)
-    dist.barrier()
+    # checkpoint_path = os.path.join(results_path, "checkpoints")
+    # if dist.get_rank() == 0:
+    #     os.makedirs(checkpoint_path, exist_ok=True)
+    # dist.barrier()
 
     channel_group = get_process_group("JChannel")
     ep_group = get_process_group("Expert")
@@ -389,7 +392,10 @@ def load_checkpoint(
     checkpoint_path: str, map_location="cpu"
 ) -> tuple[dict, dict, int, int | None, int, int, float]:
     """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, expert group rank, and channel group rank."""
-    checkpoint = torch.load(checkpoint_path, map_location=map_location)
+    print(f"checkpoint_path = {checkpoint_path}")
+    checkpoint = torch.load(
+        checkpoint_path, map_location=map_location, weights_only=False
+    )
     model_state_dict = checkpoint["model_state_dict"]
     optimizer_state_dict = checkpoint["optimizer_state_dict"]
     epoch = checkpoint["epoch"]
@@ -407,3 +413,124 @@ def load_checkpoint(
         channel_group_rank,
         loss,
     )
+
+
+def load_latest_model_states(directory):
+    end_of_epoch_directory = os.path.join(directory, "checkpoints")
+    path_base = end_of_epoch_directory
+    unfiltered_checkpoint_list = os.listdir(end_of_epoch_directory)
+    checkpoints = [
+        fname for fname in unfiltered_checkpoint_list if fname.endswith(".pt")
+    ]
+    local_checkpoint = ""
+    latest_epoch = -1
+    latest_step = -1
+    ep_group_rank = get_process_group("Expert").rank()
+    jc_group_rank = get_process_group("JChannel").rank()
+
+    intermediate = False
+
+    for fname in checkpoints:
+        m = re.match(r"cp-epoch([0-9]+)-e([0-9]+)-jc([0-9]+).pt", fname)
+        try:
+            epoch = int(m.group(1))
+            expert_rank = int(m.group(2))
+            jchannel_rank = int(m.group(3))
+            step = None
+        except IndexError:
+            m = re.match(
+                r"cp-epoch([0-9]+)-step([0-9]+)-e([0-9]+)-jc([0-9]+).pt", fname
+            )
+            epoch = int(m.group(1))
+            expert_rank = int(m.group(3))
+            jchannel_rank = int(m.group(4))
+            step = int(m.group(2))
+            intermediate = True
+
+        if not expert_rank == ep_group_rank:
+            continue
+
+        if not jchannel_rank == jc_group_rank:
+            continue
+
+        if not intermediate:
+            if epoch <= latest_epoch:
+                continue
+        else:
+            if epoch < latest_epoch:
+                continue
+
+            if step is not None:
+                if step <= latest_step:
+                    continue
+
+        latest_step = step
+
+        local_checkpoint = fname
+        latest_epoch = epoch
+
+    full_path = os.path.join(path_base, local_checkpoint)
+    print(f"Rank {dist.get_rank()}: Loading checkpoint from {full_path}")
+
+    (
+        model_state_dict,
+        optimizer_state_dict,
+        epoch,
+        step,
+        ep_group_rank,
+        channel_group_rank,
+        loss,
+    ) = load_checkpoint(full_path)
+
+    if not latest_step == -1:
+        epoch -= 1
+
+    return (
+        model_state_dict,
+        optimizer_state_dict,
+        epoch,
+        step,
+        ep_group_rank,
+        channel_group_rank,
+        loss,
+    )
+
+
+def load_configuration_yaml(directory):
+    yaml_path = os.path.join(directory, "config.yaml")
+    with open(f"{yaml_path}", "r") as f:
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    return config_dict
+
+
+def load_state_dict(
+    model, model_state_dict, optimizer_state_dict, last_epoch, device_id, bayesian=True
+):
+    ddp_group = get_process_group("DDP")
+
+    if bayesian:
+        convert_jigsaw_vi(model)
+        model.return_log_probs = False
+
+    # Make model data parallel
+    model_ddp = DistributedDataParallel(
+        model,
+        device_ids=[device_id],
+        output_device=device_id,
+        process_group=ddp_group,
+    )
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
+    try:
+        model_ddp.load_state_dict(model_state_dict)
+        optimizer.load_state_dict(optimizer_state_dict)
+        start_epoch = last_epoch + 1
+    except Exception as err:
+        if dist.get_rank() == 0:
+            print(err)
+            print("Model cannot be loaded from checkpoint. Reinitializing model.")
+        start_epoch = 0
+
+    return model_ddp, optimizer, start_epoch
