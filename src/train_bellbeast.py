@@ -175,7 +175,7 @@ def training_loop(config_dict, prof=None):
             ep_group,
         )
     else:
-        loss_fn = torch.nn.MSELoss()  # Bayesian version: UP_AllGaussLoss
+        loss_fn = torch.nn.MSELoss()
 
     # Make model data parallel
     model = DistributedDataParallel(
@@ -183,6 +183,9 @@ def training_loop(config_dict, prof=None):
         device_ids=[device_id],
         output_device=device_id,
         process_group=ddp_group,
+        gradient_as_bucket_view=True,
+        static_graph=True,
+        bucket_cap_mb=200,
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
