@@ -19,8 +19,7 @@ from evaluation import validate, validate_deterministic
 from gb.config import setup_config_dict
 
 # Import Dataloaders
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
-from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
+from gb.dataloaders.dataloader import get_dataloader
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
@@ -88,22 +87,7 @@ def training_loop(config_dict, prof=None):
             bayesian=bayesian,
             dtype=dtype,
         )
-        # Get the data loaders
-        train_dataloader = get_dataloader_1_5_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="train",
-            dtype=dtype,
-        )
 
-        valid_dataloader = get_dataloader_1_5_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="validation",
-            dtype=dtype,
-        )
     ########### Grand Bellbeast
     else:
         model = Bellbeast(
@@ -134,22 +118,23 @@ def training_loop(config_dict, prof=None):
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
-        # Get the data loaders
-        train_dataloader = get_dataloader_0_25_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="train",
-            dtype=dtype,
-        )
 
-        valid_dataloader = get_dataloader_0_25_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="validation",
-            dtype=dtype,
-        )
+    # Get the data loaders
+    train_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="train",
+        dtype=dtype,
+    )
+
+    valid_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="validation",
+        dtype=dtype,
+    )
 
     model = model.to(dtype).to(device)
 

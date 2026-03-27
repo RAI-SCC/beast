@@ -2,10 +2,10 @@ import os
 
 import torch
 import torch.distributed as dist
+from gb.dataloaders.dataloader_0_25_degree import GBDataLoader
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 
-from gb.dataloaders.dataloader_0_25_degree import GBDataLoader
 from gb.dataloaders.dataset_1_5_degree import (
     DummyDataset,
     ERA5PreprocessedDataset15degree,
