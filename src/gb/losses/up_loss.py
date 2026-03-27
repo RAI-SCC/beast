@@ -89,20 +89,24 @@ class GaussianAggregation(torch.autograd.Function):
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
 
-        local_sum_scaled = (samples.sum(dim=0) / total_samples).contiguous()
-        local_sum_sq = ((samples**2).sum(dim=0) / (total_samples - 1)).contiguous()
+        local_sum_result = torch.cat(
+            [
+                (samples.sum(dim=0) / total_samples),
+                ((samples**2).sum(dim=0) / (total_samples - 1)),
+            ],
+            dim=0,
+        )
 
-        local_sum_result = torch.cat([local_sum_scaled, local_sum_sq], dim=0)
-
-        dist.all_reduce(
+        handle = dist.all_reduce(
             local_sum_result,
             op=dist.ReduceOp.SUM,
             group=up_process_group,
             async_op=True,
         )
 
-        mean = local_sum_result[0, :, :, :].clone().unsqueeze(dim=0)
-        var = local_sum_result[1, :, :, :].clone().unsqueeze(dim=0)
+        handle.wait()
+        mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
+        var = local_sum_result[1, :, :, :].unsqueeze(dim=0)
 
         var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
