@@ -7,6 +7,6 @@ xarray
 git+https://github.com/Helmholtz-AI-Energy/perun@feat/new-sysfs-backends
 mpi4py
 netCDF4
-torch-blue
 
 -e ./src/libs/jigsaw
+-e ./src/libs/torch_blue
