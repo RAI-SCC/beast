@@ -158,6 +158,20 @@ def training_loop(config_dict, prof=None):
             f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
         )
 
+    optimizer = torch.optim.AdamW(
+        [
+            {
+                "params": model.params.low_lr.parameters(),
+                "lr": config_dict["training"]["low_lr"],
+            },
+            {
+                "params": model.params.normal_lr.parameters(),
+                "lr": config_dict["training"]["normal_lr"],
+            },
+        ],
+        lr=config_dict["training"]["normal_lr"],
+    )
+
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
@@ -188,7 +202,13 @@ def training_loop(config_dict, prof=None):
         bucket_cap_mb=200,
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    # LR Scheduler
+    if config_dict["training"]["lr_scheduler"]:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config_dict["training"]["n_epochs"]
+        )
+    else:
+        scheduler = None
 
     utils.setup_precision(
         config_dict["training"]["tf32"]
@@ -249,6 +269,7 @@ def training_loop(config_dict, prof=None):
             autocast=autocast,
             checkpoint_path=checkpoint_path,
             prof=prof,
+            lr_scheduler=scheduler,
         )
         end_time = time.perf_counter()
         nvtx.range_pop()
@@ -338,12 +359,15 @@ def train_one_epoch(
     autocast,
     checkpoint_path,
     prof=None,
+    lr_scheduler=None,
 ):
     timings = []
 
     model.train()
     loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
-
+    if lr_scheduler is not None:
+        lr_scheduler.step(epoch)
+    start_lr = 1e-6
     print_every_i_steps = 100
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
@@ -352,6 +376,12 @@ def train_one_epoch(
     step_start = time.time_ns()
     cum_batch_time = 0
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
+        if epoch == 0 and i < 5000 and lr_scheduler is not None:
+            max_values = lr_scheduler.get_last_lr()
+            for index, g in enumerate(optimizer.param_groups):
+                warm = i * (max_values[index] - start_lr) / 5000 + start_lr
+                g["lr"] = warm
+
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
         gpu_time = time.time_ns()

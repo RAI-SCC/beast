@@ -275,6 +275,23 @@ class Bellbeast(torch.nn.Module):
         )
         self.mask_out, self.mask_in = None, None
 
+        self.params = torch.nn.ModuleDict(
+            {
+                "low_lr": torch.nn.ModuleList(
+                    [
+                        self.patch_embedding,
+                        self.downsample,
+                        self.upsample,
+                        self.upsample_mix,
+                        self.patch_recovery,
+                    ]
+                ),
+                "normal_lr": torch.nn.ModuleList(
+                    [self.transformer_1, self.transformer_down, self.transformer_2]
+                ),
+            }
+        )
+
     def _get_windows(self, x, window_size):
         B, xlat, xlon, channels = x.shape
         x = x.reshape(
