@@ -9,7 +9,7 @@ data:
     train_subset: -1
     valid_subset: -1
     train_time_range: ["1979-01-01", "2020-12-31"]
-    valid_time_range: ["2021-01-01", "2021-12-31"]
+    valid_time_range: ["2021-01-01", "2022-12-31"]
     test_time_range: ["2022-01-01", "2022-12-31"]
     dataset_subsampling: 1
     target_subsampling: 6

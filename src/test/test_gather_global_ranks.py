@@ -5,11 +5,21 @@ sys.path.append("./src/")  # for utils import
 import torch
 import torch.distributed as dist
 
-from evaluation import gather_global_ranks
 from gb.utils import init_gb_process_group
 
 
-def my_gather_global_ranks(group_dict):
+def comm_gather_global_ranks(process_group, device):
+    gather_tensor = torch.tensor([dist.get_rank()], device=device)
+
+    gathered = [
+        torch.zeros_like(gather_tensor)
+        for _ in range(dist.get_world_size(process_group))
+    ]
+    dist.all_gather(gathered, gather_tensor, group=process_group)
+    return torch.cat(gathered, dim=0).to(torch.int32)
+
+
+def arithm_gather_global_ranks(group_dict):
     dtp_group = group_dict["DTP"]
     spatial_group = group_dict["JSpatial"]
     channel_group = group_dict["JChannel"]
@@ -44,15 +54,15 @@ def test_gather_global_ranks(mesh_dims: list[int]):
 
     device = f"cuda:{device_id}"
 
-    my_gathered = my_gather_global_ranks(group_dict)
+    my_gathered = arithm_gather_global_ranks(group_dict)
 
-    old_gathered = gather_global_ranks(up_group, device)
+    old_gathered = comm_gather_global_ranks(up_group, device)
     print(
         f"Rank {dist.get_rank(group=None)}. Expensive communication stuff {old_gathered}, Charlie and Markus awesome hacking stuff {my_gathered}"
     )
-
+    dist.barrier()
     dist.destroy_process_group()
 
 
 if __name__ == "__main__":
-    test_gather_global_ranks([1, 2, 8, 2, 2])
+    test_gather_global_ranks([1, 2, 2, 2, 2])
