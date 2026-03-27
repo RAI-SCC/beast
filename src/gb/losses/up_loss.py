@@ -86,29 +86,27 @@ class UP_AllGaussLoss(nn.Module):
 class GaussianAggregation(torch.autograd.Function):
     @staticmethod
     def forward(samples, up_process_group, loss_weights):
-        loc_sample_num = samples.shape[0]
         up_num = up_process_group.size()
-        total_samples = loc_sample_num * up_num
+        total_samples = samples.shape[0] * up_num
 
         local_sum_scaled = (samples.sum(dim=0) / total_samples).contiguous()
-        mu_handle = dist.all_reduce(
-            local_sum_scaled,
+        local_sum_sq = ((samples**2).sum(dim=0) / (total_samples - 1)).contiguous()
+
+        local_sum_result = torch.cat([local_sum_scaled, local_sum_sq], dim=0)
+
+        dist.all_reduce(
+            local_sum_result,
             op=dist.ReduceOp.SUM,
             group=up_process_group,
             async_op=True,
         )
 
-        local_sum_sq = ((samples**2).sum(dim=0) / (total_samples - 1)).contiguous()
-        var_handle = dist.all_reduce(
-            local_sum_sq, op=dist.ReduceOp.SUM, group=up_process_group, async_op=True
-        )
+        mean = local_sum_result[0, :, :, :].clone().unsqueeze(dim=0)
+        var = local_sum_result[1, :, :, :].clone().unsqueeze(dim=0)
 
-        mu_handle.wait()
-        mean = local_sum_scaled
-
-        var_handle.wait()
-        var = local_sum_sq - (mean**2) * (total_samples / (total_samples - 1))
+        var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
+
         std = torch.sqrt(var)
 
         replace_val = loss_weights == 0.0
