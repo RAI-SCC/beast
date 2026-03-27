@@ -22,6 +22,8 @@ class TinyBellbeast(torch.nn.Module):
         channel_group,
         ep_group,
         up_group,
+        bayesian,
+        dtype,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -38,8 +40,9 @@ class TinyBellbeast(torch.nn.Module):
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_channels = out_channels
-
+        self.bayesian = bayesian
         self.noise_dim = noise_dim
+        self.dtype = dtype
         self.activation = torch.nn.GELU()
 
         self.channel_group = channel_group  # hard coded, to avoid parsing through
@@ -54,7 +57,9 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             bias=True,
             device=self.device,
+            dtype=self.dtype,
         )
+
         self.downsample = torch.nn.Conv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
@@ -65,6 +70,7 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             device=self.device,
             bias=True,
+            dtype=self.dtype,
         )
 
         self.expert_layer = ExpertWeightingLayer(
@@ -72,6 +78,8 @@ class TinyBellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         self.upsample = torch.nn.ConvTranspose2d(
@@ -84,6 +92,7 @@ class TinyBellbeast(torch.nn.Module):
             groups=1,
             device=self.device,
             bias=True,
+            dtype=self.dtype,
         )
 
         self.upsample_mix = torch.nn.Linear(
@@ -91,6 +100,7 @@ class TinyBellbeast(torch.nn.Module):
             self.embed_dim,
             bias=True,
             device=device,
+            dtype=self.dtype,
         )
 
         self.patch_recovery = torch.nn.ConvTranspose2d(
@@ -103,6 +113,7 @@ class TinyBellbeast(torch.nn.Module):
             bias=True,
             groups=1,
             device=self.device,
+            dtype=self.dtype,
         )
 
         self.n_full_blocks = n_full_blocks
@@ -115,6 +126,7 @@ class TinyBellbeast(torch.nn.Module):
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[0])
             ]
@@ -129,6 +141,7 @@ class TinyBellbeast(torch.nn.Module):
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[1])
             ]
@@ -143,6 +156,7 @@ class TinyBellbeast(torch.nn.Module):
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
+                    dtype=self.dtype,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[2])
             ]
@@ -365,6 +379,7 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         noise_dim: int,
         dropout: float,
         device: torch.device,
+        dtype,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -372,24 +387,25 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         self.output_dim = output_dim
         self.noise_dim = noise_dim
 
+        self.device = device
+        self.dtype = dtype
+
         self.attention_block = WindowedAttention(
-            self.embed_dim,
-            self.output_dim,
-            self.heads,
+            self.embed_dim, self.output_dim, self.heads, self.dtype
         ).to(device)
 
         self.layer_norm1 = NiceNorm(output_dim, self.noise_dim, device=device).to(
-            device
+            self.device
         )
         self.layer_norm2 = NiceNorm(output_dim, self.noise_dim, device=device).to(
-            device
+            self.device
         )
 
         self.MLP = MLP(
             output_dim,
             output_dim,
             output_dim,
-        ).to(device)
+        ).to(self.device)
 
         # _average_weights(self, spatial_group, device)
 
@@ -412,6 +428,7 @@ class WindowedAttention(nn.Module):
         embed_dim,
         output_dim,
         num_heads,
+        dtype,
     ):
         super().__init__()
 
@@ -422,11 +439,36 @@ class WindowedAttention(nn.Module):
         self.qkv = nn.Linear(embed_dim, embed_dim * 3, bias=False)
         self.softmax = nn.Softmax(dim=-1)
         self.linear = nn.Linear(embed_dim, embed_dim)
+        self.dtype = dtype
 
         # Store several attributes
         self.num_heads = num_heads
         self.scale = (self.embed_dim // self.num_heads) ** -0.5
 
+    @torch.compile(mode="reduce-overhead")
+    def _attention_core(self, qkv):
+        qkv = qkv.reshape(
+            (
+                qkv.shape[0],
+                qkv.shape[1],
+                3,
+                self.num_heads,
+                qkv.shape[2] // self.num_heads // 3,
+            )
+        )
+        qkv = torch.permute(qkv, (2, 0, 3, 1, 4))
+
+        q, k, v = qkv.unbind(0)
+
+        with torch.nn.attention.sdpa_kernel(
+            torch.nn.attention.SDPBackend.FLASH_ATTENTION
+        ):
+            out = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, is_causal=False, dropout_p=0.0
+            )
+        return out
+
+    @torch.compile(mode="reduce-overhead")
     def forward(self, x, mask):
         """
         Forward pass of 2D attention mechanism with absolute positional bias term.
@@ -441,33 +483,20 @@ class WindowedAttention(nn.Module):
         x: Tensor
             of shape (n_batch * n_windows, n_patch_in_window, hidden_dim)
         """
-        qkv = self.qkv(x)
-        qkv = qkv.reshape(
-            (
-                x.shape[0],
-                x.shape[1],
-                3,
-                self.num_heads,
-                self.embed_dim // self.num_heads,
-            )
-        )
-        qkv = torch.permute(qkv, (2, 0, 3, 1, 4))
-        q, k, v = torch.tensor_split(qkv, 3, dim=0)
+        qkv = self.qkv(x).to(torch.bfloat16)
 
-        q = q.squeeze(dim=0) * self.scale
-
-        attention = q @ k.squeeze(dim=0).transpose(-2, -1)
-
-        if mask is not None:
-            attention = attention + mask
-
-        attention = self.softmax(attention)
-
-        values = attention @ v.squeeze(dim=0)
+        out = self._attention_core(qkv)
+        # q, k, v = torch.tensor_split(qkv, 3, dim=0)
+        # q = q.squeeze(dim=0) * self.scale
+        # attention = q @ k.squeeze(dim=0).transpose(-2, -1)
+        # if mask is not None:
+        #     attention = attention + mask
+        # attention = self.softmax(attention)
+        # values = attention @ v.squeeze(dim=0)
 
         # head merging
-        values = torch.transpose(values, 1, 2).reshape(x.shape)
-        values = self.linear(values)
+        out = torch.transpose(out, 1, 2).reshape(x.shape).to(self.dtype)
+        values = self.linear(out)
 
         return values
 

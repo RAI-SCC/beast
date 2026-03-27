@@ -13,7 +13,9 @@ from torch.cuda import nvtx
 from torch.nn.parallel import DistributedDataParallel
 
 # Import evaluation
-from evaluation import validate
+from evaluation import validate, validate_deterministic
+
+# Import utility functions
 from gb.config import setup_config_dict
 
 # Import Dataloaders
@@ -46,6 +48,9 @@ def training_loop(config_dict, prof=None):
     ddp_group = get_process_group("DDP")
     ep_group = get_process_group("Expert")
 
+    bayesian = config_dict["model"]["bayesian"]
+    n_samples = config_dict["training"]["n_samples"]
+
     dtype = set_dtype(config_dict["training"]["dtype"])
     autocast = config_dict["training"]["autocast"]
 
@@ -54,7 +59,7 @@ def training_loop(config_dict, prof=None):
 
     # Define the Model
     initialization_rank = (
-        dtp_group.rank() + ep_group.rank() * dtp_group.size() + up_group.size()
+        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -80,6 +85,8 @@ def training_loop(config_dict, prof=None):
             channel_group=channel_group,
             ep_group=ep_group,
             up_group=up_group,
+            bayesian=bayesian,
+            dtype=dtype,
         )
         # Get the data loaders
         train_dataloader = get_dataloader_1_5_deg(
@@ -122,9 +129,10 @@ def training_loop(config_dict, prof=None):
             channel_group=channel_group,
             ep_group=ep_group,
             up_group=up_group,
-            bayesian=True,
+            bayesian=bayesian,
             parallelism=config_dict["model_parallel"]["parallelism"],
             dtype=dtype,
+            flash_attn=config_dict["training"]["flash_attn"],
         )
         # Get the data loaders
         train_dataloader = get_dataloader_0_25_deg(
@@ -147,7 +155,7 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
         )
 
     # Make model expert
@@ -155,8 +163,19 @@ def training_loop(config_dict, prof=None):
     expert_loss_weighting = model.get_loss_weights()
 
     # Make model Bayesian
-    convert_jigsaw_vi(model)
-    model.return_log_probs = False
+    if bayesian:
+        convert_jigsaw_vi(model)
+        model.return_log_probs = False
+        loss_fn = UP_AllGaussLoss(
+            model,
+            expert_loss_weighting,
+            len(train_dataloader.dataset),
+            up_group,
+            dp_group,
+            ep_group,
+        )
+    else:
+        loss_fn = torch.nn.MSELoss()
 
     # Make model data parallel
     model = DistributedDataParallel(
@@ -164,18 +183,10 @@ def training_loop(config_dict, prof=None):
         device_ids=[device_id],
         output_device=device_id,
         process_group=ddp_group,
+        gradient_as_bucket_view=True,
+        static_graph=True,
+        bucket_cap_mb=200,
     )
-
-    loss_fn = UP_AllGaussLoss(
-        model,
-        expert_loss_weighting,
-        len(train_dataloader.dataset),
-        up_group,
-        dp_group,
-        ep_group,
-    )
-
-    n_samples = config_dict["training"]["n_samples"]
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
@@ -189,7 +200,13 @@ def training_loop(config_dict, prof=None):
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
     forward_flops, backward_flops, total_flops = count_flops(
-        model, train_dataloader, loss_fn, n_samples, device, dtp_group
+        model,
+        train_dataloader,
+        loss_fn,
+        device,
+        dtp_group,
+        n_samples,
+        bayesian,
     )
 
     ## Validation, profiling and timings
@@ -223,6 +240,7 @@ def training_loop(config_dict, prof=None):
             epoch=epoch,
             dataloader=train_dataloader,
             model=model,
+            bayesian=bayesian,
             n_samples=n_samples,
             optimizer=optimizer,
             loss_fn=loss_fn,
@@ -236,16 +254,33 @@ def training_loop(config_dict, prof=None):
         nvtx.range_pop()
 
         if not config_dict["skip_validation"]:
-            data_fit_loss, prior_matching_loss = validate(
-                config_dict=config_dict,
-                model=model,
-                expert_weights=expert_loss_weighting,
-                n_samples=n_samples,
-                dataloader=valid_dataloader,
-                device=device,
-                epoch=epoch,
-                results_path=validation_results_path,
-            )
+            if bayesian:
+                data_fit_loss, prior_matching_loss = validate(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    n_samples=n_samples,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+            else:
+                data_fit_loss = validate_deterministic(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+                prior_matching_loss = None
+
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"Epoch {epoch} average loss {avg_loss}, validation losses {data_fit_loss}, {prior_matching_loss}"
+                )
 
             # Save checkpoint after validation to have the validation loss in the checkpoint
             save_checkpoint(
@@ -262,7 +297,7 @@ def training_loop(config_dict, prof=None):
 
         if dist.get_rank(group=None) == 0:
             print(
-                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average loss {avg_loss}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
+                f"Epoch {epoch} time [min]: {(end_time - start_time) / 60.0}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
     if config_dict["timings"]:
@@ -288,14 +323,13 @@ def training_loop(config_dict, prof=None):
             index=False,
         )
 
-        dist.barrier(group=None)
-
 
 def train_one_epoch(
     config_dict,
     epoch,
     dataloader,
     model,
+    bayesian,
     n_samples,
     optimizer,
     loss_fn,
@@ -308,12 +342,15 @@ def train_one_epoch(
     timings = []
 
     model.train()
-    loss_sum = 0.0
+    loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
+
+    print_every_i_steps = 100
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
     step_start = time.time_ns()
+    cum_batch_time = 0
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
@@ -322,7 +359,10 @@ def train_one_epoch(
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             nvtx.range_push("Forward")
-            pred = model(x, samples=n_samples)
+            if bayesian:
+                pred = model(x, samples=n_samples)
+            else:
+                pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
             loss = loss_fn(pred, y)
@@ -337,9 +377,10 @@ def train_one_epoch(
         optimizer.step()
         nvtx.range_pop()
 
-        loss_sum = loss_sum + float(loss.detach())
+        loss_sum = loss_sum + loss.detach()
         step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
+        cum_batch_time += step_end - step_start
 
         if i % config_dict["training"]["checkpoint_interval"] == 0:
             save_checkpoint(
@@ -351,21 +392,27 @@ def train_one_epoch(
                 loss_sum,
             )
 
-        if i % 100 == 0:
+        if i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
-                print(
-                    f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}"
-                )
+                if bayesian:
+                    print(
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                    )
+                else:
+                    print(
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                    )
+            cum_batch_time = 0
 
         step_start = time.time_ns()
+
         if prof:
             prof.step()
 
-    loss_sum_all = torch.tensor(loss_sum, requires_grad=False, device=device)
-    dist.all_reduce(loss_sum_all, group=dtp_group)
-    average_loss = loss_sum_all.item() / max(1, len(dataloader))
+    dist.all_reduce(loss_sum, group=dtp_group)
+    average_loss = loss_sum.item() / max(1, len(dataloader))
     return average_loss, timings
 
 
@@ -376,6 +423,7 @@ def main():
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("configargs", nargs="*")
+
     args = parser.parse_args()
 
     with open(f"{args.config_file}", "r") as f:
@@ -386,6 +434,7 @@ def main():
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
     init_gb_process_group(mesh_dims)
+    dist.barrier(group=None)
 
     global_rank = dist.get_rank(group=None)
     # global_world_size = dist.get_world_size(group=None)
@@ -403,6 +452,7 @@ def main():
             path = os.getenv("PROFILE_DIR")
             p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
+        print("Profiling ... Please wait")
         with tprofiler.profile(
             activities=[
                 tprofiler.ProfilerActivity.CPU,
@@ -419,6 +469,9 @@ def main():
 
     else:
         training_loop(config_dict)
+
+    if dist.get_rank(group=None) == 0:
+        print("FINITE!")
 
     dist.destroy_process_group()
 

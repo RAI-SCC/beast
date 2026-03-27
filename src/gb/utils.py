@@ -293,9 +293,9 @@ def count_flops(
     model: torch.nn.Module,
     dataloader: torch.utils.data.DataLoader,
     loss_fn: callable,
-    n_samples: int,
     device: torch.device,
     dtp_group: dist.ProcessGroup,
+    n_samples: int = 1,
     bayesian=True,
 ):
     """
@@ -328,7 +328,10 @@ def count_flops(
     with FlopCounterMode(
         display=False
     ) as flop_counter:  # display=True breaks down by op
-        pred = model(x, samples=n_samples)
+        if bayesian:
+            pred = model(x, samples=n_samples)
+        else:
+            pred = model(x)
         loss = loss_fn(pred, y)
         loss.backward()
 

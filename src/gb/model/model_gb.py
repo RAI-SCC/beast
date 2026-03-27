@@ -29,6 +29,7 @@ class Bellbeast(torch.nn.Module):
         bayesian,
         parallelism,
         dtype,
+        flash_attn,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -53,6 +54,8 @@ class Bellbeast(torch.nn.Module):
         self.bayesian = bayesian
         self.noise_dim = noise_dim
         self.dtype = dtype
+        self.flash_attn = flash_attn
+
         self.activation = torch.nn.GELU()
 
         self.patch_embedding = convolutions.DistributedConv2D(
@@ -96,6 +99,7 @@ class Bellbeast(torch.nn.Module):
             self.ep_group,
             self.up_group,
             device=self.device,
+            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -147,6 +151,7 @@ class Bellbeast(torch.nn.Module):
             dtype=self.dtype,
         )
 
+        # Transformer blocks
         self.n_full_blocks = n_full_blocks
         self.transformer_1 = torch.nn.ModuleList(
             [
@@ -165,6 +170,7 @@ class Bellbeast(torch.nn.Module):
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
                     dtype=self.dtype,
+                    flash_attn=self.flash_attn,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[0])
             ]
@@ -187,6 +193,7 @@ class Bellbeast(torch.nn.Module):
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
                     dtype=self.dtype,
+                    flash_attn=self.flash_attn,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[1])
             ]
@@ -209,6 +216,7 @@ class Bellbeast(torch.nn.Module):
                     channel_group=self.channel_group,
                     bayesian=self.bayesian,
                     dtype=self.dtype,
+                    flash_attn=self.flash_attn,
                 ).to(self.device)
                 for _ in torch.arange(2 * self.n_full_blocks[2])
             ]
@@ -327,20 +335,7 @@ class Bellbeast(torch.nn.Module):
         # (n_windows, window sequence length, window sequence length)
         attention_mask = attention_mask.masked_fill(attention_mask != 0, -100000.0)
 
-        # if self.channel_group.rank() == 0:
-        #     attention_mask = attention_mask[
-        #         ..., : ((window_size[0] * window_size[1]) // 2)
-        #     ]
-        # elif self.channel_group.rank() == 1:
-        #     attention_mask = attention_mask[
-        #         ..., ((window_size[0] * window_size[1]) // 2) :
-        #     ]
-        # else:
-        #     assert self.channel_group.size() == 2, (
-        #         "No current implementation for case where channel group has more than 2 ranks."
-        #     )
-
-        # save attention mask here
+        # Generates masks once
         # This assumes constant batch dimension within a run (restarting a job is ok)
         return attention_mask
 
@@ -380,11 +375,9 @@ class Bellbeast(torch.nn.Module):
         )
 
         # Define masks once upon initialization (dependent on batch dimension)
-        self.mask_out, self.mask_in = self._define_masks(x.shape)
-        self.mask_out, self.mask_in = (
-            self.mask_out.to(torch.bfloat16),
-            self.mask_in.to(torch.bfloat16),
-        )  # hard-coded to bfloat16 if we use torch scaled_dot_product_attention
+        # Note: Masks do not currently work with torch flash.
+        # self.mask_out, self.mask_in = self._define_masks(x.shape)
+        self.mask_out, self.mask_in = None, None
 
         # x has global shape (B, xlat, xlon, channels)
         nvtx.range_push("Patch Embedding")
