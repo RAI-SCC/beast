@@ -155,7 +155,7 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=True)}"
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
         )
 
     # Make model expert
