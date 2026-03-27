@@ -148,7 +148,7 @@ EOF
         experiments/run_gb_script.sh \
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
-        --config_file "configs/bellbeast_config.yaml" \
+        --config_file "configs/bellbeast_config_lumi.yaml" \
         --skip_validation \
         data_train_subset=${SUBSET_SIZE} \
         model_embedding_dimension=${EMBED_DIM} \
@@ -159,7 +159,7 @@ EOF
     JOB_IDS+=("$JOB_ID")
 
     echo "  slurm_job_id: ${JOB_ID}" >> "$CONFIG_FILE"
-    cp configs/bellbeast_config.yaml "${CONFIG_DIR}/"
+    cp configs/bellbeast_config_lumi.yaml "${CONFIG_DIR}/"
 
     echo "Submitted ${RUN_NAME} → SLURM job ${JOB_ID}"
     RUN_ID=$(( RUN_ID + 1 ))
