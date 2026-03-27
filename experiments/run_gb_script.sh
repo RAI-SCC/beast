@@ -6,6 +6,7 @@
 #SBATCH --time=00:30:00
 #SBATCH --job-name='gb_run'
 #SBATCH --output='logs/%x_%j.out'
+#SBATCH --error='logs/%x_%j.err'
 
 echo "$0 $@"
 
