@@ -353,7 +353,8 @@ def train_one_epoch(
     step_start = time.time_ns()
     cum_batch_time = 0
 
-    spatial_weights = get_spatial_weights(config_dict, device)
+    sqrt_spatial_weights = torch.sqrt(get_spatial_weights(config_dict, device))
+
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
@@ -368,7 +369,7 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-            loss = loss_fn(pred * spatial_weights, y * spatial_weights)
+            loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
             nvtx.range_pop()
 
         # Backpropagation
