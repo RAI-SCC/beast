@@ -35,7 +35,7 @@ training:
     n_epochs: 10
     batch_size: 1
     dtype: float32
-    autocast: False
+    autocast: True
     timings: False
     checkpoint_interval: 1000
     flash_attn: True
