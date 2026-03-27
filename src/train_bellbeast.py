@@ -31,6 +31,7 @@ from gb.utils import (
     count_flops,
     count_model_parameters,
     get_process_group,
+    get_spatial_weights,
     init_gb_process_group,
     load_configuration_yaml,
     load_latest_model_states,
@@ -387,6 +388,9 @@ def train_one_epoch(
 
     step_start = time.time_ns()
     cum_batch_time = 0
+
+    sqrt_spatial_weights = torch.sqrt(get_spatial_weights(config_dict, device))
+
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
         if epoch == 0 and i < 5000 and lr_scheduler is not None:
             max_values = lr_scheduler.get_last_lr()
@@ -407,7 +411,7 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-            loss = loss_fn(pred, y)
+            loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
             nvtx.range_pop()
 
         # Backpropagation
