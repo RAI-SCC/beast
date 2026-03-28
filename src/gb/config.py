@@ -50,7 +50,7 @@ def setup_config_dict(
 
     # Only for GrandBellbeast: append n_masks for odd number of masks (the dataset does this, too)
     n_masks = len(config_dict["data"]["constant_masks"])
-    if config_dict["model_parallel"]["parallelism"] > 1:
+    if config_dict["jigsaw"]["parallelism"] > 1:
         if n_masks % 2 == 1:
             n_masks += 1
 

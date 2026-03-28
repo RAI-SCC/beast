@@ -134,7 +134,7 @@ def training_loop(config_dict, prof=None):
             ep_group=ep_group,
             up_group=up_group,
             bayesian=bayesian,
-            parallelism=config_dict["model_parallel"]["parallelism"],
+            parallelism=config_dict["jigsaw"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
@@ -142,7 +142,7 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
+            f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
         )
     if config_dict["resume_path"] is None:
         # Needs to happen here, before model is wrapped over and over again
@@ -403,6 +403,7 @@ def train_one_epoch(
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
+        step_start = time.time_ns()
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             nvtx.range_push("Forward")
             if bayesian:
@@ -422,9 +423,9 @@ def train_one_epoch(
         nvtx.range_push("Optimizer Step")
         optimizer.step()
         nvtx.range_pop()
+        step_end = time.time_ns()
 
         loss_sum = loss_sum + loss.detach()
-        step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
 
@@ -451,8 +452,6 @@ def train_one_epoch(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
                     )
             cum_batch_time = 0
-
-        step_start = time.time_ns()
 
         if prof:
             prof.step()

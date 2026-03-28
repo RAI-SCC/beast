@@ -26,7 +26,7 @@ model:
     n_attn_heads: [16, 32, 16]
     patch_size: 2
     noise_dim: 32
-    window_size_outer: [24, 40] # will work on JUPITER, not lumi due to divisibility
+    window_size_outer: [12, 30] # [24, 40] will work on JUPITER, not lumi due to divisibility
     window_size_inner: [18, 30]
     n_attn_blocks: [2,3,2]
     bayesian: True
@@ -44,7 +44,7 @@ training:
     timings: False
     checkpoint_interval: 1000
     flash_attn: True
-model_parallel:
+jigsaw:
     parallelism: 4
     type: jigsaw
 mesh_dims: [1, 1, 2, 2, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
