@@ -15,7 +15,6 @@ import torch_blue.vi.distributions as vidist
 import xarray as xr
 import yaml
 from jigsaw import normalization, utils_init
-from torch.nn.parallel import DistributedDataParallel
 from torch.utils.flop_counter import FlopCounterMode
 
 from gb.model.model_gb_tiny import NiceNorm
@@ -517,24 +516,12 @@ def load_configuration_yaml(directory):
 
 
 def load_state_dict(
-    model, model_state_dict, optimizer_state_dict, last_epoch, device_id, bayesian=True
+    model_ddp,
+    optimizer,
+    model_state_dict,
+    optimizer_state_dict,
+    last_epoch,
 ):
-    ddp_group = get_process_group("DDP")
-
-    if bayesian:
-        convert_jigsaw_vi(model)
-        model.return_log_probs = False
-
-    # Make model data parallel
-    model_ddp = DistributedDataParallel(
-        model,
-        device_ids=[device_id],
-        output_device=device_id,
-        process_group=ddp_group,
-    )
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-
     try:
         model_ddp.load_state_dict(model_state_dict)
         optimizer.load_state_dict(optimizer_state_dict)

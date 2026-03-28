@@ -144,46 +144,52 @@ def training_loop(config_dict, prof=None):
         print(
             f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
         )
+
+    # Needs to happen here, before model is wrapped over and over again
+    optimizer = torch.optim.AdamW(
+        [
+            {
+                "params": model.params.low_lr.parameters(),
+                "lr": config_dict["training"]["low_lr"],
+            },
+            {
+                "params": model.params.normal_lr.parameters(),
+                "lr": config_dict["training"]["normal_lr"],
+            },
+        ],
+        lr=config_dict["training"]["normal_lr"],
+    )
+
+    # Make model expert
+    model = Expert(model, ep_group)
+    expert_loss_weighting = model.get_loss_weights()
+
+    # Make model Bayesian
+    if bayesian:
+        convert_jigsaw_vi(model)
+        model.return_log_probs = False
+    # Make model data parallel
+    model = DistributedDataParallel(
+        model,
+        device_ids=[device_id],
+        output_device=device_id,
+        process_group=ddp_group,
+        gradient_as_bucket_view=True,
+        static_graph=True,
+        bucket_cap_mb=200,
+    )
+
+    # LR Scheduler
+    if config_dict["training"]["lr_scheduler"]:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
+        )
+    else:
+        scheduler = None
+
     if config_dict["resume_path"] is None:
-        # Needs to happen here, before model is wrapped over and over again
-        optimizer = torch.optim.AdamW(
-            [
-                {
-                    "params": model.params.low_lr.parameters(),
-                    "lr": config_dict["training"]["low_lr"],
-                },
-                {
-                    "params": model.params.normal_lr.parameters(),
-                    "lr": config_dict["training"]["normal_lr"],
-                },
-            ],
-            lr=config_dict["training"]["normal_lr"],
-        )
-        # Make model expert
-        model = Expert(model, ep_group)
-        expert_loss_weighting = model.get_loss_weights()
-
-        # Make model Bayesian
-        if bayesian:
-            convert_jigsaw_vi(model)
-            model.return_log_probs = False
-
-        # Make model data parallel
-        model = DistributedDataParallel(
-            model,
-            device_ids=[device_id],
-            output_device=device_id,
-            process_group=ddp_group,
-            gradient_as_bucket_view=True,
-            static_graph=True,
-            bucket_cap_mb=200,
-        )
         start_epoch = 0
     else:
-        # Make model expert
-        model = Expert(model, ep_group)
-        expert_loss_weighting = model.get_loss_weights()
-
         (
             model_state_dict,
             optimizer_state_dict,
@@ -196,11 +202,10 @@ def training_loop(config_dict, prof=None):
 
         model, optimizer, start_epoch = load_state_dict(
             model,
+            optimizer,
             model_state_dict,
             optimizer_state_dict,
             start_epoch,
-            device_id,
-            bayesian=bayesian,
         )
 
     if bayesian:
@@ -214,14 +219,6 @@ def training_loop(config_dict, prof=None):
         )
     else:
         loss_fn = torch.nn.MSELoss()
-
-    # LR Scheduler
-    if config_dict["training"]["lr_scheduler"]:
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=config_dict["training"]["n_epochs"]
-        )
-    else:
-        scheduler = None
 
     utils.setup_precision(
         config_dict["training"]["tf32"]
