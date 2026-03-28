@@ -179,14 +179,6 @@ def training_loop(config_dict, prof=None):
         bucket_cap_mb=200,
     )
 
-    # LR Scheduler
-    if config_dict["training"]["lr_scheduler"]:
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
-        )
-    else:
-        scheduler = None
-
     if config_dict["resume_path"] is None:
         start_epoch = 0
     else:
@@ -207,6 +199,14 @@ def training_loop(config_dict, prof=None):
             optimizer_state_dict,
             start_epoch,
         )
+
+    # LR Scheduler
+    if config_dict["training"]["lr_scheduler"]:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
+        )
+    else:
+        scheduler = None
 
     if bayesian:
         loss_fn = UP_AllGaussLoss(
