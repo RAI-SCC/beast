@@ -43,7 +43,7 @@ def validate(
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
-        dataloader.sampler.set_epoch(epoch)
+        dataloader.sampler.set_epoch(0)  # should always the be same across epochs
 
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
@@ -237,7 +237,9 @@ def validate_deterministic(
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
-        dataloader.sampler.set_epoch(epoch)
+        dataloader.sampler.set_epoch(
+            0
+        )  # validation loading order should always be the same across epochs
 
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
