@@ -389,23 +389,42 @@ class Bellbeast(torch.nn.Module):
 
         # attention
         for i in range(self.n_full_blocks[0]):
-            nvtx.range_push(f"Attn block 0-{i}")
+            nvtx.range_push("Attn block 0")
+
+            nvtx.range_push("Get Windows")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
             # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
             n_windows = x.shape[0] // B
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
+            nvtx.range_push("Noise Interleave")
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
+            nvtx.range_pop()
+            nvtx.range_push("Transformer_1")
             x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
+            nvtx.range_pop()
+            nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("Roll")
             x = self.roll_out(x)
+            nvtx.range_pop()
+            nvtx.range_push("Get Windows")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
+            nvtx.range_push("Transformer_1 (with mask)")
             x = self.transformer_1[i * 2 + 1](x, noise_transformer, mask=self.mask_out)
+            nvtx.range_pop()
+            nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("Unroll")
             x = self.unroll_out(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
             nvtx.range_pop()
 
         x_res2 = x.clone()
@@ -425,7 +444,7 @@ class Bellbeast(torch.nn.Module):
         x = x.permute(0, 2, 3, 1).contiguous()
 
         for i in range(self.n_full_blocks[1]):
-            nvtx.range_push(f"Attn block 1-{i}")
+            nvtx.range_push("Attn block 1")
             x = self._get_windows(x, self.window_size_inner)
             n_windows = x.shape[0] // B
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
@@ -462,7 +481,7 @@ class Bellbeast(torch.nn.Module):
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
-            nvtx.range_push(f"Attn block 2-{i}")
+            nvtx.range_push("Attn block 2")
             x = self._get_windows(x, self.window_size_outer)
             x = self.transformer_2[i * 2](x, noise=noise_transformer, mask=None)
             x = self._reverse_windows(
