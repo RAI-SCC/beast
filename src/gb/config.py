@@ -5,7 +5,7 @@ import torch
 
 
 def setup_config_dict(
-    config_dict: dict[str, dict[str, any]], args: argparse.Namespace
+    config_dict: dict[str, dict[str, any]], args: argparse.Namespace, resume=False
 ) -> dict[str, dict[str, any]]:
     """
     Clean the configuration file, adjust based on environmental variables and overwritten options.
@@ -15,33 +15,34 @@ def setup_config_dict(
     config_dict["profile"] = args.profile
     config_dict["resume_path"] = args.resume
 
-    config_dict = overwrite_config(config_dict, args.configargs)
-    world_size = int(os.getenv("SLURM_NTASKS", 1))
+    if not resume:
+        config_dict = overwrite_config(config_dict, args.configargs)
 
+        ### Data Stuff ###
+        WORKDIR = os.getenv("WORKDIR")
+
+        if os.getenv("DATA_DIR") is not None:
+            config_dict["data"]["train_data_path"] = (
+                os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
+            )
+            config_dict["data"]["valid_data_path"] = (
+                os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
+            )
+            config_dict["data"]["constant_masks_path"] = (
+                os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
+            )
+
+        if "normalization_dir" in config_dict["data"]:
+            config_dict["data"]["normalization_dir"] = (
+                WORKDIR + "/" + config_dict["data"]["normalization_dir"]
+            )
+
+    world_size = int(os.getenv("SLURM_NTASKS", 1))
     mesh_dims = config_dict["mesh_dims"]
     if -1 in config_dict["mesh_dims"]:
         index = mesh_dims.index(-1)
         config_dict["mesh_dims"][index] = (
             world_size // -torch.prod(torch.tensor(mesh_dims)).item()
-        )
-
-    ### Data Stuff ###
-    WORKDIR = os.getenv("WORKDIR")
-
-    if os.getenv("DATA_DIR") is not None:
-        config_dict["data"]["train_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
-        )
-        config_dict["data"]["valid_data_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
-        )
-        config_dict["data"]["constant_masks_path"] = (
-            os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
-        )
-
-    if "normalization_dir" in config_dict["data"]:
-        config_dict["data"]["normalization_dir"] = (
-            WORKDIR + "/" + config_dict["data"]["normalization_dir"]
         )
 
     # default case: load only one timestep

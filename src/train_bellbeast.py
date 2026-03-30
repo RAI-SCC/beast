@@ -475,10 +475,10 @@ def main():
     if args.config_file is not None:
         with open(f"{args.config_file}", "r") as f:
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+        config_dict = setup_config_dict(config_dict, args)
     else:
         config_dict = load_configuration_yaml(resume_dir)
-
-    config_dict = setup_config_dict(config_dict, args)
+        config_dict = setup_config_dict(config_dict, args, resume=True)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
