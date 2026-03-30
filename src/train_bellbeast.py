@@ -319,7 +319,7 @@ def training_loop(config_dict, prof=None):
                 model,
                 optimizer,
                 epoch,
-                step=None,
+                step=0,
                 loss=data_fit_loss,
             )
 

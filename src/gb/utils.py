@@ -381,10 +381,10 @@ def save_checkpoint(
             "loss": loss,
             "format": 1,
         }
-        if step:
-            model_name = f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
-        else:
-            model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        model_name = (
+            f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        )
+
         torch.save(cp, checkpoint_path + f"/{model_name}.pt")
 
 
@@ -426,59 +426,45 @@ def get_spatial_weights(config_dict, device):
     return weight.view(1, 1, n_lat, 1)
 
 
+def parse_checkpoint(fname):
+    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-e(\d+)-jc(\d+)\.pt$", fname)
+    if not m:
+        return None
+    return {
+        "epoch": int(m.group(1)),
+        "step": int(m.group(2)) if m.group(2) else -1,
+        "expert_rank": int(m.group(3)),
+        "jchannel_rank": int(m.group(4)),
+        "fname": fname,
+    }
+
+
 def load_latest_model_states(directory):
     end_of_epoch_directory = os.path.join(directory, "checkpoints")
     path_base = end_of_epoch_directory
-    unfiltered_checkpoint_list = os.listdir(end_of_epoch_directory)
     checkpoints = [
-        fname for fname in unfiltered_checkpoint_list if fname.endswith(".pt")
+        fname for fname in os.listdir(end_of_epoch_directory) if fname.endswith(".pt")
     ]
     local_checkpoint = ""
-    latest_epoch = -1
     latest_step = -1
     ep_group_rank = get_process_group("Expert").rank()
     jc_group_rank = get_process_group("JChannel").rank()
 
-    intermediate = False
-
+    parsed = []
     for fname in checkpoints:
-        m = re.match(r"cp-epoch([0-9]+)-e([0-9]+)-jc([0-9]+).pt", fname)
-        try:
-            epoch = int(m.group(1))
-            expert_rank = int(m.group(2))
-            jchannel_rank = int(m.group(3))
-            step = None
-        except IndexError:
-            m = re.match(
-                r"cp-epoch([0-9]+)-step([0-9]+)-e([0-9]+)-jc([0-9]+).pt", fname
-            )
-            epoch = int(m.group(1))
-            expert_rank = int(m.group(3))
-            jchannel_rank = int(m.group(4))
-            step = int(m.group(2))
-            intermediate = True
-
-        if not expert_rank == ep_group_rank:
+        info = parse_checkpoint(fname)
+        if info is None:
             continue
-
-        if not jchannel_rank == jc_group_rank:
+        if info["expert_rank"] != ep_group_rank:
             continue
+        if info["jchannel_rank"] != jc_group_rank:
+            continue
+        parsed.append(info)
 
-        if not intermediate:
-            if epoch <= latest_epoch:
-                continue
-        else:
-            if epoch < latest_epoch:
-                continue
-
-            if step is not None:
-                if step <= latest_step:
-                    continue
-
-        latest_step = step
-
-        local_checkpoint = fname
-        latest_epoch = epoch
+    if parsed:
+        latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
+        local_checkpoint = latest["fname"]
+        latest_step = latest["step"] if latest["step"] != -1 else None
 
     full_path = os.path.join(path_base, local_checkpoint)
     print(f"Rank {dist.get_rank()}: Loading checkpoint from {full_path}")
