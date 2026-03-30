@@ -134,7 +134,7 @@ def training_loop(config_dict, prof=None):
             ep_group=ep_group,
             up_group=up_group,
             bayesian=bayesian,
-            parallelism=config_dict["jigsaw"]["parallelism"],
+            parallelism=config_dict["model_parallel"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
@@ -142,7 +142,7 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
+            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
         )
 
     # Needs to happen here, before model is wrapped over and over again
@@ -377,6 +377,9 @@ def train_one_epoch(
     loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
     if lr_scheduler is not None:
         lr_scheduler.step(epoch)
+        if dist.get_rank(group=None) == 0:
+            for param_group in optimizer.param_groups:
+                print(f"Optimizer lr: {param_group['lr']}")
     start_lr = 1e-6
     print_every_i_steps = 100
 
@@ -416,7 +419,9 @@ def train_one_epoch(
         nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
-
+        nvtx.range_push("Gradient clipping")
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.6)
+        nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
         nvtx.range_pop()

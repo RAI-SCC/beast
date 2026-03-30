@@ -135,7 +135,7 @@ def plot(
     records = sorted(records, key=lambda r: r["forward_backward_tflops"])
     n = len(records)
 
-    if x_axis == "embed_dim":
+    if x_axis == "embedding_dimension":
         xs = np.array([r["forward_backward_tflops"] for r in records])
     else:
         xs = np.array([r[f"{x_axis}"] for r in records])
@@ -149,6 +149,7 @@ def plot(
         )
         for r in records
     ]
+    # print(f'records {records}')
 
     # ── Figure ────────────────────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(9, 5.5))
@@ -199,7 +200,7 @@ def plot(
     ax.xaxis.label.set_color("black")
     ax.yaxis.label.set_color("black")
 
-    if x_axis == "embed_dim":
+    if x_axis == "embedding_dimension":
         ax.set_xlabel("Model size [TFLOP in forward pass]", fontsize=15, labelpad=8)
     else:
         ax.set_xlabel(f"{x_axis}", fontsize=15, labelpad=8)
