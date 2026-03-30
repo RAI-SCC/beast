@@ -86,35 +86,39 @@ class UP_AllGaussLoss(nn.Module):
 class GaussianAggregation(torch.autograd.Function):
     @staticmethod
     def forward(samples, up_process_group, loss_weights):
-        loc_sample_num = samples.shape[0]
         up_num = up_process_group.size()
-        total_samples = loc_sample_num * up_num
+        total_samples = samples.shape[0] * up_num
 
-        local_sum_scaled = (samples.sum(dim=0) / total_samples).contiguous()
-        mu_handle = dist.all_reduce(
-            local_sum_scaled,
+        local_sum_result = torch.cat(
+            [
+                (samples.sum(dim=0) / total_samples),
+                ((samples**2).sum(dim=0) / (total_samples - 1)),
+            ],
+            dim=0,
+        )
+        ls_shape = local_sum_result.shape
+
+        handle = dist.all_reduce(
+            local_sum_result,
             op=dist.ReduceOp.SUM,
             group=up_process_group,
             async_op=True,
         )
 
-        local_sum_sq = ((samples**2).sum(dim=0) / (total_samples - 1)).contiguous()
-        var_handle = dist.all_reduce(
-            local_sum_sq, op=dist.ReduceOp.SUM, group=up_process_group, async_op=True
-        )
-
-        mu_handle.wait()
-        mean = local_sum_scaled
-
-        var_handle.wait()
-        var = local_sum_sq - (mean**2) * (total_samples / (total_samples - 1))
-        var = torch.abs(var) + 1e-10
-        std = torch.sqrt(var)
-
         replace_val = loss_weights == 0.0
         replace_val = replace_val.reshape(1, -1, 1, 1)
         # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-        replace_val = replace_val.expand_as(std)
+        replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
+
+        handle.wait()
+        mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
+        var = local_sum_result[1, :, :, :].unsqueeze(dim=0)
+
+        var = var - (mean**2) * (total_samples / (total_samples - 1))
+        var = torch.abs(var) + 1e-10
+
+        std = torch.sqrt(var)
+
         std = torch.where(replace_val, 1.0, std)
 
         return mean, std

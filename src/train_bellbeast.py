@@ -473,6 +473,7 @@ def main():
     if dist.get_rank(group=None) == 0:
         print("FINITE!")
 
+    dist.barrier(group=None)
     dist.destroy_process_group()
 
 
