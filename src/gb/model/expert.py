@@ -11,7 +11,6 @@ class JLR(torch.autograd.Function):
     @staticmethod
     def forward(x, w, ep_group, sp_group, bayesian, device):
         num_experts = ep_group.size()
-        # num_samples = sp_group.size()
         B, channels, xlat, xlon = x.shape
         if bayesian:
             num_loc_samples = w.shape[
