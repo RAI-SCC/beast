@@ -44,7 +44,7 @@ training:
     timings: False
     checkpoint_interval: 2000
     flash_attn: True
-model_parallel:
+jigsaw:
     parallelism: 8
     type: jigsaw
 mesh_dims: [1, 16, 1, 4, 2] # experts, dp, up, jigsaw spatial, jigsaw channels

@@ -79,7 +79,10 @@ def training_loop(config_dict, prof=None):
 
     # Define the Model
     initialization_rank = (
-        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
+        3
+        + channel_group.rank()
+        + ep_group.rank() * channel_group.size()
+        + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -134,7 +137,7 @@ def training_loop(config_dict, prof=None):
             ep_group=ep_group,
             up_group=up_group,
             bayesian=bayesian,
-            parallelism=config_dict["model_parallel"]["parallelism"],
+            parallelism=config_dict["jigsaw"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
@@ -142,7 +145,7 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
+            f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
         )
 
     # Needs to happen here, before model is wrapped over and over again
@@ -225,7 +228,7 @@ def training_loop(config_dict, prof=None):
     )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(42 + up_group.rank())
+    set_all_seeds(16 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
