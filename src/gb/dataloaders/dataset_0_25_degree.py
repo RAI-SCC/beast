@@ -211,7 +211,7 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         input = torch.cat(
             (
                 torch.tensor(x_t2, dtype=self.dtype),
-                torch.tensor(x_t2 - x_t1, dtype=self.dtype),
+                torch.tensor(x_t1, dtype=self.dtype),
                 self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
