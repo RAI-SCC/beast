@@ -1,4 +1,3 @@
-import time
 from typing import Any
 
 import torch
@@ -57,7 +56,6 @@ class UP_AllGaussLoss(nn.Module):
         return data_fit
 
     def forward(self, model_output, target):
-        timer_start = time.time_ns()
         nvtx.range_push("Prior Matching")
         prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
         nvtx.range_pop()
@@ -77,9 +75,6 @@ class UP_AllGaussLoss(nn.Module):
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
             self.kl_loss.log["prior_matching"].append(prior_matching.item())
-
-        timer_end = time.time_ns()
-        print(f"Time for loss calculation: {(timer_end - timer_start) / 1e6} ms")
 
         return data_fit + prior_matching
 
@@ -134,7 +129,6 @@ class NewUP_AllGaussLoss(nn.Module):
         return data_fit
 
     def forward(self, model_output, target):
-        timer_start = time.time_ns()
         # nvtx.range_push("Prior Matching")
         # prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
         # nvtx.range_pop()
@@ -157,9 +151,6 @@ class NewUP_AllGaussLoss(nn.Module):
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
             self.kl_loss.log["prior_matching"].append(prior_matching.item())
-
-        timer_end = time.time_ns()
-        print(f"Time for loss calculation: {(timer_end - timer_start) / 1e6} ms")
 
         return data_fit + prior_matching
 
