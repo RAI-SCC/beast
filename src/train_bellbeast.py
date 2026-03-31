@@ -40,6 +40,7 @@ from gb.utils import (
     save_checkpoint,
     set_all_seeds,
     set_dtype,
+    transplant_weights,
 )
 
 
@@ -170,6 +171,12 @@ def training_loop(config_dict, prof=None):
 
     # Make model Bayesian
     if bayesian:
+        if config_dict["transplant_from"] is not None:
+            model = transplant_weights(
+                model,
+                config_dict["transplant_from"],
+            )
+
         convert_jigsaw_vi(model)
         model.return_log_probs = False
     # Make model data parallel
@@ -183,7 +190,7 @@ def training_loop(config_dict, prof=None):
         bucket_cap_mb=200,
     )
 
-    if config_dict["resume_path"] is None:
+    if config_dict["resume_path"] is None or config_dict["transplant_from"] is not None:
         start_epoch = 0
     else:
         (
@@ -210,6 +217,7 @@ def training_loop(config_dict, prof=None):
             optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
         )
     else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         scheduler = None
 
     if bayesian:

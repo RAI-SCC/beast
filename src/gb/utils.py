@@ -588,3 +588,23 @@ def dist_clip_grad_norm_(params, max_norm, norm_type=2.0, group=None):
                 param.grad.mul_(clip_coef_clamped)
 
     return total_norm
+
+
+def transplant_weights(model, state_dict_path):
+    if dist.get_rank() == 0:
+        print(f"Transplanting weights from {state_dict_path}")
+
+    model_state_dict, _, _, _, _, _ = load_latest_model_states(state_dict_path)
+
+    try:
+        state_dict = {}
+        for key in model_state_dict.keys():
+            state_dict[key[7:]] = model_state_dict[key]
+
+        model.load_state_dict(state_dict)
+    except Exception as err:
+        if dist.get_rank() == 0:
+            print(err)
+            print("Model cannot be loaded from checkpoint. Reinitializing model.")
+
+    return model
