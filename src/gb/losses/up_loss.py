@@ -119,7 +119,7 @@ class NewUP_AllGaussLoss(nn.Module):
         )  # (batch, variables, lat, lon)
         self.dataset_size = dataset_size
 
-        self.aggregate_statistics = FullAggregation.apply
+        self.aggregate_statistics = torch.compile(FullAggregation.apply)
 
     def data_fitting(self, mean, std, target):
         data_fit = (
@@ -133,7 +133,6 @@ class NewUP_AllGaussLoss(nn.Module):
 
         return data_fit
 
-    @torch.compile
     def forward(self, model_output, target):
         timer_start = time.time_ns()
         # nvtx.range_push("Prior Matching")
@@ -280,7 +279,7 @@ class FullAggregation(torch.autograd.Function):
         mse_part_half = (prior_means - variational_means) / prior_variance
         mse_part = (prior_means - variational_means) * mse_part_half
 
-        raw_kl = (+mse_part + variance_ratio - variance_ratio.log() - 1) / 2
+        raw_kl = (mse_part + variance_ratio - variance_ratio.log() - 1) / 2
 
         prior_matching = raw_kl.sum()
 
