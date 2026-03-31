@@ -519,3 +519,72 @@ def load_state_dict(
         start_epoch = 0
 
     return model_ddp, optimizer, start_epoch
+
+
+def dist_clip_grad_norm_(params, max_norm, norm_type=2.0, group=None):
+    params = [
+        p for p in params if p.grad is not None
+    ]  # Convert generator to list for foreach_map
+    max_norm = torch.tensor(max_norm, device=params[0].device)
+
+    def _get_local_norms(param):
+        if param.grad is not None:
+            if norm_type == 2.0:
+                norm = torch.sqrt(torch.sum(torch.square(torch.abs(param.grad))))
+            elif norm_type == 1.0:
+                norm = torch.sum(torch.abs(param.grad))
+            else:
+                raise ValueError(f"Unsupported norm type: {norm_type}")
+
+            return norm
+        else:
+            return None
+
+    def _reduce_norms(params, norms, norm_type=2.0, group=None):
+        reduced_norms = []
+        for param, norm in zip(params, norms):
+            if (
+                hasattr(param, "sharded_dims")
+                and (param.sharded_dims is not None)
+                and (norm is not None)
+            ):
+                if norm_type == 2.0:
+                    norm = torch.square(norm)
+                    norm = dist.dnn.all_reduce(norm, group=group)
+                if norm_type == 2.0:
+                    norm = torch.sqrt(norm)
+            reduced_norms.append(norm)
+
+        return reduced_norms
+
+    with torch.no_grad():
+        # compute local norms
+        norms = [_get_local_norms(p) for p in params]
+
+        # reduce norms across ranks if required
+        norms = _reduce_norms(params, norms, norm_type=norm_type, group=group)
+
+        # now reduce the norms in the vector
+        # Filter out None values before stacking
+        valid_norms = [n for n in norms if n is not None]
+
+        if len(valid_norms) == 0:
+            # we don't want to clip in this case
+            total_norm = torch.tensor(0.0, device=params[0].device)
+        else:
+            normvec = torch.stack(valid_norms)
+
+            if norm_type == 2.0:
+                total_norm = torch.sqrt(torch.sum(torch.square(normvec)))
+            elif norm_type == 1.0:
+                total_norm = torch.sum(torch.abs(normvec))
+            else:
+                raise ValueError(f"Unsupported norm type: {norm_type}")
+
+            # clip grads and return total norm
+            clip_coef = max_norm / (total_norm + 1e-6)
+            clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
+            for param in params:
+                param.grad.mul_(clip_coef_clamped)
+
+    return total_norm
