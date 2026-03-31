@@ -30,6 +30,7 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
+    dist_clip_grad_norm_,
     get_process_group,
     get_spatial_weights,
     init_gb_process_group,
@@ -283,6 +284,7 @@ def training_loop(config_dict, prof=None):
             checkpoint_path=checkpoint_path,
             prof=prof,
             lr_scheduler=scheduler,
+            channel_group=channel_group,
         )
         end_time = time.perf_counter()
         nvtx.range_pop()
@@ -373,6 +375,7 @@ def train_one_epoch(
     checkpoint_path,
     prof=None,
     lr_scheduler=None,
+    channel_group=None,
 ):
     timings = []
 
@@ -423,7 +426,9 @@ def train_one_epoch(
         loss.backward()
         nvtx.range_pop()
         nvtx.range_push("Gradient clipping")
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.6)
+        clipped_norm = dist_clip_grad_norm_(
+            model.parameters(), 0.6, group=channel_group
+        )
         nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
@@ -450,11 +455,11 @@ def train_one_epoch(
             if dist.get_rank(group=None) == 0:
                 if bayesian:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
                 else:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
             cum_batch_time = 0
 
