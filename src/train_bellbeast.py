@@ -30,6 +30,7 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
+    dist_clip_grad_norm_,
     get_process_group,
     get_spatial_weights,
     init_gb_process_group,
@@ -79,7 +80,10 @@ def training_loop(config_dict, prof=None):
 
     # Define the Model
     initialization_rank = (
-        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
+        3
+        + channel_group.rank()
+        + ep_group.rank() * channel_group.size()
+        + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -225,7 +229,7 @@ def training_loop(config_dict, prof=None):
     )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(42 + up_group.rank())
+    set_all_seeds(16 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -280,6 +284,7 @@ def training_loop(config_dict, prof=None):
             checkpoint_path=checkpoint_path,
             prof=prof,
             lr_scheduler=scheduler,
+            channel_group=channel_group,
         )
         end_time = time.perf_counter()
         nvtx.range_pop()
@@ -370,6 +375,7 @@ def train_one_epoch(
     checkpoint_path,
     prof=None,
     lr_scheduler=None,
+    channel_group=None,
 ):
     timings = []
 
@@ -377,6 +383,9 @@ def train_one_epoch(
     loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
     if lr_scheduler is not None:
         lr_scheduler.step(epoch)
+        if dist.get_rank(group=None) == 0:
+            for param_group in optimizer.param_groups:
+                print(f"Optimizer lr: {param_group['lr']}")
     start_lr = 1e-6
     print_every_i_steps = 100
 
@@ -416,7 +425,11 @@ def train_one_epoch(
         nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
-
+        nvtx.range_push("Gradient clipping")
+        clipped_norm = dist_clip_grad_norm_(
+            model.parameters(), 0.6, group=channel_group
+        )
+        nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
         nvtx.range_pop()
@@ -442,11 +455,11 @@ def train_one_epoch(
             if dist.get_rank(group=None) == 0:
                 if bayesian:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
                 else:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
             cum_batch_time = 0
 

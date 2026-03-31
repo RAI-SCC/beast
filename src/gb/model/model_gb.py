@@ -292,6 +292,7 @@ class Bellbeast(torch.nn.Module):
             }
         )
 
+    @torch.compile
     def _get_windows(self, x, window_size):
         B, xlat, xlon, channels = x.shape
         x = x.reshape(
@@ -306,6 +307,7 @@ class Bellbeast(torch.nn.Module):
         x = x.reshape(-1, window_size[0] * window_size[1], channels)  # windows
         return x
 
+    @torch.compile
     def _reverse_windows(self, x, B, xlat, xlon, channels, window_size):
         x = x.reshape(
             B,
@@ -451,11 +453,6 @@ class Bellbeast(torch.nn.Module):
         x = self.downsample(x)
         nvtx.range_pop()
         # (B, 2*channels, lat/2, lon/2)
-
-        # here comes the Latent Representation of the experts into play:
-        nvtx.range_push("Expert Layer")
-        x = self.expert_layer(x)  # does not change the shape of the data
-        nvtx.range_pop()
 
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
