@@ -133,6 +133,7 @@ class NewUP_AllGaussLoss(nn.Module):
 
         return data_fit
 
+    @torch.compile
     def forward(self, model_output, target):
         timer_start = time.time_ns()
         # nvtx.range_push("Prior Matching")
