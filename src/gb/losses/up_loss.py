@@ -119,7 +119,7 @@ class NewUP_AllGaussLoss(nn.Module):
         )  # (batch, variables, lat, lon)
         self.dataset_size = dataset_size
 
-        self.aggregate_statistics = torch.compile(FullAggregation.apply)
+        self.aggregate_statistics = FullAggregation.apply
 
     def data_fitting(self, mean, std, target):
         data_fit = (
@@ -271,17 +271,9 @@ class FullAggregation(torch.autograd.Function):
         # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
         replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
 
-        variational_variance = torch.exp(2 * variational_log_stds)
-        prior_variance = torch.exp(
-            torch.tensor(2, device=variational_means.device) * prior_log_stds
+        prior_matching, variance_ratio, mse_part_half = gaussian_prior_matching(
+            prior_means, prior_log_stds, variational_means, variational_log_stds
         )
-        variance_ratio = variational_variance / prior_variance
-        mse_part_half = (prior_means - variational_means) / prior_variance
-        mse_part = (prior_means - variational_means) * mse_part_half
-
-        raw_kl = (mse_part + variance_ratio - variance_ratio.log() - 1) / 2
-
-        prior_matching = raw_kl.sum()
 
         handle.wait()
         mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
@@ -341,3 +333,25 @@ class FullAggregation(torch.autograd.Function):
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
         return grad_samples, None, None, None, None, grad_var_means, grad_var_log_stds
+
+
+@torch.compile
+def gaussian_prior_matching(
+    prior_means: Tensor,
+    prior_log_stds: Tensor,
+    variational_means: Tensor,
+    variational_log_stds: Tensor,
+):
+    variational_variance = torch.exp(2 * variational_log_stds)
+    prior_variance = torch.exp(
+        torch.tensor(2, device=variational_means.device) * prior_log_stds
+    )
+    variance_ratio = variational_variance / prior_variance
+    mse_part_half = (prior_means - variational_means) / prior_variance
+    mse_part = (prior_means - variational_means) * mse_part_half
+
+    raw_kl = (mse_part + variance_ratio - variance_ratio.log() - 1) / 2
+
+    prior_matching = raw_kl.sum()
+
+    return prior_matching, variance_ratio, mse_part_half
