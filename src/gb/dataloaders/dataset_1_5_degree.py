@@ -340,14 +340,22 @@ class ERA5Dataset15degree(Dataset):
         self.num_masks = self.constant_masks.shape[0]
 
         # normalization for pressure levels and standard deviation
-
-        self.norm_values = {}
-        self.norm_values["mean"] = np.load(
-            f"{config['data']['normalization_dir']}/norm_mean.npy"
-        )
-        self.norm_values["std"] = np.load(
-            f"{config['data']['normalization_dir']}/norm_std.npy"
-        )
+        self.p_mean = np.load(
+            f"{config['data']['normalization_dir']}/pressure_zarr.npy",
+            allow_pickle=True,
+        )[0].reshape(5, 13, 1, 1)
+        self.p_std = np.load(
+            f"{config['data']['normalization_dir']}/pressure_zarr.npy",
+            allow_pickle=True,
+        )[1].reshape(5, 13, 1, 1)
+        self.s_mean = np.load(
+            f"{config['data']['normalization_dir']}/surface_zarr.npy",
+            allow_pickle=True,
+        )[0].reshape(4, 1, 1)
+        self.s_std = np.load(
+            f"{config['data']['normalization_dir']}/surface_zarr.npy",
+            allow_pickle=True,
+        )[1].reshape(4, 1, 1)
 
         self.level_ordering = range(13 - 1, -1, -1)
         if dist.get_rank(group=None) == 0:
@@ -378,7 +386,6 @@ class ERA5Dataset15degree(Dataset):
                 "temperature",
                 "u_component_of_wind",
                 "v_component_of_wind",
-                "vertical_velocity",
             ]
         ]
         input_surface = self.zarr_data.isel(
@@ -389,8 +396,6 @@ class ERA5Dataset15degree(Dataset):
                 "10m_u_component_of_wind",
                 "10m_v_component_of_wind",
                 "2m_temperature",
-                "sea_surface_temperature",
-                "total_precipitation",
             ]
         ]
 
@@ -402,7 +407,6 @@ class ERA5Dataset15degree(Dataset):
                 input_pressure["temperature"].values,
                 input_pressure["u_component_of_wind"].values,
                 input_pressure["v_component_of_wind"].values,
-                input_pressure["vertical_velocity"].values,
             ],
             axis=0,
         )
@@ -412,29 +416,20 @@ class ERA5Dataset15degree(Dataset):
                 input_surface["10m_u_component_of_wind"].values,
                 input_surface["10m_v_component_of_wind"].values,
                 input_surface["2m_temperature"].values,
-                np.nan_to_num(input_surface["sea_surface_temperature"].values),
-                input_surface["total_precipitation"].values,
             ],
             axis=0,
         )
         input_pressure = np.permute_dims(input_pressure, (0, 1, 3, 2))
         input_surface = np.permute_dims(input_surface, (0, 2, 1))
 
+        input_pressure = (input_pressure - self.p_mean) / self.p_std
+        input_surface = (input_surface - self.s_mean) / self.s_std
         input_pressure = input_pressure.reshape(-1, self.xlat, self.xlon)
 
         input = torch.cat(
             (
                 torch.tensor(input_surface, dtype=self.dtype),
                 torch.tensor(input_pressure, dtype=self.dtype),
-            ),
-            dim=0,
-        )
-
-        input = (input - self.norm_values["mean"]) / self.norm_values["std"]
-
-        input = torch.cat(
-            (
-                input,
                 self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
@@ -453,7 +448,6 @@ class ERA5Dataset15degree(Dataset):
                 "temperature",
                 "u_component_of_wind",
                 "v_component_of_wind",
-                "vertical_velocity",
             ]
         ]
         target_surface = self.zarr_data.isel(
@@ -464,8 +458,6 @@ class ERA5Dataset15degree(Dataset):
                 "10m_u_component_of_wind",
                 "10m_v_component_of_wind",
                 "2m_temperature",
-                "sea_surface_temperature",
-                "total_precipitation",
             ]
         ]
 
@@ -477,7 +469,6 @@ class ERA5Dataset15degree(Dataset):
                 target_pressure["temperature"].values,
                 target_pressure["u_component_of_wind"].values,
                 target_pressure["v_component_of_wind"].values,
-                target_pressure["vertical_velocity"].values,
             ],
             axis=0,
         )
@@ -487,8 +478,6 @@ class ERA5Dataset15degree(Dataset):
                 target_surface["10m_u_component_of_wind"].values,
                 target_surface["10m_v_component_of_wind"].values,
                 target_surface["2m_temperature"].values,
-                np.nan_to_num(target_surface["sea_surface_temperature"].values),
-                target_surface["total_precipitation"].values,
             ],
             axis=0,
         )
@@ -496,6 +485,8 @@ class ERA5Dataset15degree(Dataset):
         target_pressure = np.permute_dims(target_pressure, (0, 1, 3, 2))
         target_surface = np.permute_dims(target_surface, (0, 2, 1))
 
+        target_pressure = (target_pressure - self.p_mean) / self.p_std
+        target_surface = (target_surface - self.s_mean) / self.s_std
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
 
         target = torch.cat(
@@ -506,13 +497,11 @@ class ERA5Dataset15degree(Dataset):
             dim=0,
         )
 
-        target = (target - self.norm_values["mean"]) / self.norm_values["std"]
-
         return input, target
 
     def get_constant_masks(self):
         return torch.tensor(self.constant_masks[:, : self.xlat, : self.xlon]).to(
-            dtype=self.dtype
+            torch.float32
         )
 
     def _load_constant_mask_2d(self, folder_path, mask_list):
@@ -569,7 +558,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "temperature",
                 "u_component_of_wind",
                 "v_component_of_wind",
-                "vertical_velocity",
             ]
         ]
         input_surface1 = self.zarr_data.isel(
@@ -580,8 +568,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "10m_u_component_of_wind",
                 "10m_v_component_of_wind",
                 "2m_temperature",
-                "sea_surface_temperature",
-                "total_precipitation",
             ]
         ]
 
@@ -593,7 +579,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 input_pressure1["temperature"].values,
                 input_pressure1["u_component_of_wind"].values,
                 input_pressure1["v_component_of_wind"].values,
-                input_pressure1["vertical_velocity"].values,
             ],
             axis=0,
         )
@@ -603,14 +588,14 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 input_surface1["10m_u_component_of_wind"].values,
                 input_surface1["10m_v_component_of_wind"].values,
                 input_surface1["2m_temperature"].values,
-                np.nan_to_num(input_surface1["sea_surface_temperature"].values),
-                input_surface1["total_precipitation"].values,
             ],
             axis=0,
         )
 
         input_pressure1 = np.permute_dims(input_pressure1, (0, 1, 3, 2))
         input_surface1 = np.permute_dims(input_surface1, (0, 2, 1))
+        input_pressure1 = (input_pressure1 - self.p_mean) / self.p_std
+        input_surface1 = (input_surface1 - self.s_mean) / self.s_std
         input_pressure1 = input_pressure1.reshape(-1, self.xlat, self.xlon)
 
         input_pressure2 = self.zarr_data.isel(
@@ -625,7 +610,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "temperature",
                 "u_component_of_wind",
                 "v_component_of_wind",
-                "vertical_velocity",
             ]
         ]
         input_surface2 = self.zarr_data.isel(
@@ -636,8 +620,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "10m_u_component_of_wind",
                 "10m_v_component_of_wind",
                 "2m_temperature",
-                "sea_surface_temperature",
-                "total_precipitation",
             ]
         ]
 
@@ -649,7 +631,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 input_pressure2["temperature"].values,
                 input_pressure2["u_component_of_wind"].values,
                 input_pressure2["v_component_of_wind"].values,
-                input_pressure2["vertical_velocity"].values,
             ],
             axis=0,
         )
@@ -659,8 +640,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 input_surface2["10m_u_component_of_wind"].values,
                 input_surface2["10m_v_component_of_wind"].values,
                 input_surface2["2m_temperature"].values,
-                np.nan_to_num(input_surface2["sea_surface_temperature"].values),
-                input_surface2["total_precipitation"].values,
             ],
             axis=0,
         )
@@ -668,35 +647,16 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
         input_pressure2 = np.permute_dims(input_pressure2, (0, 1, 3, 2))
         input_surface2 = np.permute_dims(input_surface2, (0, 2, 1))
 
+        input_pressure2 = (input_pressure2 - self.p_mean) / self.p_std
+        input_surface2 = (input_surface2 - self.s_mean) / self.s_std
         input_pressure2 = input_pressure2.reshape(-1, self.xlat, self.xlon)
-
-        # input_pressure1 = torch.nn.functional.pad(input_pressure1, (0, 0, 0, 0, 0, 1))
-        # input_pressure2 = torch.nn.functional.pad(input_pressure2, (0, 0, 0, 0, 0, 1))
-
-        input1 = torch.cat(
-            (
-                torch.tensor(input_surface1, dtype=self.dtype),
-                torch.tensor(input_pressure1, dtype=self.dtype),
-            ),
-            dim=0,
-        )
-
-        input1 = (input1 - self.norm_values["mean"]) / self.norm_values["std"]
-
-        input2 = torch.cat(
-            (
-                torch.tensor(input_surface2, dtype=self.dtype),
-                torch.tensor(input_pressure2, dtype=self.dtype),
-            ),
-            dim=0,
-        )
-
-        input2 = (input2 - self.norm_values["mean"]) / self.norm_values["std"]
 
         input = torch.cat(
             (
-                input1,
-                input2,
+                torch.tensor(input_surface1, dtype=self.dtype),
+                torch.tensor(input_pressure1, dtype=self.dtype),
+                torch.tensor(input_surface2, dtype=self.dtype),
+                torch.tensor(input_pressure2, dtype=self.dtype),
                 self.get_constant_masks().to(self.dtype),
             ),
             dim=0,
@@ -715,7 +675,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "temperature",
                 "u_component_of_wind",
                 "v_component_of_wind",
-                "vertical_velocity",
             ]
         ]
         target_surface = self.zarr_data.isel(
@@ -726,8 +685,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 "10m_u_component_of_wind",
                 "10m_v_component_of_wind",
                 "2m_temperature",
-                "sea_surface_temperature",
-                "total_precipitation",
             ]
         ]
 
@@ -739,7 +696,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 target_pressure["temperature"].values,
                 target_pressure["u_component_of_wind"].values,
                 target_pressure["v_component_of_wind"].values,
-                target_pressure["vertical_velocity"].values,
             ],
             axis=0,
         )
@@ -749,14 +705,14 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
                 target_surface["10m_u_component_of_wind"].values,
                 target_surface["10m_v_component_of_wind"].values,
                 target_surface["2m_temperature"].values,
-                np.nan_to_num(target_surface["sea_surface_temperature"].values),
-                target_surface["total_precipitation"].values,
             ],
             axis=0,
         )
 
         target_pressure = np.permute_dims(target_pressure, (0, 1, 3, 2))
         target_surface = np.permute_dims(target_surface, (0, 2, 1))
+        target_pressure = (target_pressure - self.p_mean) / self.p_std
+        target_surface = (target_surface - self.s_mean) / self.s_std
         target_pressure = target_pressure.reshape(-1, self.xlat, self.xlon)
 
         target = torch.cat(
@@ -766,8 +722,6 @@ class ERA5TwoTimestepsDataset15degree(ERA5Dataset15degree):
             ),
             dim=0,
         )
-
-        target = (target - self.norm_values["mean"]) / self.norm_values["std"]
 
         return input, target
 
