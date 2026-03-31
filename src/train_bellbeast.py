@@ -20,7 +20,7 @@ from gb.config import setup_config_dict
 
 # Import Dataloaders
 from gb.dataloaders.dataloader import get_dataloader
-from gb.losses.up_loss import UP_AllGaussLoss
+from gb.losses.up_loss import NewUP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
@@ -209,7 +209,7 @@ def training_loop(config_dict, prof=None):
         scheduler = None
 
     if bayesian:
-        loss_fn = UP_AllGaussLoss(
+        loss_fn = NewUP_AllGaussLoss(
             model,
             expert_loss_weighting,
             len(train_dataloader.dataset),
