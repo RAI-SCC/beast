@@ -423,7 +423,7 @@ def train_one_epoch(
         loss.backward()
         nvtx.range_pop()
         nvtx.range_push("Gradient clipping")
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.6)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
