@@ -195,7 +195,7 @@ EOF
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config_lumi.yaml" \
         --skip_validation \
-        mesh_dims=$MESH_STRING) \
+        mesh_dims=${MESH_STRING} \
         data_train_subset=${SUBSET_SIZE} \
         training_n_samples=${LOCAL_SAMPLES} \
         model_embedding_dimension=${EMBED_DIM} \
