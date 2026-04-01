@@ -338,8 +338,8 @@ def gaussian_prior_matching(
         torch.tensor(2, device=variational_means.device) * prior_log_stds
     )
     variance_ratio = variational_variance / prior_variance
-    mse_part_half = (prior_means - variational_means) / prior_variance
-    mse_part = (prior_means - variational_means) * mse_part_half
+    mse_part_half = (variational_means - prior_means) / prior_variance
+    mse_part = (variational_means - prior_means) * mse_part_half
 
     raw_kl = (mse_part + variance_ratio - variance_ratio.log() - 1) / 2
 
