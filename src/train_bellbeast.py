@@ -483,6 +483,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
     parser.add_argument("--resume")
+    parser.add_argument("--transplant")
     parser.add_argument("--skip_validation", action="store_true")
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
@@ -498,6 +499,10 @@ def main():
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
         config_dict = setup_config_dict(config_dict, args)
     else:
+        if args.transplant is not None:
+            raise RuntimeError(
+                "You cannot transplant weights without giving a config file. Please set --config_file"
+            )
         config_dict = load_configuration_yaml(resume_dir)
         config_dict = setup_config_dict(config_dict, args, resume=True)
 

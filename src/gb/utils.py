@@ -594,7 +594,8 @@ def transplant_weights(model, state_dict_path):
     if dist.get_rank() == 0:
         print(f"Transplanting weights from {state_dict_path}")
 
-    model_state_dict, _, _, _, _, _ = load_latest_model_states(state_dict_path)
+    # this is not very nice, but how to change?
+    model_state_dict, _, _, _, _, _, _ = load_latest_model_states(state_dict_path)
 
     try:
         state_dict = {}

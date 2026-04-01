@@ -14,6 +14,7 @@ def setup_config_dict(
     config_dict["skip_validation"] = args.skip_validation
     config_dict["profile"] = args.profile
     config_dict["resume_path"] = args.resume
+    config_dict["transplant_from"] = args.transplant
 
     if not resume:
         config_dict = overwrite_config(config_dict, args.configargs)
