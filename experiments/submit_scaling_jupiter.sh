@@ -35,11 +35,12 @@ set -euo pipefail
 # ---------------------------
 
 # EXP_NAME="weak_model_dim"
-# VAR_NAME="embed_dim"
-# VARS=(128 256)
+# VAR_NAME="embedding_dimension"
+# VARS=(128 256 512 1024 2048 4096 8192)
 # NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
 # SUBSET_SIZE=100
+# MESH_STRING="1,1,2,2,2"
 
 # ---------------------------
 # MULTI-NODE EXPERIMENTS
@@ -49,14 +50,13 @@ set -euo pipefail
 # Total dataset size stays the same
 # ---------------------------
 
-EXP_NAME="lsn_multinode"
-VAR_NAME="training_n_samples"
-VARS=(1)
-MESH_STRING="1,2,-1,4,2"
-NODES=(16 32 64 128 256 512)
-EMBED_DIM=2048
-X_AXIS_NAME="nodes"
-SUBSET_SIZE=500
+# EXP_NAME="lsn_multinode"
+# VAR_NAME="training_n_samples"
+# VARS=(1)
+# MESH_STRING="1,2,-1,2,2"
+# NODES=(16 32)
+# X_AXIS_NAME="nodes"
+# SUBSET_SIZE=500
 
 # ---------------------------
 # Exp 2: Increase global batch size by increasing node count
@@ -65,12 +65,14 @@ SUBSET_SIZE=500
 # ---------------------------
 
 # EXP_NAME="lbs_multinode"
-# VAR_NAME="lbs"
-# VARS=(1)
-# NODES=(32 64 128 256 512)
-# SUBSET_SIZE=4000
-# X_AXIS_NAME="nodes"
-# EMBED_DIM=1024
+VAR_NAME="training_n_samples"
+EXP_NAME="lbs_multinode"
+VAR_NAME="training_n_samples"
+VARS=(1)
+MESH_STRING="1,-1,2,2,2"
+NODES=(256 512 1024 2048)
+X_AXIS_NAME="nodes"
+SUBSET_SIZE=16000
 
 # ── System (can be overridden via flags) ────────────────────────────────────
 # Choose the system that you are running on. Commene the other one out.
@@ -84,6 +86,9 @@ GPUS=4
 TIME="01:00:00"
 PLOT_TIME="00:10:00"
 CONTAINER_SETUP="jupiter_container.sh"
+PROJECT_DIR="${PROJECT_jureap1}/GBB"
+OUTPUT_DIR="${PROJECT_DIR}/output"
+
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────
 remaining_args=()
@@ -103,10 +108,10 @@ done
 REPO_ROOT="$(pwd)"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-EXPERIMENT_DIR="${OUTPUT_DIR}/output/${SYSTEM_NAME}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
+EXPERIMENT_DIR="${OUTPUT_DIR}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
 CONFIG_DIR="${EXPERIMENT_DIR}/configs"
 LOG_DIR="${EXPERIMENT_DIR}/logs"
-ANALYSIS_DIR="${REPO_ROOT}/results/${SYSTEM_NAME}"
+ANALYSIS_DIR="${EXPERIMENT_DIR}/results"
 
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$ANALYSIS_DIR"
@@ -151,18 +156,16 @@ EOF
         experiments/run_gb_script.sh \
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
-        --config_file "configs/bellbeast_config.yaml" \
+        --config_file "configs/bellbeast_config_jupiter.yaml" \
         --skip_validation \
         data_train_subset=${SUBSET_SIZE} \
-        model_embedding_dimension=${EMBED_DIM} \
-        ${VAR_NAME}=${VAR} \
-        mesh_dims=$MESH_STRING )
+        mesh_dims=${MESH_STRING} )
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
     JOB_IDS+=("$JOB_ID")
 
     echo "  slurm_job_id: ${JOB_ID}" >> "$CONFIG_FILE"
-    cp configs/bellbeast_config.yaml "${CONFIG_DIR}/"
+    cp configs/bellbeast_config_jupiter.yaml "${CONFIG_DIR}/"
 
     echo "Submitted ${RUN_NAME} → SLURM job ${JOB_ID}"
     RUN_ID=$(( RUN_ID + 1 ))

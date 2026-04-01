@@ -10,7 +10,7 @@ import torch_blue
 from torch import nn
 
 from gb.losses.up_loss import GaussianAggregation
-from gb.utils import get_process_group
+from gb.utils import get_process_group, get_spatial_weights
 
 
 @torch.no_grad()
@@ -43,7 +43,7 @@ def validate(
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
-        dataloader.sampler.set_epoch(epoch)
+        dataloader.sampler.set_epoch(0)  # should always the be same across epochs
 
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
@@ -237,7 +237,9 @@ def validate_deterministic(
     exp_agg = ExpertAggregation(ep_group, global_expert_mask)
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
-        dataloader.sampler.set_epoch(epoch)
+        dataloader.sampler.set_epoch(
+            0
+        )  # validation loading order should always be the same across epochs
 
     # load spatial weights
     spatial_weights = get_spatial_weights(config_dict, device)
@@ -796,16 +798,6 @@ def get_names_and_indices(config_dict, rank, world_size, for_plot=False):
                         names.append(f"{pressure_var}_{level}")
 
     return torch.tensor(indices, dtype=torch.long), names
-
-
-@torch.no_grad()
-def get_spatial_weights(config_dict, device):
-    n_lat = config_dict["data"]["xlat"]
-    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
-    cossum = np.sum(np.cos(latitude))
-    weight = torch.tensor(n_lat * np.cos(latitude) / cossum, device=device).float()
-
-    return weight.view(1, 1, n_lat, 1)
 
 
 @torch.no_grad()

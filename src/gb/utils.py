@@ -1,9 +1,11 @@
 import math
 import os
 import random
+import re
 import types
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
@@ -11,6 +13,7 @@ import torch.nn.init as init
 import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
+import yaml
 from jigsaw import normalization, utils_init
 from torch.utils.flop_counter import FlopCounterMode
 
@@ -349,17 +352,17 @@ def count_flops(
 
 
 def save_checkpoint(
-    results_path: str,
+    checkpoint_path: str,
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     epoch: int,
     step: int | None,
     loss: float,
 ):
-    checkpoint_path = os.path.join(results_path, "checkpoints")
-    if dist.get_rank() == 0:
-        os.makedirs(checkpoint_path, exist_ok=True)
-    dist.barrier()
+    # checkpoint_path = os.path.join(results_path, "checkpoints")
+    # if dist.get_rank() == 0:
+    #     os.makedirs(checkpoint_path, exist_ok=True)
+    # dist.barrier()
 
     channel_group = get_process_group("JChannel")
     ep_group = get_process_group("Expert")
@@ -378,10 +381,10 @@ def save_checkpoint(
             "loss": loss,
             "format": 1,
         }
-        if step:
-            model_name = f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
-        else:
-            model_name = f"cp-epoch{epoch}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        model_name = (
+            f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        )
+
         torch.save(cp, checkpoint_path + f"/{model_name}.pt")
 
 
@@ -389,7 +392,10 @@ def load_checkpoint(
     checkpoint_path: str, map_location="cpu"
 ) -> tuple[dict, dict, int, int | None, int, int, float]:
     """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, expert group rank, and channel group rank."""
-    checkpoint = torch.load(checkpoint_path, map_location=map_location)
+    print(f"checkpoint_path = {checkpoint_path}")
+    checkpoint = torch.load(
+        checkpoint_path, map_location=map_location, weights_only=False
+    )
     model_state_dict = checkpoint["model_state_dict"]
     optimizer_state_dict = checkpoint["optimizer_state_dict"]
     epoch = checkpoint["epoch"]
@@ -407,3 +413,199 @@ def load_checkpoint(
         channel_group_rank,
         loss,
     )
+
+
+@torch.no_grad()
+def get_spatial_weights(config_dict, device):
+    n_lat = config_dict["data"]["xlat"]
+    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
+    cossum = np.sum(np.cos(latitude))
+    weight = torch.tensor(n_lat * np.cos(latitude) / cossum, device=device).to(
+        torch.float32
+    )
+    return weight.view(1, 1, n_lat, 1)
+
+
+def parse_checkpoint(fname):
+    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-e(\d+)-jc(\d+)\.pt$", fname)
+    if not m:
+        return None
+    return {
+        "epoch": int(m.group(1)),
+        "step": int(m.group(2)) if m.group(2) else -1,
+        "expert_rank": int(m.group(3)),
+        "jchannel_rank": int(m.group(4)),
+        "fname": fname,
+    }
+
+
+def load_latest_model_states(directory):
+    end_of_epoch_directory = os.path.join(directory, "checkpoints")
+    path_base = end_of_epoch_directory
+    checkpoints = [
+        fname for fname in os.listdir(end_of_epoch_directory) if fname.endswith(".pt")
+    ]
+    local_checkpoint = ""
+    latest_step = -1
+    ep_group_rank = get_process_group("Expert").rank()
+    jc_group_rank = get_process_group("JChannel").rank()
+
+    parsed = []
+    for fname in checkpoints:
+        info = parse_checkpoint(fname)
+        if info is None:
+            continue
+        if info["expert_rank"] != ep_group_rank:
+            continue
+        if info["jchannel_rank"] != jc_group_rank:
+            continue
+        parsed.append(info)
+
+    if parsed:
+        latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
+        local_checkpoint = latest["fname"]
+        latest_step = latest["step"] if latest["step"] != -1 else None
+
+    full_path = os.path.join(path_base, local_checkpoint)
+    print(f"Rank {dist.get_rank()}: Loading checkpoint from {full_path}")
+
+    (
+        model_state_dict,
+        optimizer_state_dict,
+        epoch,
+        step,
+        ep_group_rank,
+        channel_group_rank,
+        loss,
+    ) = load_checkpoint(full_path)
+
+    if not latest_step == -1:
+        epoch -= 1
+
+    return (
+        model_state_dict,
+        optimizer_state_dict,
+        epoch,
+        step,
+        ep_group_rank,
+        channel_group_rank,
+        loss,
+    )
+
+
+def load_configuration_yaml(directory):
+    yaml_path = os.path.join(directory, "config.yaml")
+    with open(f"{yaml_path}", "r") as f:
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    return config_dict
+
+
+def load_state_dict(
+    model_ddp,
+    optimizer,
+    model_state_dict,
+    optimizer_state_dict,
+    last_epoch,
+):
+    try:
+        model_ddp.load_state_dict(model_state_dict)
+        optimizer.load_state_dict(optimizer_state_dict)
+        start_epoch = last_epoch + 1
+    except Exception as err:
+        if dist.get_rank() == 0:
+            print(err)
+            print("Model cannot be loaded from checkpoint. Reinitializing model.")
+        start_epoch = 0
+
+    return model_ddp, optimizer, start_epoch
+
+
+def dist_clip_grad_norm_(params, max_norm, norm_type=2.0, group=None):
+    params = [
+        p for p in params if p.grad is not None
+    ]  # Convert generator to list for foreach_map
+    max_norm = torch.tensor(max_norm, device=params[0].device)
+
+    def _get_local_norms(param):
+        if param.grad is not None:
+            if norm_type == 2.0:
+                norm = torch.sqrt(torch.sum(torch.square(torch.abs(param.grad))))
+            elif norm_type == 1.0:
+                norm = torch.sum(torch.abs(param.grad))
+            else:
+                raise ValueError(f"Unsupported norm type: {norm_type}")
+
+            return norm
+        else:
+            return None
+
+    def _reduce_norms(params, norms, norm_type=2.0, group=None):
+        reduced_norms = []
+        for param, norm in zip(params, norms):
+            if (
+                hasattr(param, "sharded_dims")
+                and (param.sharded_dims is not None)
+                and (norm is not None)
+            ):
+                if norm_type == 2.0:
+                    norm = torch.square(norm)
+                    norm = dist.dnn.all_reduce(norm, group=group)
+                if norm_type == 2.0:
+                    norm = torch.sqrt(norm)
+            reduced_norms.append(norm)
+
+        return reduced_norms
+
+    with torch.no_grad():
+        # compute local norms
+        norms = [_get_local_norms(p) for p in params]
+
+        # reduce norms across ranks if required
+        norms = _reduce_norms(params, norms, norm_type=norm_type, group=group)
+
+        # now reduce the norms in the vector
+        # Filter out None values before stacking
+        valid_norms = [n for n in norms if n is not None]
+
+        if len(valid_norms) == 0:
+            # we don't want to clip in this case
+            total_norm = torch.tensor(0.0, device=params[0].device)
+        else:
+            normvec = torch.stack(valid_norms)
+
+            if norm_type == 2.0:
+                total_norm = torch.sqrt(torch.sum(torch.square(normvec)))
+            elif norm_type == 1.0:
+                total_norm = torch.sum(torch.abs(normvec))
+            else:
+                raise ValueError(f"Unsupported norm type: {norm_type}")
+
+            # clip grads and return total norm
+            clip_coef = max_norm / (total_norm + 1e-6)
+            clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
+            for param in params:
+                param.grad.mul_(clip_coef_clamped)
+
+    return total_norm
+
+
+def transplant_weights(model, state_dict_path):
+    if dist.get_rank() == 0:
+        print(f"Transplanting weights from {state_dict_path}")
+
+    # this is not very nice, but how to change?
+    model_state_dict, _, _, _, _, _, _ = load_latest_model_states(state_dict_path)
+
+    try:
+        state_dict = {}
+        for key in model_state_dict.keys():
+            state_dict[key[7:]] = model_state_dict[key]
+
+        model.load_state_dict(state_dict)
+    except Exception as err:
+        if dist.get_rank() == 0:
+            print(err)
+            print("Model cannot be loaded from checkpoint. Reinitializing model.")
+
+    return model

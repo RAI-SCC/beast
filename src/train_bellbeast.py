@@ -19,9 +19,8 @@ from evaluation import validate, validate_deterministic
 from gb.config import setup_config_dict
 
 # Import Dataloaders
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader_0_25_deg
-from gb.dataloaders.dataloader_1_5_degree import get_dataloader_1_5_deg
-from gb.losses.up_loss import UP_AllGaussLoss
+from gb.dataloaders.dataloader import get_dataloader
+from gb.losses.up_loss import NewUP_AllGaussLoss
 from gb.model.expert import Expert
 
 # Import model
@@ -31,11 +30,17 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
+    dist_clip_grad_norm_,
     get_process_group,
+    get_spatial_weights,
     init_gb_process_group,
+    load_configuration_yaml,
+    load_latest_model_states,
+    load_state_dict,
     save_checkpoint,
     set_all_seeds,
     set_dtype,
+    transplant_weights,
 )
 
 
@@ -57,9 +62,29 @@ def training_loop(config_dict, prof=None):
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
+    # Get the data loaders
+    train_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="train",
+        dtype=dtype,
+    )
+
+    valid_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        mode="validation",
+        dtype=dtype,
+    )
+
     # Define the Model
     initialization_rank = (
-        channel_group.rank() + ep_group.rank() * channel_group.size() + up_group.size()
+        3
+        + channel_group.rank()
+        + ep_group.rank() * channel_group.size()
+        + up_group.size()
     )
     set_all_seeds(initialization_rank)
 
@@ -88,22 +113,6 @@ def training_loop(config_dict, prof=None):
             bayesian=bayesian,
             dtype=dtype,
         )
-        # Get the data loaders
-        train_dataloader = get_dataloader_1_5_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="train",
-            dtype=dtype,
-        )
-
-        valid_dataloader = get_dataloader_1_5_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="validation",
-            dtype=dtype,
-        )
     ########### Grand Bellbeast
     else:
         model = Bellbeast(
@@ -130,33 +139,31 @@ def training_loop(config_dict, prof=None):
             ep_group=ep_group,
             up_group=up_group,
             bayesian=bayesian,
-            parallelism=config_dict["model_parallel"]["parallelism"],
+            parallelism=config_dict["jigsaw"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
         )
-        # Get the data loaders
-        train_dataloader = get_dataloader_0_25_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="train",
-            dtype=dtype,
-        )
-
-        valid_dataloader = get_dataloader_0_25_deg(
-            config_dict,
-            dtp_process_group=dtp_group,
-            dp_process_group=dp_group,
-            mode="validation",
-            dtype=dtype,
-        )
-
     model = model.to(dtype).to(device)
 
     if dist.get_rank(group=None) == 0:
         print(
-            f"Parameters: {count_model_parameters(model, config_dict['model_parallel']['parallelism'], bayesian=bayesian)}"
+            f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
         )
+
+    # Needs to happen here, before model is wrapped over and over again
+    optimizer = torch.optim.AdamW(
+        [
+            {
+                "params": model.params.low_lr.parameters(),
+                "lr": config_dict["training"]["low_lr"],
+            },
+            {
+                "params": model.params.normal_lr.parameters(),
+                "lr": config_dict["training"]["normal_lr"],
+            },
+        ],
+        lr=config_dict["training"]["normal_lr"],
+    )
 
     # Make model expert
     model = Expert(model, ep_group)
@@ -164,19 +171,14 @@ def training_loop(config_dict, prof=None):
 
     # Make model Bayesian
     if bayesian:
+        if config_dict["transplant_from"] is not None:
+            model = transplant_weights(
+                model,
+                config_dict["transplant_from"],
+            )
+
         convert_jigsaw_vi(model)
         model.return_log_probs = False
-        loss_fn = UP_AllGaussLoss(
-            model,
-            expert_loss_weighting,
-            len(train_dataloader.dataset),
-            up_group,
-            dp_group,
-            ep_group,
-        )
-    else:
-        loss_fn = torch.nn.MSELoss()
-
     # Make model data parallel
     model = DistributedDataParallel(
         model,
@@ -188,14 +190,54 @@ def training_loop(config_dict, prof=None):
         bucket_cap_mb=200,
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    if config_dict["resume_path"] is None or config_dict["transplant_from"] is not None:
+        start_epoch = 0
+    else:
+        (
+            model_state_dict,
+            optimizer_state_dict,
+            start_epoch,
+            step,
+            ep_group_rank,
+            channel_group_rank,
+            loss,
+        ) = load_latest_model_states(str(config_dict["resume_path"]))
+
+        model, optimizer, start_epoch = load_state_dict(
+            model,
+            optimizer,
+            model_state_dict,
+            optimizer_state_dict,
+            start_epoch,
+        )
+
+    # LR Scheduler
+    if config_dict["training"]["lr_scheduler"]:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
+        )
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        scheduler = None
+
+    if bayesian:
+        loss_fn = NewUP_AllGaussLoss(
+            model,
+            expert_loss_weighting,
+            len(train_dataloader.dataset),
+            up_group,
+            dp_group,
+            ep_group,
+        )
+    else:
+        loss_fn = torch.nn.MSELoss()
 
     utils.setup_precision(
         config_dict["training"]["tf32"]
     )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(42 + up_group.rank())
+    set_all_seeds(16 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -232,7 +274,7 @@ def training_loop(config_dict, prof=None):
     time_log = []
 
     ### Run Training
-    for epoch in range(config_dict["training"]["n_epochs"]):
+    for epoch in range(start_epoch, config_dict["training"]["n_epochs"]):
         nvtx.range_push("Epoch")
         start_time = time.perf_counter()
         avg_loss, timings = train_one_epoch(
@@ -249,6 +291,8 @@ def training_loop(config_dict, prof=None):
             autocast=autocast,
             checkpoint_path=checkpoint_path,
             prof=prof,
+            lr_scheduler=scheduler,
+            channel_group=channel_group,
         )
         end_time = time.perf_counter()
         nvtx.range_pop()
@@ -284,11 +328,11 @@ def training_loop(config_dict, prof=None):
 
             # Save checkpoint after validation to have the validation loss in the checkpoint
             save_checkpoint(
-                validation_results_path,
+                checkpoint_path,
                 model,
                 optimizer,
                 epoch,
-                step=None,
+                step=0,
                 loss=data_fit_loss,
             )
 
@@ -338,12 +382,19 @@ def train_one_epoch(
     autocast,
     checkpoint_path,
     prof=None,
+    lr_scheduler=None,
+    channel_group=None,
 ):
     timings = []
 
     model.train()
     loss_sum = torch.tensor([0.0], device=device, requires_grad=False)
-
+    if lr_scheduler is not None:
+        lr_scheduler.step(epoch)
+        if dist.get_rank(group=None) == 0:
+            for param_group in optimizer.param_groups:
+                print(f"Optimizer lr: {param_group['lr']}")
+    start_lr = 1e-6
     print_every_i_steps = 100
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
@@ -351,12 +402,22 @@ def train_one_epoch(
 
     step_start = time.time_ns()
     cum_batch_time = 0
+
+    sqrt_spatial_weights = torch.sqrt(get_spatial_weights(config_dict, device))
+
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
+        if epoch == 0 and i < 5000 and lr_scheduler is not None:
+            max_values = lr_scheduler.get_last_lr()
+            for index, g in enumerate(optimizer.param_groups):
+                warm = i * (max_values[index] - start_lr) / 5000 + start_lr
+                g["lr"] = warm
+
         x = x.to(device)  # ToDO: Run test if loading data directly to GPU
         y = y.to(device)
         gpu_time = time.time_ns()
 
         optimizer.zero_grad(set_to_none=True)
+        step_start = time.time_ns()
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=autocast):
             nvtx.range_push("Forward")
             if bayesian:
@@ -365,20 +426,24 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-            loss = loss_fn(pred, y)
+            loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
             nvtx.range_pop()
 
         # Backpropagation
         nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
-
+        nvtx.range_push("Gradient clipping")
+        clipped_norm = dist_clip_grad_norm_(
+            model.parameters(), 0.6, group=channel_group
+        )
+        nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
         nvtx.range_pop()
+        step_end = time.time_ns()
 
         loss_sum = loss_sum + loss.detach()
-        step_end = time.time_ns()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
 
@@ -398,15 +463,13 @@ def train_one_epoch(
             if dist.get_rank(group=None) == 0:
                 if bayesian:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
                 else:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
             cum_batch_time = 0
-
-        step_start = time.time_ns()
 
         if prof:
             prof.step()
@@ -419,17 +482,29 @@ def train_one_epoch(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_file")
+    parser.add_argument("--resume")
+    parser.add_argument("--transplant")
     parser.add_argument("--skip_validation", action="store_true")
     parser.add_argument("--timings", action="store_true")
     parser.add_argument("--profile", action="store_true")
+
     parser.add_argument("configargs", nargs="*")
 
     args = parser.parse_args()
 
-    with open(f"{args.config_file}", "r") as f:
-        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+    resume_dir = None if args.resume is None else f"{args.resume}"
 
-    config_dict = setup_config_dict(config_dict, args)
+    if args.config_file is not None:
+        with open(f"{args.config_file}", "r") as f:
+            config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+        config_dict = setup_config_dict(config_dict, args)
+    else:
+        if args.transplant is not None:
+            raise RuntimeError(
+                "You cannot transplant weights without giving a config file. Please set --config_file"
+            )
+        config_dict = load_configuration_yaml(resume_dir)
+        config_dict = setup_config_dict(config_dict, args, resume=True)
 
     ### Distributed Stuff ###
     mesh_dims = config_dict["mesh_dims"]
