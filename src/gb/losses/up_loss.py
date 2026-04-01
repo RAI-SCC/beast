@@ -294,18 +294,14 @@ class FullAggregation(torch.autograd.Function):
 
         ctx.mark_non_differentiable(variance_ratio, mse_part_half)
         ctx.up_process_group = up_process_group
-        ctx.save_for_backward(
-            samples, mean, std, variational_means, variance_ratio, mse_part_half
-        )
+        ctx.save_for_backward(samples, mean, std, variance_ratio, mse_part_half)
 
     @staticmethod
     def backward(
         ctx: Any, grad_mean, grad_std, grad_pm, grad_vr: None, grad_mse_half: None
     ) -> Any:
         up_process_group = ctx.up_process_group
-        samples, mean, std, variational_means, variance_ratio, mse_part_half = (
-            ctx.saved_tensors
-        )
+        samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
 
         N_loc = samples.shape[0]
         N_glob = N_loc * up_process_group.size()
@@ -320,7 +316,7 @@ class FullAggregation(torch.autograd.Function):
         ) / std
 
         grad_pm = grad_pm.expand_as(variance_ratio)
-        grad_var_means = grad_pm * variational_means * mse_part_half
+        grad_var_means = grad_pm * mse_part_half
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
         return grad_samples, None, None, None, None, grad_var_means, grad_var_log_stds
