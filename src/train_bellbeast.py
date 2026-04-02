@@ -406,7 +406,6 @@ def train_one_epoch(
     sqrt_spatial_weights = torch.sqrt(get_spatial_weights(config_dict, device))
 
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
-
         if prof:
             prof.step()
 
@@ -437,10 +436,12 @@ def train_one_epoch(
         nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
-        nvtx.range_push("Gradient clipping")
-        clipped_norm = dist_clip_grad_norm_(
-            model.parameters(), 0.6, group=channel_group
-        )
+        # nvtx.range_push("Gradient clipping")
+
+        if not bayesian:
+            clipped_norm = dist_clip_grad_norm_(
+                model.parameters(), 0.6, group=channel_group
+            )
         nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
@@ -451,7 +452,7 @@ def train_one_epoch(
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
 
-        if i % config_dict["training"]["checkpoint_interval"] == 0:
+        if i != 0 and i % config_dict["training"]["checkpoint_interval"] == 0:
             save_checkpoint(
                 checkpoint_path,
                 model,
@@ -461,20 +462,19 @@ def train_one_epoch(
                 loss_sum,
             )
 
-        if i % print_every_i_steps == 0:
+        if i != 0 and i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 if bayesian:
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
                     )
                 else:
                     print(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
             cum_batch_time = 0
-
 
     dist.all_reduce(loss_sum, group=dtp_group)
     average_loss = loss_sum.item() / max(1, len(dataloader))
@@ -524,7 +524,6 @@ def main():
     if config_dict["profile"] and global_rank == 3:
         import torch.profiler as tprofiler
 
-
         print("Profiling ... Please wait")
         with tprofiler.profile(
             activities=[
@@ -536,7 +535,9 @@ def main():
             schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
             with_stack=True,
             # with_flops=True,
-            on_trace_ready=tprofiler.tensorboard_trace_handler(f"{os.getenv('PROFILE_DIR')}/tb_logs_rank_{global_rank}"),
+            on_trace_ready=tprofiler.tensorboard_trace_handler(
+                f"{os.getenv('PROFILE_DIR')}/tb_logs_rank_{global_rank}"
+            ),
         ) as prof:
             training_loop(config_dict, prof)
 
