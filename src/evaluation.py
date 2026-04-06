@@ -9,8 +9,8 @@ import torch.distributed as dist
 import torch_blue
 from torch import nn
 
+from gb.comm import get_process_group
 from gb.losses.up_loss import GaussianAggregation
-from gb.setup import get_process_group
 from gb.utils import get_spatial_weights
 
 

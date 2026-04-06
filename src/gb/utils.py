@@ -16,11 +16,28 @@ import yaml
 from jigsaw import normalization, utils_init
 from torch.utils.flop_counter import FlopCounterMode
 
+from gb.comm import get_process_group
 from gb.model.model_gb_tiny import NiceNorm
-from gb.setup import (
-    get_process_group,
-    load_configuration_yaml,
-)
+
+
+def execute_in_waves(func, wave_size:int = 128):
+    world_size = dist.get_world_size(group=None)
+    num_groups = (world_size + wave_size - 1) // group_size
+    global_rank = dist.get_rank(group=None)
+    result = None
+
+    for group in range(num_groups):
+        start_rank = group * group_size
+        end_rank = start_rank + group_size
+
+        if global_rank < end_rank and global_rank >= start_rank:
+            result = func()
+            print(f"R{global_rank}/{world_size}: Executed function {func.__name__} in wave {group}")
+        
+        dist.barrier(group=None)  # Synchronize after each wave
+        print(f"R{global_rank}/{world_size}: Synchronized after wave {group}")
+    
+    return result
 
 def download_1_5_degree_data(data_path):
     # data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")

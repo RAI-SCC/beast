@@ -7,6 +7,7 @@ import torch
 import torch.distributed as dist
 import xarray as xr
 from torch.utils.data import Dataset
+from src.gb.utils import execute_in_waves
 
 
 class ERA5DatasetDistributed(Dataset):
@@ -53,39 +54,21 @@ class ERA5DatasetDistributed(Dataset):
         mask_list = config["data"]["constant_masks"]
 
         # Filter desired time points based on parameters and return file statistics.
-         #start = time.perf_counter()
+        # start = time.perf_counter()
+        
+        def load_data():
+            self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
 
-        group_size = 128          # ranks per wave — tune to filesystem concurrency
-        num_groups =  (dist.get_world_size(group=None) + group_size - 1) // group_size 
-        global_rank = dist.get_rank(group=None)
+            times = pd.to_datetime(self.zarr_data.time)
+            train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+            self.zarr_data = self.zarr_data.sel(time=train_years)
 
-        for group in range(num_groups):
-            start_rank = group * group_size
-            end_rank = start_rank + group_size
+            self.n_data_items = len(self.zarr_data["time"])
+            self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
 
-            if global_rank < end_rank and global_rank >= start_rank:
-                start = time.perf_counter()
-                self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
-                
-                times = pd.to_datetime(self.zarr_data.time)
-                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
-                self.zarr_data = self.zarr_data.sel(time=train_years)
-                
-                self.n_data_items = len(self.zarr_data["time"])
-                self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
-                end = time.perf_counter()
-                print(f"Rank {global_rank} has loaded data")
-                delta_t = end - start
-                if (30 - delta_t) > 0:
-                    time.sleep(30 - delta_t)
+        
+        execute_in_waves(load_data, 2)
 
-            else:
-                time.sleep(30)
-
-            #dist.barrier(device_ids=[self.device.index])
-
-
- 
         with torch.no_grad():
             self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
             self.num_masks = self.constant_masks.shape[0]
@@ -129,8 +112,8 @@ class ERA5DatasetDistributed(Dataset):
     def __len__(self):
         """Return total number of samples."""
         return self.n_data_items - self.dt
-
-    def __getitem__(self, idx):
+    
+    def __load_data(self, idx):
         """
         Return single input, target.
 
@@ -185,6 +168,13 @@ class ERA5DatasetDistributed(Dataset):
         target = torch.tensor(y, dtype=self.dtype)
         return input, target
 
+    def __getitem__(self, idx):
+        if idx == 0:
+            return execute_in_waves(lambda: self.__load_data(idx), 2)
+        else:
+            return self.__load_data(idx)
+        
+
     def get_constant_masks(self):
         return self.constant_masks[
             self.in_masks[0] : self.in_masks[1],
@@ -209,19 +199,23 @@ class ERA5DatasetDistributed(Dataset):
         # Load data from numpy files
 
         masks = torch.zeros(
-            (3, self.xlat, self.xlon), dtype=self.dtype, requires_grad=False
-        ).to(self.device)
+            (3, self.xlat, self.xlon), dtype=self.dtype, requires_grad=False, device=self.device
+        )
 
         if self.local_rank == 0:
             data_files = [f for f in os.listdir(folder_path) if f in mask_list]
             data = []
             for i, file in enumerate(data_files):
-                data.append(np.load(os.path.join(folder_path, file)))
-            
-            masks = torch.as_tensor(np.stack(data, axis=0), dtype=self.dtype, device=self.device).contiguous()
+                data.append(torch.from_numpy(np.load(os.path.join(folder_path, file)), dtype=self.dtype).to(self.device))
 
-        # handle = dist.broadcast(masks, src=0, async_op=True)
-        dist.broadcast(masks, src=0, group=None)
+            masks = torch.cat(
+                data
+            )
+
+        print(f"R{self.local_rank}: Before - Mask first value: {masks[0,0,0].item()}")
+        dist.broadcast(masks, group_src=0, group=self.process_group)
+        print(f"R{self.local_rank}: After - Mask first value: {masks[0,0,0].item()}")
+
         masks = masks.to(torch.device("cpu"))
         return masks
 
@@ -231,7 +225,13 @@ class ERA5DatasetDistributed(Dataset):
         if self.local_rank == 0:
             mean = np.load(f"{config['data']['normalization_dir']}/norm_mean.npy")
             std = np.load(f"{config['data']['normalization_dir']}/norm_std.npy")
-            norms = torch.as_tensor(np.stack([mean, std], axis=0), dtype=self.dtype, device=self.device).squeeze().contiguous()
+            norms = (
+                torch.as_tensor(
+                    np.stack([mean, std], axis=0), dtype=self.dtype, device=self.device
+                )
+                .squeeze()
+                .contiguous()
+            )
 
         # handle = dist.broadcast(norms, src=0, async_op=True)
         dist.broadcast(norms, src=0, group=None)

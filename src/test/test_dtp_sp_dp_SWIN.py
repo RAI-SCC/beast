@@ -12,12 +12,13 @@ import torch.distributed as dist
 
 # torch blue imports
 import yaml
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 
 # jigsaw imports
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+from gb.comm import get_process_group, init_gb_process_group
 from gb.losses.up_loss import UP_AllGaussLoss
 
 # Import model
@@ -25,8 +26,6 @@ from gb.model.test_models.swin_jigsaw_025 import SWIN
 from gb.utils import (
     convert_jigsaw_vi,
     count_model_parameters,
-    get_process_group,
-    init_gb_process_group,
     set_all_seeds,
 )
 

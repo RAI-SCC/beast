@@ -20,9 +20,6 @@ from gb.model.expert import Expert
 # Import model
 from gb.model.model_gb import Bellbeast
 from gb.model.model_gb_tiny import TinyBellbeast
-from gb.setup import (
-    get_process_group,
-)
 from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
@@ -35,6 +32,9 @@ from gb.utils import (
     set_all_seeds,
     set_dtype,
     transplant_weights,
+)
+from gb.comm import (
+    get_process_group,
 )
 
 
@@ -60,8 +60,6 @@ def training_loop(config_dict, prof=None):
         + ep_group.rank() * channel_group.size()
         + up_group.size()
     )
-
-
 
     # Define the Model
     if dist.get_rank(group=None) == 0:
@@ -153,7 +151,7 @@ def training_loop(config_dict, prof=None):
     if dist.get_rank(group=None) == 0:
         print("Make model Bayesian")
 
-    #dist.barrier(device_ids=[device.index])
+    # dist.barrier(device_ids=[device.index])
 
     if bayesian:
         if config_dict["transplant_from"] is not None:
@@ -213,7 +211,7 @@ def training_loop(config_dict, prof=None):
     # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
     if dist.get_rank(group=None) == 0:
         print("Getting Dataloader")
-    
+
     train_dataloader = get_dataloader(
         config_dict,
         dtp_process_group=dtp_group,

@@ -1,14 +1,12 @@
 import argparse
 
-import torch
 import torch.distributed as dist
 import yaml
 
-from gb.config import setup_config_dict
-from gb.setup import (
+from gb.comm import (
     init_gb_process_group,
-    load_configuration_yaml,
 )
+from gb.config import load_configuration_yaml, setup_config_dict
 
 
 def main():
@@ -44,22 +42,12 @@ def main():
     dist.barrier(group=None)
     global_rank = dist.get_rank(group=None)
 
-    device_id = torch.cuda.current_device()
-    device = torch.device("cuda", device_id)
-
-    # warmup_all = torch.zeros((3,1440,720)).to(device)
-    # if dist.get_rank(group=None) ==0:
-    #     warmup_all = torch.tensor(np.ones((3,1440,720)), dtype=torch.float).to(device)
-    # dist.broadcast(warmup_all, src=0, group=None)
-    # print(f'Rank {global_rank} finished torch.distributed warmup: result = {warmup_all.sum()}')
-    # # global_world_size = dist.get_world_size(group=None)
-
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")
         print(f"Mask path: {config_dict['data']['constant_masks_path']}")
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
-    from training import training_loop
+    from src.training import training_loop
 
     training_loop(config_dict)
 

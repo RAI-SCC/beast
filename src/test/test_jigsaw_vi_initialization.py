@@ -10,10 +10,9 @@ import torch.distributed as dist
 import yaml
 from jigsaw import convolutions
 
+from gb.comm import get_process_group, init_gb_process_group
 from gb.utils import (
     convert_jigsaw_vi,
-    get_process_group,
-    init_gb_process_group,
     set_all_seeds,
 )
 
