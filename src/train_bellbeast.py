@@ -6,7 +6,6 @@ import yaml
 
 from gb.config import setup_config_dict
 from gb.setup import (
-    get_process_group,
     init_gb_process_group,
     load_configuration_yaml,
 )
@@ -45,20 +44,15 @@ def main():
     dist.barrier(group=None)
     global_rank = dist.get_rank(group=None)
 
-    if global_rank == 0:
-        print(f"dist is initialized: {dist.is_initialized()}")
-
     device_id = torch.cuda.current_device()
     device = torch.device("cuda", device_id)
 
-    warmup_all = torch.tensor(1.0).to(device)
-    warmup_ddp = torch.tensor(1.0).to(device)
-
-    dist.all_reduce(warmup_all, op=dist.ReduceOp.SUM)
-    dist.all_reduce(warmup_ddp, op=dist.ReduceOp.SUM, group=get_process_group("DDP"))
-
-    # print(f'Rank {global_rank} finished torch.distributed warmup with {warmup_all} ranks and {warmup_ddp} ddp ranks')
-    # global_world_size = dist.get_world_size(group=None)
+    # warmup_all = torch.zeros((3,1440,720)).to(device)
+    # if dist.get_rank(group=None) ==0:
+    #     warmup_all = torch.tensor(np.ones((3,1440,720)), dtype=torch.float).to(device)
+    # dist.broadcast(warmup_all, src=0, group=None)
+    # print(f'Rank {global_rank} finished torch.distributed warmup: result = {warmup_all.sum()}')
+    # # global_world_size = dist.get_world_size(group=None)
 
     if global_rank == 0:
         print(f"Train data path: {config_dict['data']['train_data_path']}")

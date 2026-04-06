@@ -61,12 +61,16 @@ def training_loop(config_dict, prof=None):
         + up_group.size()
     )
 
-    data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
+    # Define the Model
+    if dist.get_rank(group=None) == 0:
+        print("Initializing Model")
 
+    set_all_seeds(initialization_rank)
+
+    data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
     if dist.get_rank(group=None) == 0:
         print("Getting Dataloader")
-
-    time.sleep(data_access_rank * 0.0001)
+    time.sleep(data_access_rank * 0.0005)
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
@@ -76,12 +80,7 @@ def training_loop(config_dict, prof=None):
         mode="train",
         dtype=dtype,
     )
-
-    # Define the Model
-    if dist.get_rank(group=None) == 0:
-        print("Initializing Model")
-
-    set_all_seeds(initialization_rank)
+    dist.barrier()
 
     ########### Tiny Bellbeast
     if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
@@ -139,6 +138,7 @@ def training_loop(config_dict, prof=None):
             flash_attn=config_dict["training"]["flash_attn"],
         )
     model = model.to(dtype).to(device)
+
     if dist.get_rank(group=None) == 0:
         print(
             f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
@@ -164,10 +164,7 @@ def training_loop(config_dict, prof=None):
     expert_loss_weighting = model.get_loss_weights()
 
     if dist.get_rank(group=None) == 0:
-        print("Make model Bayesian, at ", time.now())
-
-    # timeout = up_group.size() * dp_group.size()
-    # dist.barrier()
+        print("Make model Bayesian")
 
     if bayesian:
         if config_dict["transplant_from"] is not None:
@@ -283,7 +280,7 @@ def training_loop(config_dict, prof=None):
 
     ### Run Training
     if dist.get_rank(group=None) == 0:
-        print("Starting Epochs..")
+        print("Starting Epochs...")
 
     for epoch in range(start_epoch, config_dict["training"]["n_epochs"]):
         start_time = time.perf_counter()

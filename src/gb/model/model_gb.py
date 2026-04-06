@@ -56,7 +56,6 @@ class Bellbeast(torch.nn.Module):
         self.flash_attn = flash_attn
 
         self.activation = torch.nn.GELU()
-
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
