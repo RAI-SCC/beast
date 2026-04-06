@@ -37,7 +37,12 @@ class GBDataLoader(DataLoader):
 
 
 def get_dataloader(
-    config_dict, dtp_process_group, dp_process_group, mode="train", dtype=torch.float32
+    config_dict,
+    dtp_process_group,
+    dp_process_group,
+    device,
+    mode="train",
+    dtype=torch.float32,
 ):
     dt = config_dict["data"]["dt"]
     batch_size = config_dict["training"]["batch_size"]
@@ -63,6 +68,7 @@ def get_dataloader(
                 config_dict,
                 mode=mode,
                 process_group=dtp_process_group,
+                device=device,
                 normalize=True,
                 dt=dt,
                 dtype=dtype,
@@ -72,6 +78,7 @@ def get_dataloader(
                 config_dict,
                 mode=mode,
                 process_group=dtp_process_group,
+                device=device,
                 normalize=True,
                 dt=dt,
                 dtype=dtype,

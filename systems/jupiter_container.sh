@@ -7,7 +7,7 @@ export PROJECT_DIR="${PROJECT_jureap1}/GBB"
 export VENV_DIR="${HOME}/.venvs/gbb"
 #export CONTAINER_HOME="${PROJECT_DIR}/images"
 export CONTAINER_HOME="/e/scratch/jureap1/GrandBellbeast/images"
-export SIF="${CONTAINER_HOME}/pytorch26.02.sif"
+export SIF="${CONTAINER_HOME}/pytorch25.06.sif"
 
 # Container mnt points
 export WORKDIR="$( pwd )" # For source code
@@ -47,9 +47,10 @@ export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
 
 # Timeout configurations
-export NCCL_IB_TIMEOUT=50
-export UCX_RC_TIMEOUT=4s
-export NCCL_IB_RETRY_CNT=10
+export NCCL_IB_TIMEOUT=100
+export UCX_RC_TIMEOUT=8s
+export UCX_DC_TIMEOUT=8s
+export NCCL_IB_RETRY_CNT=20
 
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
@@ -82,8 +83,8 @@ export SYSTEM_SLURM_PARAMS=(
     exec
     --nv
     --bind "$DATA_DIR":"/workspace/"
-    $SIF
-    systems/venv_entry.sh
+    #$SIF
+    #systems/venv_entry.sh
 )
 
 setup_system() {

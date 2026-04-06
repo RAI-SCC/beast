@@ -7,6 +7,10 @@ fi
 
 source $VENV_DIR/bin/activate
 
+if [ "$SLURM_PROCID" -eq 0 ]; then
+    echo "PYTHON ENVIRONMENT SOURCED"
+fi
+
 if [[ "$SLURM_PROCID" =~ ^([0-3]|64)$ ]]; then
     if [[ ${PROFSYS} == true ]]; then
         echo "Enabling program tracing (PROF_TRACE=true) for process $SLURM_PROCID"
