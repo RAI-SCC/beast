@@ -59,19 +59,19 @@ class CustomDeviceMesh:
                 if self._rank in granks_list:
                     self._groups[self._mesh_dim_names[dim]] = group
 
-        # flatten last two dimensions:
-        rank_tensor_fl = rank_tensor.flatten(-2)
-        rank_tensor_rs = rank_tensor_fl.flatten(0, -2)
-        group_ranks = [x.flatten() for x in rank_tensor_rs.unbind(0)]
-        for granks in group_ranks:
-            granks_list = granks.numpy().tolist()
-            group = dist.new_group(
-                ranks=granks_list, backend=self._backend, device_id=self._device
-            )
-            if self._rank in granks_list:
-                self._groups["yx"] = group
+        # # flatten last two dimensions:
+        # rank_tensor_fl = rank_tensor.flatten(-2)
+        # rank_tensor_rs = rank_tensor_fl.flatten(0, -2)
+        # group_ranks = [x.flatten() for x in rank_tensor_rs.unbind(0)]
+        # for granks in group_ranks:
+        #     granks_list = granks.numpy().tolist()
+        #     group = dist.new_group(
+        #         ranks=granks_list, backend=self._backend, device_id=self._device
+        #     )
+        #     if self._rank in granks_list:
+        #         self._groups["yx"] = group
 
-        self.yx_group = self._groups["yx"]
+        # self.yx_group = self._groups["yx"]
 
 
 def init_gb_process_group(
@@ -85,7 +85,6 @@ def init_gb_process_group(
     # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
     # # Initialize GPUs
     device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
     if backend == "nccl":
         device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
         device = torch.device("cuda", device_id)
@@ -101,18 +100,7 @@ def init_gb_process_group(
     if not dist.is_initialized():
         raise RuntimeError("Process group initialization failed.")
 
-    # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
-    # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
-
-    # # Initialize GPUs
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
-        device = torch.device("cuda", device_id)
-        torch.cuda.set_device(device)
-
-    return _create_process_mesh_dict(mesh_dims, device_type=device_type)
+    return _create_process_mesh_dict(mesh_dims, device_type=device)
 
 
 def _create_process_mesh_dict(

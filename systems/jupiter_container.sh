@@ -3,8 +3,9 @@
 # Container configuration and paths
 # =============================================================================
 export PROJECT_DIR="${PROJECT_jureap1}/GBB"
+export SCRATCH_DIR="/e/scratch/jureap1/GrandBellbeast"
 
-export VENV_DIR="${HOME}/.venvs/gbb"
+export VENV_DIR="${PROJECT_DIR}/${USER}/venvs/gbb"
 #export CONTAINER_HOME="${PROJECT_DIR}/images"
 export CONTAINER_HOME="/e/scratch/jureap1/GrandBellbeast/images"
 export CONTAINER_NAME="pytorch25.06.sif"
