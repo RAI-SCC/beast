@@ -30,6 +30,7 @@ class Bellbeast(torch.nn.Module):
         parallelism,
         dtype,
         flash_attn,
+        nice_norm,
     ):
         super().__init__()
         self.xlat, self.xlon = xlat, xlon
@@ -55,6 +56,8 @@ class Bellbeast(torch.nn.Module):
         self.noise_dim = noise_dim
         self.dtype = dtype
         self.flash_attn = flash_attn
+        self.dropout = 0 if self.bayesian else 1e-1
+        self.nice_norm = nice_norm
 
         self.activation = torch.nn.GELU()
 
@@ -153,74 +156,141 @@ class Bellbeast(torch.nn.Module):
 
         # Transformer blocks
         self.n_full_blocks = n_full_blocks
-        self.transformer_1 = torch.nn.ModuleList(
-            [
-                attention.DistributedNICEWindowedTransformer(
-                    x_features=self.embed_dim,
-                    embed_dim=self.embed_dim,
-                    output_dim=self.embed_dim,
-                    heads=self.heads[0],
-                    noise_dim=self.noise_dim,
-                    dropout=0 if self.bayesian else 1e-3,  # dropout
-                    local_rank=self.local_rank,
-                    device=self.device,
-                    parallelism=self.channel_group.size(),
-                    model_group=self.dtp_group,
-                    spatial_group=self.spatial_group,
-                    channel_group=self.channel_group,
-                    bayesian=self.bayesian,
-                    dtype=self.dtype,
-                    flash_attn=self.flash_attn,
-                ).to(self.device)
-                for _ in torch.arange(2 * self.n_full_blocks[0])
-            ]
-        )
+        if self.nice_norm:
+            self.transformer_1 = torch.nn.ModuleList(
+                [
+                    attention.DistributedNICEWindowedTransformer(
+                        x_features=self.embed_dim,
+                        embed_dim=self.embed_dim,
+                        output_dim=self.embed_dim,
+                        heads=self.heads[0],
+                        noise_dim=self.noise_dim,
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[0])
+                ]
+            )
 
-        self.transformer_down = torch.nn.ModuleList(
-            [
-                attention.DistributedNICEWindowedTransformer(
-                    self.embed_dim * 2,
-                    self.embed_dim * 2,
-                    self.embed_dim * 2,
-                    heads=self.heads[1],
-                    noise_dim=self.noise_dim,
-                    dropout=0 if self.bayesian else 1e-3,  # dropout
-                    local_rank=self.local_rank,
-                    device=self.device,
-                    parallelism=self.channel_group.size(),
-                    model_group=self.dtp_group,
-                    spatial_group=self.spatial_group,
-                    channel_group=self.channel_group,
-                    bayesian=self.bayesian,
-                    dtype=self.dtype,
-                    flash_attn=self.flash_attn,
-                ).to(self.device)
-                for _ in torch.arange(2 * self.n_full_blocks[1])
-            ]
-        )
+            self.transformer_down = torch.nn.ModuleList(
+                [
+                    attention.DistributedNICEWindowedTransformer(
+                        self.embed_dim * 2,
+                        self.embed_dim * 2,
+                        self.embed_dim * 2,
+                        heads=self.heads[1],
+                        noise_dim=self.noise_dim,
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[1])
+                ]
+            )
 
-        self.transformer_2 = torch.nn.ModuleList(
-            [
-                attention.DistributedNICEWindowedTransformer(
-                    x_features=self.embed_dim,
-                    embed_dim=self.embed_dim,
-                    output_dim=self.embed_dim,
-                    heads=self.heads[2],
-                    noise_dim=self.noise_dim,
-                    dropout=0 if self.bayesian else 1e-3,  # dropout
-                    local_rank=self.local_rank,
-                    device=self.device,
-                    parallelism=self.channel_group.size(),
-                    model_group=self.dtp_group,
-                    spatial_group=self.spatial_group,
-                    channel_group=self.channel_group,
-                    bayesian=self.bayesian,
-                    dtype=self.dtype,
-                    flash_attn=self.flash_attn,
-                ).to(self.device)
-                for _ in torch.arange(2 * self.n_full_blocks[2])
-            ]
-        )
+            self.transformer_2 = torch.nn.ModuleList(
+                [
+                    attention.DistributedNICEWindowedTransformer(
+                        x_features=self.embed_dim,
+                        embed_dim=self.embed_dim,
+                        output_dim=self.embed_dim,
+                        heads=self.heads[2],
+                        noise_dim=self.noise_dim,
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[2])
+                ]
+            )
+        else:
+            self.transformer_1 = torch.nn.ModuleList(
+                [
+                    attention.DistributedWindowedTransformer(
+                        x_features=self.embed_dim,
+                        embed_dim=self.embed_dim,
+                        output_dim=self.embed_dim,
+                        heads=self.heads[0],
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[0])
+                ]
+            )
+
+            self.transformer_down = torch.nn.ModuleList(
+                [
+                    attention.DistributedWindowedTransformer(
+                        self.embed_dim * 2,
+                        self.embed_dim * 2,
+                        self.embed_dim * 2,
+                        heads=self.heads[1],
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[1])
+                ]
+            )
+
+            self.transformer_2 = torch.nn.ModuleList(
+                [
+                    attention.DistributedWindowedTransformer(
+                        x_features=self.embed_dim,
+                        embed_dim=self.embed_dim,
+                        output_dim=self.embed_dim,
+                        heads=self.heads[2],
+                        dropout=self.dropout,  # dropout
+                        local_rank=self.local_rank,
+                        device=self.device,
+                        parallelism=self.channel_group.size(),
+                        model_group=self.dtp_group,
+                        spatial_group=self.spatial_group,
+                        channel_group=self.channel_group,
+                        bayesian=self.bayesian,
+                        dtype=self.dtype,
+                        flash_attn=self.flash_attn,
+                    ).to(self.device)
+                    for _ in torch.arange(2 * self.n_full_blocks[2])
+                ]
+            )
 
         assert window_size_outer[0] % 2 == 0, (
             "window_outer[0] size must be divisible by 2"
@@ -389,8 +459,9 @@ class Bellbeast(torch.nn.Module):
 
     def forward(self, x):
         # noise has shape [(sample), batch, noise_dim]
-        noise = torch.randn(x.shape[0], self.noise_dim, device=self.device).to(
-            self.dtype
+        noise = (
+            torch.randn(x.shape[0], self.noise_dim, device=self.device).to(self.dtype)
+            / self.noise_dim
         )
 
         # Define masks once upon initialization (dependent on batch dimension)
@@ -420,7 +491,10 @@ class Bellbeast(torch.nn.Module):
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
             nvtx.range_pop()
             nvtx.range_push("Transformer_1")
-            x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
+            if self.nice_norm:
+                x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
+            else:
+                x = self.transformer_1[i * 2](x, mask=None)
             nvtx.range_pop()
             nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
@@ -434,7 +508,12 @@ class Bellbeast(torch.nn.Module):
             x = self._get_windows(x, self.window_size_outer)
             nvtx.range_pop()
             nvtx.range_push("Transformer_1 (with mask)")
-            x = self.transformer_1[i * 2 + 1](x, noise_transformer, mask=self.mask_out)
+            if self.nice_norm:
+                x = self.transformer_1[i * 2 + 1](
+                    x, noise_transformer, mask=self.mask_out
+                )
+            else:
+                x = self.transformer_1[i * 2 + 1](x, mask=self.mask_out)
             nvtx.range_pop()
             nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
@@ -462,15 +541,21 @@ class Bellbeast(torch.nn.Module):
             x = self._get_windows(x, self.window_size_inner)
             n_windows = x.shape[0] // B
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
-            x = self.transformer_down[i * 2](x, noise_transformer_down, mask=None)
+            if self.nice_norm:
+                x = self.transformer_down[i * 2](x, noise_transformer_down, mask=None)
+            else:
+                x = self.transformer_down[i * 2](x, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
             x = self.roll_in(x)
             x = self._get_windows(x, self.window_size_inner)
-            x = self.transformer_down[i * 2 + 1](
-                x, noise_transformer_down, mask=self.mask_in
-            )
+            if self.nice_norm:
+                x = self.transformer_down[i * 2 + 1](
+                    x, noise_transformer_down, mask=self.mask_in
+                )
+            else:
+                x = self.transformer_down[i * 2 + 1](x, mask=self.mask_in)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
@@ -497,13 +582,24 @@ class Bellbeast(torch.nn.Module):
         for i in range(self.n_full_blocks[2]):
             nvtx.range_push("Attn block 2")
             x = self._get_windows(x, self.window_size_outer)
-            x = self.transformer_2[i * 2](x, noise=noise_transformer, mask=None)
+            n_windows = x.shape[0] // B
+            noise_transformer = noise.repeat_interleave(n_windows, dim=0)
+
+            if self.nice_norm:
+                x = self.transformer_2[i * 2](x, noise_transformer, mask=None)
+            else:
+                x = self.transformer_2[i * 2](x, mask=None)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
-            x = self.transformer_2[i * 2 + 1](x, noise_transformer, mask=self.mask_out)
+            if self.nice_norm:
+                x = self.transformer_2[i * 2 + 1](
+                    x, noise_transformer, mask=self.mask_out
+                )
+            else:
+                x = self.transformer_2[i * 2 + 1](x, mask=self.mask_out)
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )

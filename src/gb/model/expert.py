@@ -11,7 +11,6 @@ class JLR(torch.autograd.Function):
     @staticmethod
     def forward(x, w, ep_group, sp_group, bayesian, device):
         num_experts = ep_group.size()
-        num_samples = sp_group.size()
         B, channels, xlat, xlon = x.shape
         if bayesian:
             num_loc_samples = w.shape[
@@ -20,8 +19,8 @@ class JLR(torch.autograd.Function):
         else:
             num_loc_samples = 1
 
-        x /= num_samples
-        dist.all_reduce(x, op=dist.ReduceOp.SUM, group=sp_group)
+        xc = x.clone()
+        dist.all_reduce(xc, op=dist.ReduceOp.AVG, group=sp_group)
 
         expert_x = [
             torch.empty(
@@ -32,7 +31,7 @@ class JLR(torch.autograd.Function):
             )
             for _ in range(num_experts)
         ]
-        dist.all_gather(expert_x, x, group=ep_group)
+        dist.all_gather(expert_x, xc, group=ep_group)
 
         expert_x = torch.cat(expert_x, dim=0)
 

@@ -30,7 +30,6 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
-    dist_clip_grad_norm_,
     get_process_group,
     get_spatial_weights,
     init_gb_process_group,
@@ -142,6 +141,7 @@ def training_loop(config_dict, prof=None):
             parallelism=config_dict["jigsaw"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
+            nice_norm=config_dict["model"]["nice_norm"],
         )
     model = model.to(dtype).to(device)
 
@@ -163,6 +163,9 @@ def training_loop(config_dict, prof=None):
             },
         ],
         lr=config_dict["training"]["normal_lr"],
+        betas=(0.9, 0.90),
+        eps=1e-6,
+        weight_decay=0,
     )
 
     # Make model expert
@@ -426,17 +429,19 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-            loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
-            nvtx.range_pop()
+        pred = pred.to(torch.float32)
+        loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
+        nvtx.range_pop()
 
         # Backpropagation
         nvtx.range_push("Backward")
         loss.backward()
         nvtx.range_pop()
         nvtx.range_push("Gradient clipping")
-        clipped_norm = dist_clip_grad_norm_(
-            model.parameters(), 0.6, group=channel_group
-        )
+        # clipped_norm = dist_clip_grad_norm_(
+        #     model.parameters(), 0.6, group=channel_group
+        # )
+        clipped_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         nvtx.range_pop()
         nvtx.range_push("Optimizer Step")
         optimizer.step()
