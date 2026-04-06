@@ -6,69 +6,114 @@ set -euo pipefail
 # Uncomment the one that you want to run
 
 # ---------------------------
-# Exp 1: Constant nodes
-# Increase the local sampling number
+# SINGLE-NODE EXPERIMENTS
+# ---------------------------
+# Exp 2.1: Increase the local sampling number
 # Model size stays the same
 # ---------------------------
 # EXP_NAME="weak_model_lsn"
-# VAR_NAME="lsn"
-# VARS=(1 2 4 8)
+# VAR_NAME="training_n_samples"
+# VARS=(1 2 4 6 8)
+# MESH_STRING="1,1,2,4,2"
+# LOCAL_SAMPLES=1 #will be overwritten by VARS
+# EMBED_DIM=128
 # NODES=(2) # stays constant
 # X_AXIS_NAME=${VAR_NAME}
+# SUBSET_SIZE=500
 
 # ---------------------------
-# Exp 2: Constant nodes
-# Increase the local batch size
+# Exp 2.2: Increase the local batch size
 # Model size stays the same
 # Total dataset size increases with the local batch size
 # ---------------------------
 # EXP_NAME="weak_model_lbs"
-# VAR_NAME="lbs"
-# VARS=(1 2 4 8 16)
+# VAR_NAME="training_batch_size"
+# VARS=(1 2 4 6 8)
+# MESH_STRING="1,1,2,4,2"
+# LOCAL_SAMPLES=1
+# EMBED_DIM=128
 # NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
+# SUBSET_SIZE=500
 
 # ---------------------------
-# Exp 3: Constant nodes
-# Increase the model size
+# Exp 2.3: Increase the model size
 # Local batch size and sampling number stay the same
 # ---------------------------
 
 # EXP_NAME="weak_model_dim"
-# VAR_NAME="embed_dim"
-# VARS=(128 256)
+# VAR_NAME="model_embedding_dimension"
+# VARS=(128 256 512 1024)
+# MESH_STRING="1,1,2,4,2"
+# LOCAL_SAMPLES=1
+# EMBED_DIM=128 # will be overwritten by VARS
 # NODES=(2) # Stays constant
 # X_AXIS_NAME=${VAR_NAME}
-# SUBSET_SIZE=100
+# SUBSET_SIZE=500
 
 # ---------------------------
 # MULTI-NODE EXPERIMENTS
 # ---------------------------
-# Exp 1: Increase global sampling number by increasing node count
+# Exp 3.1: Increase global sampling number by increasing node count
 # Local sampling number and batch size stay the same
 # Total dataset size stays the same
 # ---------------------------
 
-EXP_NAME="lsn_multinode"
-VAR_NAME="training_n_samples"
+EXP_NAME="up_weak_scaling_baseline"
+VAR_NAME="training_batch_size"
 VARS=(1)
-MESH_STRING="1,2,-1,4,2"
-NODES=(16 32 64 128 256 512)
-EMBED_DIM=2048
+EMBED_DIM=512
+LOCAL_SAMPLES=2
+MESH_STRING="1,1,-1,4,2"
+NODES=(1 4 8 16 32 64 128 256 512 1024)
 X_AXIS_NAME="nodes"
 SUBSET_SIZE=500
 
+# Exp 3.2: Increase global sampling number by increasing node count
+# Local sampling number and batch size stay the same
+# Total dataset size stays the same
 # ---------------------------
-# Exp 2: Increase global batch size by increasing node count
+
+# EXP_NAME="up_weak_scaling_realistic"
+# VAR_NAME="training_batch_size"
+# VARS=(1)
+# EMBED_DIM=512
+# LOCAL_SAMPLES=2
+# MESH_STRING="1,16,-1,4,2"
+# NODES=(16 32 64 128 256 512 1024)
+# X_AXIS_NAME="nodes"
+# SUBSET_SIZE=500
+
+# ---------------------------
+# Exp 4.1: Increase global batch size by increasing node count
 # Local sampling number and batch size stay the same
 # Total dataset is scaled with node count to ensure constant work per node
 # ---------------------------
 
-# EXP_NAME="lbs_multinode_manualddp"
-# VAR_NAME="lbs"
+# EXP_NAME="dp_strong_scaling_baseline"
+# VAR_NAME="training_batch_size"
 # VARS=(1)
-# NODES=(32 64 128 256 512)
-# SUBSET_SIZE=4000
+# EMBED_DIM=512
+# LOCAL_SAMPLES=2
+# MESH_STRING="1,-1,1,4,2"
+# NODES=(1 4 8 16 32 64 128 256 512 1024)
+# SUBSET_SIZE=4096
+# X_AXIS_NAME="nodes"
+
+# ---------------------------
+# Exp 4.2: Increase global batch size by increasing node count
+# Local sampling number and batch size stay the same
+# Total dataset is scaled with node count to ensure constant work per node
+# ---------------------------
+
+# EXP_NAME="dp_strong_scaling_realistic"
+# VAR_NAME="training_batch_size"
+# VARS=(1)
+# EMBED_DIM=512
+# LOCAL_SAMPLES=2
+# MESH_STRING="1,-1,8,4,2"
+# NODES=(8 16 32 64 128 256 512 1024)
+# SUBSET_SIZE=4096
 # X_AXIS_NAME="nodes"
 
 # ── System (can be overridden via flags) ────────────────────────────────────
@@ -150,10 +195,11 @@ EOF
         src/train_bellbeast.py \
         --config_file "configs/bellbeast_config_lumi.yaml" \
         --skip_validation \
+        mesh_dims=${MESH_STRING} \
         data_train_subset=${SUBSET_SIZE} \
+        training_n_samples=${LOCAL_SAMPLES} \
         model_embedding_dimension=${EMBED_DIM} \
-        ${VAR_NAME}=${VAR} \
-        mesh_dims=$MESH_STRING )
+        ${VAR_NAME}=${VAR}
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
     JOB_IDS+=("$JOB_ID")

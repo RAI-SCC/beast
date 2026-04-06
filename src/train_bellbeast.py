@@ -409,6 +409,10 @@ def train_one_epoch(
     sqrt_spatial_weights = torch.sqrt(get_spatial_weights(config_dict, device))
 
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
+
+        if prof:
+            prof.step()
+
         if epoch == 0 and i < 5000 and lr_scheduler is not None:
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
@@ -476,8 +480,6 @@ def train_one_epoch(
                     )
             cum_batch_time = 0
 
-        if prof:
-            prof.step()
 
     dist.all_reduce(loss_sum, group=dtp_group)
     average_loss = loss_sum.item() / max(1, len(dataloader))
@@ -527,10 +529,6 @@ def main():
     if config_dict["profile"] and global_rank == 3:
         import torch.profiler as tprofiler
 
-        def trace_handler(p):
-            # Export in Chrome trace format (Perfetto can open this)
-            path = os.getenv("PROFILE_DIR")
-            p.export_chrome_trace(f"{path}/trace-{global_rank}.json")
 
         print("Profiling ... Please wait")
         with tprofiler.profile(
@@ -538,12 +536,12 @@ def main():
                 tprofiler.ProfilerActivity.CPU,
                 tprofiler.ProfilerActivity.CUDA,
             ],
-            # record_shapes=True,
-            # profile_memory=True,
+            record_shapes=True,
+            profile_memory=True,
             schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
-            # with_stack=True,
+            with_stack=True,
             # with_flops=True,
-            on_trace_ready=trace_handler,
+            on_trace_ready=tprofiler.tensorboard_trace_handler(f"{os.getenv('PROFILE_DIR')}/tb_logs_rank_{global_rank}"),
         ) as prof:
             training_loop(config_dict, prof)
 

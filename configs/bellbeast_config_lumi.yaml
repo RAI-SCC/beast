@@ -34,7 +34,7 @@ model:
 training:
     tf32: False
     n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size(); 2 is only possible if flash_attn is True
-    n_epochs: 50
+    n_epochs: 1
     batch_size: 1 # Can be 2 if model_bayesian=false
     lr_scheduler: False
     low_lr: 0.00001
