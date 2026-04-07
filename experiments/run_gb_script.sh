@@ -91,7 +91,7 @@ export PROFSYS=$profsys
 
 # 1.) Copy image file to dev/shm on each node
 SHM_DIR=/dev/shm/${SLURM_JOB_ID}
-export IMAGE_SHM=${SHM_DIR}/$CONTAINER_NAME
+export IMAGE_SHM=${SHM_DIR}/${CONTAINER_NAME}
 export IMAGE_REGISTRY=$SIF
 srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p $(dirname ${IMAGE_SHM}) && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying ${IMAGE_REGISTRY} to ${IMAGE_SHM}" && cp ${IMAGE_REGISTRY} ${IMAGE_SHM}'
 
@@ -122,8 +122,5 @@ echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"
 echo ""
 
-export NCCL_IB_TIMEOUT=100
-export UCX_RC_TIMEOUT=8s
-export NCCL_IB_RETRY_CNT=20
 
 srun ${SYSTEM_SLURM_PARAMS[@]} ${IMAGE_SHM} systems/venv_entry.sh $PYTHON_CMD $WORKDIR/$python_script "${remaining_args[@]}"

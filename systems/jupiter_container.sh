@@ -48,9 +48,9 @@ export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
 
 # Timeout configurations
-export NCCL_IB_TIMEOUT=26
+export NCCL_IB_TIMEOUT=100
 export UCX_RC_TIMEOUT=8s
-export NCCL_IB_RETRY_CNT=7
+export NCCL_IB_RETRY_CNT=20
 
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"

@@ -57,12 +57,14 @@ class ERA5DatasetDistributed(Dataset):
 
         group_size = 128          # ranks per wave — tune to filesystem concurrency
         num_groups =  (dist.get_world_size(group=None) + group_size - 1) // group_size 
-
+        global_rank = dist.get_rank(group=None)
 
         for group in range(num_groups):
             start_rank = group * group_size
             end_rank = start_rank + group_size
-            if self.local_rank < end_rank and self.local_rank >= start_rank:
+
+            if global_rank < end_rank and global_rank >= start_rank:
+                start = time.perf_counter()
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
                 
                 times = pd.to_datetime(self.zarr_data.time)
@@ -71,8 +73,16 @@ class ERA5DatasetDistributed(Dataset):
                 
                 self.n_data_items = len(self.zarr_data["time"])
                 self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
-            
-            dist.barrier(device_ids=[self.device.index])
+                end = time.perf_counter()
+                print(f"Rank {global_rank} has loaded data")
+                delta_t = end - start
+                if (30 - delta_t) > 0:
+                    time.sleep(30 - delta_t)
+
+            else:
+                time.sleep(30)
+
+            #dist.barrier(device_ids=[self.device.index])
 
 
  

@@ -61,19 +61,7 @@ def training_loop(config_dict, prof=None):
         + up_group.size()
     )
 
-    # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
-    # if dist.get_rank(group=None) == 0:
-    #     print("Getting Dataloader")
-    # time.sleep(data_access_rank * 0.00005)
-    # Get the data loaders
-    train_dataloader = get_dataloader(
-        config_dict,
-        dtp_process_group=dtp_group,
-        dp_process_group=dp_group,
-        device=device,
-        mode="train",
-        dtype=dtype,
-    )
+
 
     # Define the Model
     if dist.get_rank(group=None) == 0:
@@ -165,7 +153,7 @@ def training_loop(config_dict, prof=None):
     if dist.get_rank(group=None) == 0:
         print("Make model Bayesian")
 
-    dist.barrier(device_ids=[device.index])
+    #dist.barrier(device_ids=[device.index])
 
     if bayesian:
         if config_dict["transplant_from"] is not None:
@@ -221,6 +209,19 @@ def training_loop(config_dict, prof=None):
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         scheduler = None
+
+    # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
+    if dist.get_rank(group=None) == 0:
+        print("Getting Dataloader")
+    
+    train_dataloader = get_dataloader(
+        config_dict,
+        dtp_process_group=dtp_group,
+        dp_process_group=dp_group,
+        device=device,
+        mode="train",
+        dtype=dtype,
+    )
 
     if dist.get_rank(group=None) == 0:
         print("Setup loss")
