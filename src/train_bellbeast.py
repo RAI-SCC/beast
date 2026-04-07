@@ -433,7 +433,6 @@ def train_one_epoch(
                 pred = model(x)
             nvtx.range_pop()
             nvtx.range_push("Loss")
-        pred = pred.to(torch.float32)
         loss = loss_fn(pred * sqrt_spatial_weights, y * sqrt_spatial_weights)
         nvtx.range_pop()
 
