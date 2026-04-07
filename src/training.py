@@ -311,7 +311,7 @@ def training_loop(config_dict, prof=None):
             optimizer,
             epoch,
             step=0,
-            loss=data_fit_loss,
+            loss=avg_loss,
         )
 
         for t in timings:

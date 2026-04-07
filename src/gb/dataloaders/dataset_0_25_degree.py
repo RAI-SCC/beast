@@ -76,20 +76,21 @@ class ERA5DatasetDistributed(Dataset):
 
 
  
-        self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-        self.num_masks = self.constant_masks.shape[0]
-        # self.num_masks = 3
-        # normalization for pressure levels and standard deviation
-        self.norm_values = {}
-        self.norms = self._load_normalizations(config)
+        with torch.no_grad():
+            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+            self.num_masks = self.constant_masks.shape[0]
+            # self.num_masks = 3
+            # normalization for pressure levels and standard deviation
+            self.norm_values = {}
+            self.norms = self._load_normalizations(config)
 
-        # self.norms_handle.wait()
-        self.norm_values["mean"] = (
-            self.norms[0, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-        )
-        self.norm_values["std"] = (
-            self.norms[1, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-        )
+            # self.norms_handle.wait()
+            self.norm_values["mean"] = (
+                self.norms[0, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
+            )
+            self.norm_values["std"] = (
+                self.norms[1, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
+            )
 
         self.received_masks_and_norms = False
 
@@ -207,8 +208,7 @@ class ERA5DatasetDistributed(Dataset):
             for i, file in enumerate(data_files):
                 data.append(np.load(os.path.join(folder_path, file)))
             
-            masks = torch.as_tensor(np.stack(data, axis=0), dtype=self.dtype, requires_grad=False, device=self.device).contiguous()
-                # masks[i, :, :] = torch.from_numpy(data[: self.xlat, :]).detach().clone()
+            masks = torch.as_tensor(np.stack(data, axis=0), dtype=self.dtype, device=self.device).contiguous()
 
         # handle = dist.broadcast(masks, src=0, async_op=True)
         dist.broadcast(masks, src=0, group=None)
@@ -221,10 +221,7 @@ class ERA5DatasetDistributed(Dataset):
         if self.local_rank == 0:
             mean = np.load(f"{config['data']['normalization_dir']}/norm_mean.npy")
             std = np.load(f"{config['data']['normalization_dir']}/norm_std.npy")
-            norms = torch.as_tensor(np.stack([mean, std], axis=0), dtype=self.dtype, requires_grad=False, device=self.device).squeeze().contiguous()
-
-            # norms[0, :] = torch.from_numpy(mean).detach().clone().squeeze()
-            # norms[1, :] = torch.from_numpy(std).detach().clone().squeeze()
+            norms = torch.as_tensor(np.stack([mean, std], axis=0), dtype=self.dtype, device=self.device).squeeze().contiguous()
 
         # handle = dist.broadcast(norms, src=0, async_op=True)
         dist.broadcast(norms, src=0, group=None)
