@@ -61,10 +61,10 @@ def training_loop(config_dict, prof=None):
         + up_group.size()
     )
 
-    data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
-    if dist.get_rank(group=None) == 0:
-        print("Getting Dataloader")
-    time.sleep(data_access_rank * 0.00005)
+    # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
+    # if dist.get_rank(group=None) == 0:
+    #     print("Getting Dataloader")
+    # time.sleep(data_access_rank * 0.00005)
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
@@ -165,7 +165,7 @@ def training_loop(config_dict, prof=None):
     if dist.get_rank(group=None) == 0:
         print("Make model Bayesian")
 
-    dist.barrier()
+    dist.barrier(device_ids=[device.index])
 
     if bayesian:
         if config_dict["transplant_from"] is not None:

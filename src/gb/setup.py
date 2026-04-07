@@ -1,6 +1,6 @@
 import os
 from collections.abc import Sequence
-
+import datetime 
 import torch
 import torch.distributed as dist
 import yaml
@@ -26,12 +26,15 @@ def init_gb_process_group(
         device = torch.device("cuda", device_id)
         torch.cuda.set_device(device)
 
+    timeout = datetime.timedelta(minutes=15)
+
     dist.init_process_group(
         backend=backend,
         rank=rank,
         world_size=world_size,
         device_id=device,
         init_method="env://",
+        timeout=timeout,
     )
     if not dist.is_initialized():
         raise RuntimeError("Process group initialization failed.")
