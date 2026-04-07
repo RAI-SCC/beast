@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import pandas as pd
@@ -52,10 +53,18 @@ class ERA5DatasetDistributed(Dataset):
         mask_list = config["data"]["constant_masks"]
 
         # Filter desired time points based on parameters and return file statistics.
+        start = time.perf_counter()
         self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
         times = pd.to_datetime(self.zarr_data.time)
         train_years = times[(times >= self.years[0]) & (times < self.years[1])]
         self.zarr_data = self.zarr_data.sel(time=train_years)
+
+        end = time.perf_counter()
+        delta_t = end - start
+        sleep_time = 1200 - delta_t
+        if sleep_time <= 0:
+            sleep_time = 1200 + abs(sleep_time)
+        time.sleep(sleep_time)
 
         self.n_data_items = len(self.zarr_data["time"])
         self.num_vars = len(self.zarr_data["feature"])  # self.num_vars

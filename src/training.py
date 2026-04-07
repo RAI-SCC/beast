@@ -61,16 +61,10 @@ def training_loop(config_dict, prof=None):
         + up_group.size()
     )
 
-    # Define the Model
-    if dist.get_rank(group=None) == 0:
-        print("Initializing Model")
-
-    set_all_seeds(initialization_rank)
-
     data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
     if dist.get_rank(group=None) == 0:
         print("Getting Dataloader")
-    time.sleep(data_access_rank * 0.0005)
+    time.sleep(data_access_rank * 0.00005)
     # Get the data loaders
     train_dataloader = get_dataloader(
         config_dict,
@@ -80,7 +74,12 @@ def training_loop(config_dict, prof=None):
         mode="train",
         dtype=dtype,
     )
-    dist.barrier()
+
+    # Define the Model
+    if dist.get_rank(group=None) == 0:
+        print("Initializing Model")
+
+    set_all_seeds(initialization_rank)
 
     ########### Tiny Bellbeast
     if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
@@ -165,6 +164,8 @@ def training_loop(config_dict, prof=None):
 
     if dist.get_rank(group=None) == 0:
         print("Make model Bayesian")
+
+    dist.barrier()
 
     if bayesian:
         if config_dict["transplant_from"] is not None:

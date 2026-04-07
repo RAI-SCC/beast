@@ -122,4 +122,8 @@ echo "Running cmd:"
 echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${remaining_args[@]}"
 echo ""
 
+export NCCL_IB_TIMEOUT=100
+export UCX_RC_TIMEOUT=8s
+export NCCL_IB_RETRY_CNT=20
+
 srun ${SYSTEM_SLURM_PARAMS[@]} ${IMAGE_SHM} systems/venv_entry.sh $PYTHON_CMD $WORKDIR/$python_script "${remaining_args[@]}"
