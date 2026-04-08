@@ -77,7 +77,7 @@ class ERA5DatasetDistributed(Dataset):
                 f"{config['data']['normalization_dir']}/norm_std.npy"
             )
 
-        execute_in_waves(load_data, 2)
+        execute_in_waves(load_data)
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -105,7 +105,7 @@ class ERA5DatasetDistributed(Dataset):
         """Return total number of samples."""
         return self.n_data_items - self.dt
 
-    def __load_data(self, idx):
+    def __getitem__(self, idx):
         """
         Return single input, target.
 
@@ -150,12 +150,6 @@ class ERA5DatasetDistributed(Dataset):
 
         target = torch.tensor(y, dtype=self.dtype)
         return input, target
-
-    def __getitem__(self, idx):
-        if idx == 0:
-            return execute_in_waves(lambda: self.__load_data(idx), 2)
-        else:
-            return self.__load_data(idx)
 
     def get_constant_masks(self):
         return torch.tensor(
@@ -210,7 +204,7 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         """Return total number of samples."""
         return self.n_data_items - 2 * self.dt
 
-    def __load_data(self, idx):
+    def __getitem__(self, idx):
         """
         Return single input, target.
 

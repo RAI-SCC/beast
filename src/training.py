@@ -28,6 +28,7 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
+    execute_in_waves,
     get_spatial_weights,
     load_latest_model_states,
     load_state_dict,
@@ -390,12 +391,19 @@ def train_one_epoch(
     if dist.get_rank(group=None) == 0:
         print("Let's go... ")
 
-    for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
+    dl_iter = iter(dataloader)
+    for i in range(len(dataloader)):
         if epoch == 0 and i < 10000 and lr_scheduler is not None:
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
                 warm = i * (max_values[index] - start_lr) / 10000 + start_lr
                 g["lr"] = warm
+
+        # Desync on first iteration
+        if i == 0:
+            x, y, dl_start, dl_end = execute_in_waves(lambda: next(dl_iter))
+        else:
+            x, y, dl_start, dl_end = next(dl_iter)
 
         x = x.to(device)
         y = y.to(device)

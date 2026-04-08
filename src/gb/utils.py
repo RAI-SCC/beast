@@ -2,6 +2,7 @@ import math
 import os
 import random
 import re
+import time
 import types
 
 import numpy as np
@@ -27,17 +28,19 @@ def execute_in_waves(func, wave_size: int = 128):
     result = None
 
     for group in range(num_groups):
+        wave_start = time.time()
         start_rank = group * wave_size
         end_rank = start_rank + wave_size
 
         if global_rank < end_rank and global_rank >= start_rank:
             result = func()
-            print(
-                f"R{global_rank}/{world_size}: Executed function {func.__name__} in wave {group}"
-            )
 
         dist.barrier(group=None)  # Synchronize after each wave
-        print(f"R{global_rank}/{world_size}: Synchronized after wave {group}")
+        wave_end = time.time()
+        if global_rank == 0:
+            print(
+                f"R{global_rank}/{world_size}: Wave {group} of {func.__name__} executed in {wave_end - wave_start}"
+            )
 
     return result
 
