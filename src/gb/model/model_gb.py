@@ -387,9 +387,10 @@ class Bellbeast(torch.nn.Module):
 
     def forward(self, x):
         # noise has shape [(sample), batch, noise_dim]
-        noise = torch.randn(x.shape[0], self.noise_dim, device=self.device).to(
-            self.dtype
-        )
+        # noise = torch.randn(x.shape[0], self.noise_dim, device=self.device).to(
+        #     self.dtype
+        # )
+        noise = (torch.randn(x.shape[0], self.noise_dim, device=self.device).to(self.dtype)/self.noise_dim)
 
         # Define masks once upon initialization (dependent on batch dimension)
         # Note: Masks do not currently work with torch flash.

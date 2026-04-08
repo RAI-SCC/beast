@@ -10,6 +10,10 @@ import yaml
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
+from gb.comm import (
+    get_process_group,
+)
+
 # Import evaluation
 # Import utility functions
 # Import Dataloaders
@@ -24,7 +28,6 @@ from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
-    dist_clip_grad_norm_,
     get_spatial_weights,
     load_latest_model_states,
     load_state_dict,
@@ -32,9 +35,6 @@ from gb.utils import (
     set_all_seeds,
     set_dtype,
     transplant_weights,
-)
-from gb.comm import (
-    get_process_group,
 )
 
 
@@ -142,6 +142,9 @@ def training_loop(config_dict, prof=None):
             },
         ],
         lr=config_dict["training"]["normal_lr"],
+        betas=(0.9, 0.90),
+        eps=1e-6,
+        weight_decay=0,
     )
 
     # Make model expert
@@ -205,7 +208,7 @@ def training_loop(config_dict, prof=None):
             optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
         )
     else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         scheduler = None
 
     # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
@@ -246,6 +249,7 @@ def training_loop(config_dict, prof=None):
     # These numbers are already summed across all ranks (not just the dtp group)
     if dist.get_rank(group=None) == 0:
         print("Counting FLOP")
+
     forward_flops, backward_flops, total_flops = count_flops(
         model,
         train_dataloader,
@@ -387,13 +391,13 @@ def train_one_epoch(
         print("Let's go... ")
 
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
-        if epoch == 0 and i < 5000 and lr_scheduler is not None:
+        if epoch == 0 and i < 10000 and lr_scheduler is not None:
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
-                warm = i * (max_values[index] - start_lr) / 5000 + start_lr
+                warm = i * (max_values[index] - start_lr) / 10000 + start_lr
                 g["lr"] = warm
 
-        x = x.to(device)  # ToDO: Run test if loading data directly to GPU
+        x = x.to(device)
         y = y.to(device)
         gpu_time = time.time_ns()
 
@@ -409,16 +413,28 @@ def train_one_epoch(
         # Backpropagation
         loss.backward()
 
-        if not bayesian:
-            clipped_norm = dist_clip_grad_norm_(
-                model.parameters(), 0.6, group=channel_group
-            )
+        # if not bayesian:
+        #     clipped_norm = dist_clip_grad_norm_(
+        #         model.parameters(), 0.6, group=channel_group
+        #     )
+        clipped_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+
         optimizer.step()
         step_end = time.time_ns()
 
         loss_sum = loss_sum + loss.detach()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
+
+        if i % config_dict["training"]["checkpoint_interval"] == 0:
+            save_checkpoint(
+                checkpoint_path,
+                model,
+                optimizer,
+                epoch,
+                i,
+                loss_sum,
+            )
 
         if i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
