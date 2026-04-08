@@ -52,17 +52,15 @@ class ERA5DatasetDistributed(Dataset):
         mask_path = config["data"]["constant_masks_path"]
         mask_list = config["data"]["constant_masks"]
 
-        # Filter desired time points based on parameters and return file statistics.
-         #start = time.perf_counter()
-
         group_size = 128          # ranks per wave — tune to filesystem concurrency
         num_groups =  (dist.get_world_size(group=None) + group_size - 1) // group_size 
         global_rank = dist.get_rank(group=None)
+        self.num_vars = 84
+        self.norm_values = {}
 
         for group in range(num_groups):
             start_rank = group * group_size
             end_rank = start_rank + group_size
-
             if global_rank < end_rank and global_rank >= start_rank:
                 start = time.perf_counter()
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
@@ -70,39 +68,30 @@ class ERA5DatasetDistributed(Dataset):
                 times = pd.to_datetime(self.zarr_data.time)
                 train_years = times[(times >= self.years[0]) & (times < self.years[1])]
                 self.zarr_data = self.zarr_data.sel(time=train_years)
-                
                 self.n_data_items = len(self.zarr_data["time"])
-                self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
+                self.num_vars = len(self.zarr_data["feature"])  
+                
+                self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+                self.num_masks = self.constant_masks.shape[0]
+
+                # normalization for pressure levels and standard deviation
+                self.norm_values["mean"] = np.load(
+                    f"{config['data']['normalization_dir']}/norm_mean.npy"
+                )
+                self.norm_values["std"] = np.load(
+                    f"{config['data']['normalization_dir']}/norm_std.npy"
+                )
                 end = time.perf_counter()
-                print(f"Rank {global_rank} has loaded data")
                 delta_t = end - start
                 if (30 - delta_t) > 0:
                     time.sleep(30 - delta_t)
 
+                print(f"Rank {global_rank} has loaded data: constant masks = {self.constant_masks.sum()}, norm[mean] = {self.norm_values["mean"].sum()}")
+
             else:
                 time.sleep(30)
 
-            #dist.barrier(device_ids=[self.device.index])
-
-
- 
-        with torch.no_grad():
-            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-            self.num_masks = self.constant_masks.shape[0]
-            # self.num_masks = 3
-            # normalization for pressure levels and standard deviation
-            self.norm_values = {}
-            self.norms = self._load_normalizations(config)
-
-            # self.norms_handle.wait()
-            self.norm_values["mean"] = (
-                self.norms[0, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-            )
-            self.norm_values["std"] = (
-                self.norms[1, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-            )
-
-        self.received_masks_and_norms = False
+        
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -125,6 +114,7 @@ class ERA5DatasetDistributed(Dataset):
             self.in_var = [0, self.num_vars]
             self.in_masks = [0, self.num_masks]
             self.in_out_xlon = [0, self.xlon]
+        
 
     def __len__(self):
         """Return total number of samples."""
@@ -137,15 +127,6 @@ class ERA5DatasetDistributed(Dataset):
         idx: int
                 global index of item
         """
-        # if not self.received_masks_and_norms:
-        #     #self.mask_handle.wait()
-        #     #self.norms_handle.wait()
-        #     self.constant_masks = self.constant_masks.to("cpu")
-
-        #     self.norm_values["mean"] = self.norms[0, :].to("cpu").numpy()
-        #     self.norm_values["std"] = self.norms[1, :].to("cpu").numpy()
-
-        #     self.received_masks_and_norms = True
 
         target_idx = idx + self.dt
         x = self.zarr_data.isel(
@@ -186,11 +167,13 @@ class ERA5DatasetDistributed(Dataset):
         return input, target
 
     def get_constant_masks(self):
-        return self.constant_masks[
-            self.in_masks[0] : self.in_masks[1],
-            : self.xlat,
-            self.in_out_xlon[0] : self.in_out_xlon[1],
-        ]
+        return torch.tensor(
+            self.constant_masks[
+                self.in_masks[0] : self.in_masks[1],
+                : self.xlat,
+                self.in_out_xlon[0] : self.in_out_xlon[1],
+            ]
+        )
 
     def _load_constant_mask_2d(self, folder_path, mask_list):
         """
@@ -207,37 +190,12 @@ class ERA5DatasetDistributed(Dataset):
             of shape (num_masks, n_lat, n_lon)
         """
         # Load data from numpy files
-
-        masks = torch.zeros(
-            (3, self.xlat, self.xlon), dtype=self.dtype, requires_grad=False
-        ).to(self.device)
-
-        if self.local_rank == 0:
-            data_files = [f for f in os.listdir(folder_path) if f in mask_list]
-            data = []
-            for i, file in enumerate(data_files):
-                data.append(np.load(os.path.join(folder_path, file)))
-            
-            masks = torch.as_tensor(np.stack(data, axis=0), dtype=self.dtype, device=self.device).contiguous()
-
-        # handle = dist.broadcast(masks, src=0, async_op=True)
-        dist.broadcast(masks, src=0, group=None)
-        masks = masks.to(torch.device("cpu"))
+        data_files = [f for f in os.listdir(folder_path) if f in mask_list]
+        data = []
+        for file in data_files:
+            data.append(np.load(os.path.join(folder_path, file)))
+        masks = np.stack(data, axis=0)
         return masks
-
-    def _load_normalizations(self, config):
-
-        norms = torch.zeros((2, self.num_vars), requires_grad=False).to(self.device)
-        if self.local_rank == 0:
-            mean = np.load(f"{config['data']['normalization_dir']}/norm_mean.npy")
-            std = np.load(f"{config['data']['normalization_dir']}/norm_std.npy")
-            norms = torch.as_tensor(np.stack([mean, std], axis=0), dtype=self.dtype, device=self.device).squeeze().contiguous()
-
-        # handle = dist.broadcast(norms, src=0, async_op=True)
-        dist.broadcast(norms, src=0, group=None)
-        norms = norms.to(torch.device("cpu"))
-
-        return norms
 
 
 class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
