@@ -47,7 +47,7 @@ def main():
         print(f"Mask path: {config_dict['data']['constant_masks_path']}")
         print(f"Normalization dir: {config_dict['data']['normalization_dir']}")
 
-    from src.training import training_loop
+    from training import training_loop
 
     training_loop(config_dict)
 

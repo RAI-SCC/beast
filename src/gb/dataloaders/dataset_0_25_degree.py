@@ -7,7 +7,7 @@ import torch.distributed as dist
 import xarray as xr
 from torch.utils.data import Dataset
 
-from src.gb.utils import execute_in_waves
+from gb.utils import execute_in_waves
 
 
 class ERA5DatasetDistributed(Dataset):
@@ -55,6 +55,7 @@ class ERA5DatasetDistributed(Dataset):
 
         # Filter desired time points based on parameters and return file statistics.
         # start = time.perf_counter()
+        self.norm_values = {}
 
         def load_data():
             self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
@@ -77,24 +78,6 @@ class ERA5DatasetDistributed(Dataset):
             )
 
         execute_in_waves(load_data, 2)
-
-        with torch.no_grad():
-            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-            self.num_masks = self.constant_masks.shape[0]
-            # self.num_masks = 3
-            # normalization for pressure levels and standard deviation
-            self.norm_values = {}
-            self.norms = self._load_normalizations(config)
-
-            # self.norms_handle.wait()
-            self.norm_values["mean"] = (
-                self.norms[0, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-            )
-            self.norm_values["std"] = (
-                self.norms[1, :].unsqueeze(dim=1).unsqueeze(dim=2).numpy()
-            )
-
-        self.received_masks_and_norms = False
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -227,7 +210,7 @@ class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
         """Return total number of samples."""
         return self.n_data_items - 2 * self.dt
 
-    def __getitem__(self, idx):
+    def __load_data(self, idx):
         """
         Return single input, target.
 

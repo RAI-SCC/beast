@@ -85,6 +85,7 @@ def init_gb_process_group(
     # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
     # # Initialize GPUs
     device = "cuda" if backend == "nccl" else "cpu"
+    device_type = device
     if backend == "nccl":
         device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
         device = torch.device("cuda", device_id)
@@ -100,7 +101,7 @@ def init_gb_process_group(
     if not dist.is_initialized():
         raise RuntimeError("Process group initialization failed.")
 
-    return _create_process_mesh_dict(mesh_dims, device_type=device)
+    return _create_process_mesh_dict(mesh_dims, device_type=device_type)
 
 
 def _create_process_mesh_dict(
