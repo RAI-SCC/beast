@@ -1,0 +1,50 @@
+data:
+    dt: 6
+    train_data_path: "era5_chunked.zarr" # era5_chunked.zarr on jupiter, era5_preprocessed.zarr on lumi
+    valid_data_path: "era5_chunked.zarr"
+    constant_masks_path: "constant_masks"
+    constant_masks : ["soil_type_normalized.npy", "topography_normalized.npy", "land_mask.npy"]
+    preprocessed: False
+    normalization_dir: "data/normalization"
+    train_subset: -1
+    valid_subset: -1
+    train_time_range: ["1979-01-01", "2020-12-31"]
+    valid_time_range: ["2021-01-01", "2021-12-31"]
+    test_time_range: ["2021-01-01", "2022-12-31"]
+    dataset_subsampling: 1
+    target_subsampling: 6
+    prefetch_factor: 2
+    num_workers: 7
+    xlat: 720
+    xlon: 1440
+    n_variables: 84
+    n_in_timesteps: 2 #Can be 1 or 2, other not supported atm
+model:
+    n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
+    embedding_dimension: 1536
+    n_output_channels: 84
+    n_attn_heads: [12,24,12]
+    patch_size: 2
+    noise_dim: 32
+    window_size_outer: [30, 60] # will work on JUPITER, not lumi due to divisibility
+    window_size_inner: [20, 30]
+    n_attn_blocks: [1,1,1]
+    bayesian: True
+    latent_rollout: 1
+training:
+    tf32: True
+    n_samples: 1 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_epochs: 50
+    batch_size: 1
+    lr_scheduler: True
+    low_lr: 0.00001
+    normal_lr: 0.0001
+    dtype: float32
+    autocast: True
+    timings: False
+    checkpoint_interval: 1000
+    flash_attn: True
+jigsaw:
+    parallelism: 8
+    type: jigsaw
+mesh_dims: [1, 32, -1, 4, 2] # experts, dp, up, jigsaw spatial, jigsaw channels
