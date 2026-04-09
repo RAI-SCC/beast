@@ -62,10 +62,10 @@ set -euo pipefail
 EXP_NAME="up_weak_scaling_baseline"
 VAR_NAME="training_batch_size"
 VARS=(1)
-EMBED_DIM=512
-LOCAL_SAMPLES=2
+EMBED_DIM=1024
+LOCAL_SAMPLES=1
 MESH_STRING="1,1,-1,4,2"
-NODES=(1 4 8 16 32 64 128 256 512 1024)
+NODES=(2 4 8 16 32 64 128 256 512 1024)
 X_AXIS_NAME="nodes"
 SUBSET_SIZE=500
 
@@ -145,10 +145,10 @@ done
 REPO_ROOT="$(pwd)"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-EXPERIMENT_DIR="${PROJECT_DIR}/output/${SYSTEM_NAME}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
+EXPERIMENT_DIR="${SCRATCH_DIR}/output/${SYSTEM_NAME}/${EXP_NAME}_$(date +%Y%m%d_%H%M%S)"
 CONFIG_DIR="${EXPERIMENT_DIR}/configs"
 LOG_DIR="${EXPERIMENT_DIR}/logs"
-ANALYSIS_DIR="${REPO_ROOT}/results/${SYSTEM_NAME}"
+ANALYSIS_DIR="${EXPERIMENT_DIR}/results"
 
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$ANALYSIS_DIR"
@@ -193,19 +193,20 @@ EOF
         experiments/run_gb_script.sh \
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
-        --config_file "configs/bellbeast_config_lumi.yaml" \
         --skip_validation \
+        --config_file "configs/hero_config_lumi.yaml" \
         mesh_dims=${MESH_STRING} \
         data_train_subset=${SUBSET_SIZE} \
         training_n_samples=${LOCAL_SAMPLES} \
         model_embedding_dimension=${EMBED_DIM} \
         ${VAR_NAME}=${VAR}
+    )
 
     JOB_ID=$(echo "$RAW" | awk '{print $NF}')
     JOB_IDS+=("$JOB_ID")
 
     echo "  slurm_job_id: ${JOB_ID}" >> "$CONFIG_FILE"
-    cp configs/bellbeast_config_lumi.yaml "${CONFIG_DIR}/"
+    cp configs/hero_config_lumi.yaml "${CONFIG_DIR}/"
 
     echo "Submitted ${RUN_NAME} → SLURM job ${JOB_ID}"
     RUN_ID=$(( RUN_ID + 1 ))
@@ -214,79 +215,3 @@ done
 
 echo ""
 echo "All sweep jobs submitted. Experiment root: ${EXPERIMENT_DIR}"
-
-
-# ── Build afterany dependency string  job1:job2:job3 … ───────────────────────
-DEPENDENCY=$(IFS=:; echo "${JOB_IDS[*]}")
-SWEEP_TAG=$(basename "${EXPERIMENT_DIR}")
-PLOT_PATH="${ANALYSIS_DIR}/scaling_${SWEEP_TAG}.png"
-
-# ── Write self-contained plotting job script ──────────────────────────────────
-PLOT_SCRIPT="${EXPERIMENT_DIR}/plot_job.sh"
-cat > "${PLOT_SCRIPT}" <<PLOTEOF
-#!/bin/bash
-#SBATCH -A "$ACCOUNT"
-#SBATCH -p "$PARTITION"
-#SBATCH --nodes 1
-#SBATCH --tasks-per-node 1
-#SBATCH --cpus-per-task 4
-#SBATCH --time "$PLOT_TIME"
-#SBATCH --job-name="plot_${SWEEP_TAG}"
-#SBATCH --output="${LOG_DIR}/plot_${SWEEP_TAG}.out"
-#SBATCH --error="${LOG_DIR}/plot_${SWEEP_TAG}.err"
-
-# /etc/bashrc on Jupiter sets BASHRCSOURCED without exporting it first,
-# which trips up 'set -u'.  Source it with nounset temporarily disabled.
-set +u
-source /etc/bashrc 2>/dev/null || true
-set -u
-set -eo pipefail
-
-echo "========================================================"
-echo " Scaling plot job"
-echo " Sweep     : ${SWEEP_TAG}"
-echo " Logs dir  : ${LOG_DIR}"
-echo " Output    : ${PLOT_PATH}"
-echo " Started   : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "========================================================"
-
-module use /appl/local/csc/modulefiles
-module load pytorch
-
-python3 "${REPO_ROOT}/experiments/parse_scaling.py" \\
-    --logs_dir  "${LOG_DIR}" \\
-    --out_path  "${PLOT_PATH}" \\
-    --sweep_id  "${SWEEP_TAG}" \\
-    --x_axis "${X_AXIS_NAME}"
-
-echo ""
-echo "Plot written → ${PLOT_PATH}"
-echo "Finished    : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PLOTEOF
-
-chmod +x "${PLOT_SCRIPT}"
-
-# ── Submit plotting job with afterany dependency ──────────────────────────────
-# afterany fires after every listed job ends, regardless of exit status.
-PLOT_JOB_RAW=$(sbatch \
-    --dependency="afterany:${DEPENDENCY}" \
-    --kill-on-invalid-dep=yes \
-    "${PLOT_SCRIPT}")
-
-PLOT_JOB_ID=$(echo "$PLOT_JOB_RAW" | awk '{print $NF}')
-
-# Record the plotting job in the sweep metadata
-cat >> "${EXPERIMENT_DIR}/sweep_config.yaml" <<EOF
-  plot_job_id: ${PLOT_JOB_ID}
-  plot_dependency: "${DEPENDENCY}"
-  plot_output: "${PLOT_PATH}"
-EOF
-
-echo ""
-echo "Plot job submitted → SLURM job ${PLOT_JOB_ID}"
-echo "  dependency : afterany:${DEPENDENCY}"
-echo "  output     : ${PLOT_PATH}"
-echo ""
-echo "Monitor with:"
-echo "  squeue -j ${PLOT_JOB_ID}"
-echo "  squeue -u \$USER"
