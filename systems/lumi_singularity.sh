@@ -83,8 +83,6 @@ export SYSTEM_SLURM_PARAMS=(
     singularity
     exec
     --bind "$DATA_DIR"
-    # $SIF
-    # systems/venv_entry.sh
 )
 
 setup_system(){

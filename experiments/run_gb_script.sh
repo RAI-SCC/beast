@@ -95,27 +95,12 @@ export IMAGE_SHM=${SHM_DIR}/${CONTAINER_NAME}
 export IMAGE_REGISTRY=$SIF
 srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p $(dirname ${IMAGE_SHM}) && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying ${IMAGE_REGISTRY} to ${IMAGE_SHM}" && cp ${IMAGE_REGISTRY} ${IMAGE_SHM}'
 
-# 1.2) Copy constant mask and normalization data to dev/shm on each node
-# export MASK_SHM=${SHM_DIR}/constant_masks
-# export NORM_SHM=${SHM_DIR}/normalization
-# export MASK_REGISTRY=$DATA_DIR/constant_masks
-# export NORM_REGISTRY=$WORKDIR/data/normalization
-# srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p ${MASK_SHM} && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying masks to ${MASK_SHM}" && cp ${MASK_REGISTRY}/soil_type_normalized.npy ${MASK_SHM}/soil_type_normalized.npy && cp ${MASK_REGISTRY}/topography_normalized.npy ${MASK_SHM}/topography_normalized.npy && cp ${MASK_REGISTRY}/land_mask.npy ${MASK_SHM}/land_mask.npy'
-# srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p ${NORM_SHM} && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying norms to ${NORM_SHM}" && cp ${NORM_REGISTRY}/norm_mean.npy ${NORM_SHM}/norm_mean.npy && cp ${NORM_REGISTRY}/norm_std.npy ${NORM_SHM}/norm_std.npy'
-
 # 2.) Set apptainer temporary directories and pycache to dev shm as well
 export APPTAINER_TMPDIR=${SHM_DIR}/apptainer/tmp/
 export APPTAINER_CACHEDIR=${SHM_DIR}/apptainer/cache/
 export PYTHONPYCACHEPREFIX=${SHM_DIR}/pycache/
 # Create directories
 srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p ${APPTAINER_TMPDIR} ${PYTHONPYCACHEPREFIX} ${APPTAINER_CACHE_DIR}'
-
-
-# 4.) Run warmup with some tasks per node and time it (reference: 4608 ranks on 64 nodes takes ~1 minute)
-echo "Running warmup ..."
-time srun  ${SYSTEM_SLURM_PARAMS[@]} ${IMAGE_SHM} systems/venv_entry.sh \
-  python -c "from mpi4py import MPI; MPI.COMM_WORLD.barrier(); print(f'[{MPI.COMM_WORLD.rank}|{MPI.COMM_WORLD.size}] global warmup completed')"
-echo "Finished warmup."
 
 # Run acutal job
 echo "Running cmd:"

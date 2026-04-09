@@ -48,10 +48,10 @@ export NCCL_IB_HCA="mlx5"
 export NCCL_NET_GDR_LEVEL=5
 export NCCL_P2P_LEVEL=NVL
 
-# Timeout configurations
-export NCCL_IB_TIMEOUT=100
+# Timeout configurations (for correctness, max values, maybe it does not work)
+export NCCL_IB_TIMEOUT=31
 export UCX_RC_TIMEOUT=8s
-export NCCL_IB_RETRY_CNT=20
+export NCCL_IB_RETRY_CNT=7
 
 # PMIx for Slurm integration
 export PMIX_MCA_gds="hash"
@@ -84,8 +84,6 @@ export SYSTEM_SLURM_PARAMS=(
     exec
     --nv
     --bind "$DATA_DIR":"/workspace/"
-    #$SIF
-    #systems/venv_entry.sh
 )
 
 setup_system() {

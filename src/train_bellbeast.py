@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import torch.distributed as dist
 import yaml
@@ -49,7 +50,28 @@ def main():
 
     from training import training_loop
 
-    training_loop(config_dict)
+    if config_dict["profile"] and global_rank == 3:
+        import torch.profiler as tprofiler
+
+        print("Profiling ... Please wait")
+        with tprofiler.profile(
+            activities=[
+                tprofiler.ProfilerActivity.CPU,
+                tprofiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+            profile_memory=True,
+            schedule=tprofiler.schedule(skip_first=1, wait=2, warmup=2, active=3),
+            with_stack=True,
+            # with_flops=True,
+            on_trace_ready=tprofiler.tensorboard_trace_handler(
+                f"{os.getenv('PROFILE_DIR')}/tb_logs_rank_{global_rank}"
+            ),
+        ) as prof:
+            training_loop(config_dict, prof)
+
+    else:
+        training_loop(config_dict)
 
     if dist.get_rank(group=None) == 0:
         print("FINITE!")
