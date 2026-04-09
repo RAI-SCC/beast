@@ -10,13 +10,10 @@ import yaml
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
+from evaluation import validate, validate_deterministic
 from gb.comm import (
     get_process_group,
 )
-
-# Import evaluation
-# Import utility functions
-# Import Dataloaders
 from gb.dataloaders.dataloader import get_dataloader
 from gb.losses.up_loss import NewUP_AllGaussLoss
 from gb.model.expert import Expert
@@ -224,6 +221,17 @@ def training_loop(config_dict, prof=None):
         mode="train",
         dtype=dtype,
     )
+    if not config_dict["skip_validation"]:
+        valid_dataloader = get_dataloader(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            device=device,
+            mode="validate",
+            dtype=dtype,
+        )
+    else:
+        valid_dataloader = None
 
     if dist.get_rank(group=None) == 0:
         print("Setup loss")
@@ -326,6 +334,35 @@ def training_loop(config_dict, prof=None):
                 f"Epoch {epoch} average loss {avg_loss}, time [min]: {(end_time - start_time) / 60.0}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
 
+        if not config_dict["skip_validation"]:
+            if bayesian:
+                data_fit_loss, prior_matching_loss = validate(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    n_samples=n_samples,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+            else:
+                data_fit_loss = validate_deterministic(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+                prior_matching_loss = None
+
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"Epoch {epoch} Validation: loss {data_fit_loss}, {prior_matching_loss}"
+                )
+
     if config_dict["timings"]:
         timings_path = os.path.join(results_path, "timings")
         time_df = pd.DataFrame(
@@ -393,7 +430,7 @@ def train_one_epoch(
 
     dl_iter = iter(dataloader)
     for i in range(len(dataloader)):
-        if epoch == 0 and i < 10000 and lr_scheduler is not None:
+        if (epoch == 0) and (i < 10000) and (lr_scheduler is not None):
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
                 warm = i * (max_values[index] - start_lr) / 10000 + start_lr
