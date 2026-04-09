@@ -1,5 +1,4 @@
 import os
-import time
 
 import numpy as np
 import pandas as pd
@@ -7,6 +6,8 @@ import torch
 import torch.distributed as dist
 import xarray as xr
 from torch.utils.data import Dataset
+
+from gb.utils import execute_in_waves
 
 
 class ERA5DatasetDistributed(Dataset):
@@ -52,46 +53,31 @@ class ERA5DatasetDistributed(Dataset):
         mask_path = config["data"]["constant_masks_path"]
         mask_list = config["data"]["constant_masks"]
 
-        group_size = 128          # ranks per wave — tune to filesystem concurrency
-        num_groups =  (dist.get_world_size(group=None) + group_size - 1) // group_size 
-        global_rank = dist.get_rank(group=None)
-        self.num_vars = 84
+        # Filter desired time points based on parameters and return file statistics.
+        # start = time.perf_counter()
         self.norm_values = {}
 
-        for group in range(num_groups):
-            start_rank = group * group_size
-            end_rank = start_rank + group_size
-            if global_rank < end_rank and global_rank >= start_rank:
-                start = time.perf_counter()
-                self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
-                
-                times = pd.to_datetime(self.zarr_data.time)
-                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
-                self.zarr_data = self.zarr_data.sel(time=train_years)
-                self.n_data_items = len(self.zarr_data["time"])
-                self.num_vars = len(self.zarr_data["feature"])  
-                
-                self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-                self.num_masks = self.constant_masks.shape[0]
+        def load_data():
+            self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
 
-                # normalization for pressure levels and standard deviation
-                self.norm_values["mean"] = np.load(
-                    f"{config['data']['normalization_dir']}/norm_mean.npy"
-                )
-                self.norm_values["std"] = np.load(
-                    f"{config['data']['normalization_dir']}/norm_std.npy"
-                )
-                end = time.perf_counter()
-                delta_t = end - start
-                if (30 - delta_t) > 0:
-                    time.sleep(30 - delta_t)
+            times = pd.to_datetime(self.zarr_data.time)
+            train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+            self.zarr_data = self.zarr_data.sel(time=train_years)
 
-                print(f"Rank {global_rank} has loaded data: constant masks = {self.constant_masks.sum()}, norm[mean] = {self.norm_values["mean"].sum()}")
+            self.n_data_items = len(self.zarr_data["time"])
+            self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
 
-            else:
-                time.sleep(30)
+            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+            self.num_masks = self.constant_masks.shape[0]
 
-        
+            self.norm_values["mean"] = np.load(
+                f"{config['data']['normalization_dir']}/norm_mean.npy"
+            )
+            self.norm_values["std"] = np.load(
+                f"{config['data']['normalization_dir']}/norm_std.npy"
+            )
+
+        execute_in_waves(load_data)
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -114,7 +100,6 @@ class ERA5DatasetDistributed(Dataset):
             self.in_var = [0, self.num_vars]
             self.in_masks = [0, self.num_masks]
             self.in_out_xlon = [0, self.xlon]
-        
 
     def __len__(self):
         """Return total number of samples."""

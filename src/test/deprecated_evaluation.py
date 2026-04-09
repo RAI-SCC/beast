@@ -9,8 +9,8 @@ import torch_blue
 from jigsaw import plotting_functions as plot_fns
 from torch import Tensor
 
+from gb.comm import get_process_group
 from gb.losses.up_loss import GaussianAggregation
-from gb.utils import get_process_group
 
 
 @torch.no_grad()

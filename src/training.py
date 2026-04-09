@@ -10,9 +10,10 @@ import yaml
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
-# Import evaluation
-# Import utility functions
-# Import Dataloaders
+from evaluation import validate, validate_deterministic
+from gb.comm import (
+    get_process_group,
+)
 from gb.dataloaders.dataloader import get_dataloader
 from gb.losses.up_loss import NewUP_AllGaussLoss
 from gb.model.expert import Expert
@@ -20,14 +21,11 @@ from gb.model.expert import Expert
 # Import model
 from gb.model.model_gb import Bellbeast
 from gb.model.model_gb_tiny import TinyBellbeast
-from gb.setup import (
-    get_process_group,
-)
 from gb.utils import (
     convert_jigsaw_vi,
     count_flops,
     count_model_parameters,
-    dist_clip_grad_norm_,
+    execute_in_waves,
     get_spatial_weights,
     load_latest_model_states,
     load_state_dict,
@@ -60,8 +58,6 @@ def training_loop(config_dict, prof=None):
         + ep_group.rank() * channel_group.size()
         + up_group.size()
     )
-
-
 
     # Define the Model
     if dist.get_rank(group=None) == 0:
@@ -156,7 +152,7 @@ def training_loop(config_dict, prof=None):
     if dist.get_rank(group=None) == 0:
         print("Make model Bayesian")
 
-    #dist.barrier(device_ids=[device.index])
+    # dist.barrier(device_ids=[device.index])
 
     if bayesian:
         if config_dict["transplant_from"] is not None:
@@ -210,13 +206,13 @@ def training_loop(config_dict, prof=None):
             optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
         )
     else:
-        #optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         scheduler = None
 
     # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
     if dist.get_rank(group=None) == 0:
         print("Getting Dataloader")
-    
+
     train_dataloader = get_dataloader(
         config_dict,
         dtp_process_group=dtp_group,
@@ -225,6 +221,17 @@ def training_loop(config_dict, prof=None):
         mode="train",
         dtype=dtype,
     )
+    if not config_dict["skip_validation"]:
+        valid_dataloader = get_dataloader(
+            config_dict,
+            dtp_process_group=dtp_group,
+            dp_process_group=dp_group,
+            device=device,
+            mode="validate",
+            dtype=dtype,
+        )
+    else:
+        valid_dataloader = None
 
     if dist.get_rank(group=None) == 0:
         print("Setup loss")
@@ -251,7 +258,7 @@ def training_loop(config_dict, prof=None):
     # These numbers are already summed across all ranks (not just the dtp group)
     if dist.get_rank(group=None) == 0:
         print("Counting FLOP")
-        
+
     forward_flops, backward_flops, total_flops = count_flops(
         model,
         train_dataloader,
@@ -326,34 +333,35 @@ def training_loop(config_dict, prof=None):
             print(
                 f"Epoch {epoch} average loss {avg_loss}, time [min]: {(end_time - start_time) / 60.0}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
-        if bayesian:
-            data_fit_loss, prior_matching_loss = validate(
-                config_dict=config_dict,
-                model=model,
-                expert_weights=expert_loss_weighting,
-                n_samples=n_samples,
-                dataloader=valid_dataloader,
-                device=device,
-                epoch=epoch,
-                results_path=validation_results_path,
-            )
-        else:
-            data_fit_loss = validate_deterministic(
-                config_dict=config_dict,
-                model=model,
-                expert_weights=expert_loss_weighting,
-                dataloader=valid_dataloader,
-                device=device,
-                epoch=epoch,
-                results_path=validation_results_path,
-            )
-            prior_matching_loss = None
 
-        if dist.get_rank(group=None) == 0:
-            print(
-                f"Epoch {epoch} Validation: loss {data_fit_loss}, {prior_matching_loss}"
-            )
+        if not config_dict["skip_validation"]:
+            if bayesian:
+                data_fit_loss, prior_matching_loss = validate(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    n_samples=n_samples,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+            else:
+                data_fit_loss = validate_deterministic(
+                    config_dict=config_dict,
+                    model=model,
+                    expert_weights=expert_loss_weighting,
+                    dataloader=valid_dataloader,
+                    device=device,
+                    epoch=epoch,
+                    results_path=validation_results_path,
+                )
+                prior_matching_loss = None
 
+            if dist.get_rank(group=None) == 0:
+                print(
+                    f"Epoch {epoch} Validation: loss {data_fit_loss}, {prior_matching_loss}"
+                )
 
     if config_dict["timings"]:
         timings_path = os.path.join(results_path, "timings")
@@ -420,14 +428,21 @@ def train_one_epoch(
     if dist.get_rank(group=None) == 0:
         print("Let's go... ")
 
-    for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
-        if (epoch == 0) and (i < 10000) and (lr_scheduler is not None) and not bayesian:
+    dl_iter = iter(dataloader)
+    for i in range(len(dataloader)):
+        if (epoch == 0) and (i < 10000) and (lr_scheduler is not None):
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
                 warm = i * (max_values[index] - start_lr) / 10000 + start_lr
                 g["lr"] = warm
 
-        x = x.to(device)  
+        # Desync on first iteration
+        if i == 0:
+            x, y, dl_start, dl_end = execute_in_waves(lambda: next(dl_iter))
+        else:
+            x, y, dl_start, dl_end = next(dl_iter)
+
+        x = x.to(device)
         y = y.to(device)
         gpu_time = time.time_ns()
 
@@ -455,7 +470,7 @@ def train_one_epoch(
         loss_sum = loss_sum + loss.detach()
         timings.append((epoch, i, step_start, dl_start, dl_end, gpu_time, step_end))
         cum_batch_time += step_end - step_start
-        
+
         if i % config_dict["training"]["checkpoint_interval"] == 0:
             save_checkpoint(
                 checkpoint_path,
@@ -465,7 +480,7 @@ def train_one_epoch(
                 i,
                 loss_sum,
             )
-            
+
         if i % print_every_i_steps == 0:
             # Average loss over all four processes for exactness
             dist.all_reduce(loss, group=dtp_group)

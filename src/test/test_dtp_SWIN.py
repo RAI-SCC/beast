@@ -12,6 +12,7 @@ import torch.distributed as dist
 # torch blue imports
 import torch_blue
 import yaml
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 
 # Import model
 from gb.model.swin_jigsaw_025 import SWIN
@@ -22,8 +23,8 @@ from torch_blue import vi
 from torch_blue.vi import convert_to_vimodule
 from torch_blue.vi.distributions import Normal
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
-from gb.utils import get_process_group, init_gb_process_group, set_all_seeds
+from gb.comm import get_process_group, init_gb_process_group
+from gb.utils import set_all_seeds
 
 
 def training_loop(config_dict):

@@ -20,11 +20,10 @@ from torch_blue.vi.distributions import (
     MeanFieldNormal as MeanFieldNormalPredictiveDistribution,
 )
 
+from gb.comm import get_process_group, init_gb_process_group
 from gb.dataloaders.dataloader_1_5_degree import get_test_dataloader
 from gb.utils import (
     download_1_5_degree_data,
-    get_process_group,
-    init_gb_process_group,
     set_all_seeds,
 )
 

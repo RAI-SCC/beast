@@ -18,12 +18,12 @@ from jigsaw import normalization, utils
 from torch.nn.parallel import DistributedDataParallel
 from torch_blue.vi import convert_to_vimodule
 
+# Import model
+from ..gb.comm import get_process_group, init_gb_process_group
 from ..gb.dataloaders import dataloader_0_25_degree
 from ..gb.losses import up_loss
 from ..gb.model.test_models import nice_swin_jigsaw_025
-
-# Import model
-from ..gb.utils import get_process_group, init_gb_process_group, set_all_seeds
+from ..gb.utils import set_all_seeds
 
 
 def training_loop(config_dict):
