@@ -31,6 +31,7 @@ model:
     n_attn_blocks: [2, 3, 2]
     bayesian: True
     latent_rollout: 1
+    nice_norm: True
 training:
     tf32: True
     n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size(); 2 is only possible if flash_attn is True

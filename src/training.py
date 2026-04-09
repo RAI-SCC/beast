@@ -119,6 +119,7 @@ def training_loop(config_dict, prof=None):
             parallelism=config_dict["jigsaw"]["parallelism"],
             dtype=dtype,
             flash_attn=config_dict["training"]["flash_attn"],
+            nice_norm=config_dict["model"]["nice_norm"],
         )
     model = model.to(dtype).to(device)
 
@@ -458,11 +459,8 @@ def train_one_epoch(
         # Backpropagation
         loss.backward()
 
-        # if not bayesian:
-        #     clipped_norm = dist_clip_grad_norm_(
-        #         model.parameters(), 0.6, group=channel_group
-        #     )
-        clipped_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        if not bayesian:
+            clipped_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
 
         optimizer.step()
         step_end = time.time_ns()
