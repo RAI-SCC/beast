@@ -2,6 +2,7 @@ import argparse
 import os
 
 import torch
+import yaml
 
 
 def setup_config_dict(
@@ -110,5 +111,13 @@ def overwrite_config(
             elif isinstance(original_value[0], int):
                 formated_new_value = [int(x) for x in new_value.split(",")]
             config_dict[section][key] = formated_new_value
+
+    return config_dict
+
+
+def load_configuration_yaml(directory):
+    yaml_path = os.path.join(directory, "config.yaml")
+    with open(f"{yaml_path}", "r") as f:
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
     return config_dict

@@ -8,12 +8,13 @@ import torch.distributed as dist
 
 # torch blue imports
 import yaml
+from gb.dataloaders.dataloader_0_25_degree import get_dataloader
 
 # Jigsaw imports
 from jigsaw import utils
 from torch.nn.parallel import DistributedDataParallel
 
-from gb.dataloaders.dataloader_0_25_degree import get_dataloader
+from gb.comm import get_process_group, init_gb_process_group
 from gb.losses.up_loss import UP_AllGaussLoss
 from gb.model.expert import Expert
 
@@ -21,8 +22,6 @@ from gb.model.expert import Expert
 from gb.model.model_gb import Bellbeast
 from gb.utils import (
     convert_jigsaw_vi,
-    get_process_group,
-    init_gb_process_group,
     set_all_seeds,
 )
 

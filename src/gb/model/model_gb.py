@@ -1,6 +1,5 @@
 import torch
 from jigsaw import attention, convolutions, linear
-from torch.cuda import nvtx
 
 from gb.model.expert import ExpertWeightingLayer
 
@@ -60,7 +59,6 @@ class Bellbeast(torch.nn.Module):
         self.nice_norm = nice_norm
 
         self.activation = torch.nn.GELU()
-
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
@@ -470,74 +468,48 @@ class Bellbeast(torch.nn.Module):
         self.mask_out, self.mask_in = None, None
 
         # x has global shape (B, xlat, xlon, channels)
-        nvtx.range_push("Patch Embedding")
         x = self.patch_embedding(x)
-        nvtx.range_pop()
         x_res = x.clone()
         B, channels, xlat, xlon = x.shape
         x = x.reshape(B, channels, xlat * xlon).mT.view(B, xlat, xlon, channels)
 
         # attention
         for i in range(self.n_full_blocks[0]):
-            nvtx.range_push("Attn block 0")
-
-            nvtx.range_push("Get Windows")
             x = self._get_windows(x, self.window_size_outer)
-            nvtx.range_pop()
             # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
             n_windows = x.shape[0] // B
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
-            nvtx.range_push("Noise Interleave")
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
-            nvtx.range_pop()
-            nvtx.range_push("Transformer_1")
             if self.nice_norm:
                 x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
             else:
                 x = self.transformer_1[i * 2](x, mask=None)
-            nvtx.range_pop()
-            nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
-            nvtx.range_pop()
-            nvtx.range_push("Roll")
             x = self.roll_out(x)
-            nvtx.range_pop()
-            nvtx.range_push("Get Windows")
             x = self._get_windows(x, self.window_size_outer)
-            nvtx.range_pop()
-            nvtx.range_push("Transformer_1 (with mask)")
             if self.nice_norm:
                 x = self.transformer_1[i * 2 + 1](
                     x, noise_transformer, mask=self.mask_out
                 )
             else:
                 x = self.transformer_1[i * 2 + 1](x, mask=self.mask_out)
-            nvtx.range_pop()
-            nvtx.range_push("Reverse Windows")
             x = self._reverse_windows(
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
-            nvtx.range_pop()
-            nvtx.range_push("Unroll")
             x = self.unroll_out(x)  # [B, lat, lon, channels]
-            nvtx.range_pop()
-            nvtx.range_pop()
 
         x_res2 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous()
         # (B, channels, lat, lon)
-        nvtx.range_push("Downsample")
         x = self.downsample(x)
-        nvtx.range_pop()
         # (B, 2*channels, lat/2, lon/2)
 
         B, channels, xlat, xlon = x.shape
         x = x.permute(0, 2, 3, 1).contiguous()
 
         for i in range(self.n_full_blocks[1]):
-            nvtx.range_push("Attn block 1")
             x = self._get_windows(x, self.window_size_inner)
             n_windows = x.shape[0] // B
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
@@ -560,27 +532,21 @@ class Bellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_inner
             )
             x = self.unroll_in(x)  # [B, lat, lon, channels]
-            nvtx.range_pop()
 
         x = x.permute(0, 3, 1, 2).contiguous()
 
-        nvtx.range_push("Upsample")
         x = self.upsample(x)
-        nvtx.range_pop()
 
         B, channels, xlat, xlon = x.shape
 
         x = x.permute(0, 2, 3, 1).flatten(start_dim=1, end_dim=2).contiguous()
-        nvtx.range_push("Activation + Upsample Mix")
         x = self.activation(x)
         x = self.upsample_mix(x)
-        nvtx.range_pop()
         x = x.reshape(B, xlat, xlon, channels)
 
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
-            nvtx.range_push("Attn block 2")
             x = self._get_windows(x, self.window_size_outer)
             n_windows = x.shape[0] // B
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
@@ -604,12 +570,9 @@ class Bellbeast(torch.nn.Module):
                 x, B, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
-            nvtx.range_pop()
         B, xlat, xlon, channels = x.shape
         x = x.permute(0, 3, 1, 2).contiguous()
 
-        nvtx.range_push("Patch Recovery")
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
-        nvtx.range_pop()
 
         return x

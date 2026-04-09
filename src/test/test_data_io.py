@@ -17,7 +17,7 @@ import torch.distributed as dist
 import xarray as xr
 import yaml
 
-from gb.utils import get_process_group, init_gb_process_group
+from gb.comm import get_process_group, init_gb_process_group
 
 
 def load_data_chunked_4way(

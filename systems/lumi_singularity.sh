@@ -6,7 +6,9 @@ export PROJECT_DIR=/projappl/project_462001248
 export SCRATCH_DIR=/scratch/project_462001248
 
 export VENV_DIR=$HOME/.venvs/gbb
-export SIF="/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
+export CONTAINER_HOME="/appl/local/containers/sif-images"
+export CONTAINER_NAME="lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.1.sif"
+export SIF="${CONTAINER_HOME}/${CONTAINER_NAME}"
 
 export WORKDIR="$( pwd )"
 export LOCAL_WORKDIR="$( pwd )"
@@ -81,8 +83,6 @@ export SYSTEM_SLURM_PARAMS=(
     singularity
     exec
     --bind "$DATA_DIR"
-    $SIF
-    systems/venv_entry.sh
 )
 
 setup_system(){

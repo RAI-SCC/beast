@@ -7,8 +7,9 @@ import os
 import torch
 import torch_blue
 
+from gb.comm import get_process_group, init_gb_process_group
 from gb.losses.up_loss import UP_AllGaussLoss
-from gb.utils import get_process_group, init_gb_process_group, set_all_seeds
+from gb.utils import set_all_seeds
 
 
 class DummyModule(torch_blue.vi.VIModule):
