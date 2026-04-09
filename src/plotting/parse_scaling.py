@@ -21,34 +21,10 @@ import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib.lines import Line2D
 
-# ── KIT Color Palette ─────────────────────────────────────────────────────────
-KIT_GREEN = (0 / 255, 150 / 255, 130 / 255)
-KIT_BLUE = (70 / 255, 100 / 255, 170 / 255)
-KIT_RED = (162 / 255, 34 / 255, 35 / 255)
-KIT_ORANGE = (223 / 255, 155 / 255, 27 / 255)
-KIT_LIGHTGREEN = (140 / 255, 182 / 255, 60 / 255)
-KIT_PURPLE = (163 / 255, 16 / 255, 124 / 255)
-KIT_CYAN = (35 / 255, 161 / 255, 224 / 255)
-KIT_BROWN = (167 / 255, 130 / 255, 46 / 255)
-
-KIT_GRAY10 = (0.9, 0.9, 0.9)
-KIT_GRAY30 = (0.7, 0.7, 0.7)
-KIT_GRAY60 = (0.4, 0.4, 0.4)
-
-KIT_PALETTE = [
-    KIT_BLUE,
-    KIT_GREEN,
-    KIT_ORANGE,
-    KIT_RED,
-    KIT_CYAN,
-    KIT_PURPLE,
-    KIT_LIGHTGREEN,
-    KIT_BROWN,
-]
+from utils import KIT_PALETTE
 
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
-
 
 def parse_log(path: Path, x_axis: str) -> dict | None:
     """
@@ -60,10 +36,16 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
     """
     text = path.read_text()
 
+    # Slurm configuration
+    partition = re.search("SLURM_PARTITION:\s+([a-z\-])+", text).group(1)
+    job_id = int(re.search("SLURM_JOB_ID:\s+(\d+)", text).group(1))
+    nnodes = int(re.search("SLURM_NNODES:\s+(\d+)", text).group(1))
+    ntasks = int(re.search("SLURM_NTASKS:\s+(\d+)", text).group(1))
+
     # ── Forward TFLOP per iteration (x-axis) ──────────────────────────────────
     # "Forward flops per iteration is 4.282531261444092 TFLOP"
     m_fwd_bwd = re.search(
-        r"forward-backward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP", text
+        r"forward-backward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP", text, 
     )
     if not m_fwd_bwd:
         print(f"  [skip] no 'forward-backward flops per iteration' line in {path.name}")
@@ -72,22 +54,13 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
 
     # ── Per-epoch average TFLOPs (y-axis source) ──────────────────────────────
     # "Epoch 2 time [min]: 0.547..., average loss 2.25e+17, average TFLOPs = 39.109..."
-    epoch_pattern = re.compile(
-        r"Epoch\s+(\d+)\s+time\s+\[min\]:\s*([\d.eE+\-]+)"
-        r"(?:,\s*average loss\s+[\d.eE+\-]+)?"  # optional, non-capturing
-        r",\s*average TFLOPs\s*=\s*([\d.eE+\-]+)"
+    timing_pattern = re.compile(
+        r"Average time per batch\s*([\d.eE+\-]+)\s*ms",
     )
-    epochs = [
-        {
-            "epoch": int(ep),
-            "time_min": float(t),
-            "avg_tflops": float(tf),
-        }
-        for ep, t, tf in epoch_pattern.findall(text)
-    ]
+    batch_timings = np.array([ float(tf) for tf in timing_pattern.findall(text) ])
 
-    if len(epochs) < 2:
-        print(f"  [skip] fewer than 2 complete epochs in {path.name}")
+    if len(batch_timings) < 2:
+        print(f"  [skip] Ran for less than 50 gradient updates {path.name}")
         return None
 
     # ── Optional labels ───────────────────────────────────────────────────────
@@ -97,23 +70,36 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
     m_var = re.search(rf"--{x_axis}\s+(\d+)", text)
     var = int(m_var.group(1)) if m_var else None
 
+    
+    # Parse mesh dims
+    mesh_str = re.search(r"mesh_dims=[\d-]+,[\d-]+,[\d-]+,[\d-]+,[\d-]+", text)
+
+    if not mesh_str:
+        print(f" [skip] Mesh dims not available for {path.name}")
+
+    mesh_dims = [int(dim) for dim in mesh_str.group(0).split("=")[1].split(",")]
+    for i, dim in enumerate(mesh_dims):
+        if dim == -1:
+            tmp = np.abs(np.prod(mesh_dims))
+            mesh_dims[i] = ntasks // tmp
+
+
     return {
         "file": path.name,
+        "partition": partition,
+        "job_id": job_id,
+        "nodes": nnodes,
+        "tasks": ntasks,
         "forward_backward_tflops": forward_backward,
-        "epochs": epochs,
+        "avg_batch_timing": batch_timings.mean(),
         "params": params,
-        f"{x_axis}": var,  # whatever is on the x axis. this can be flops, batch size, sample number, nodes"
+        "exp_dim": mesh_dims[0],
+        "dp_dim": mesh_dims[1],
+        "up_dim": mesh_dims[2],
+        "jchannel_dim": mesh_dims[3],
+        "jspatial_dim": mesh_dims[4],
     }
 
-
-def compute_metrics(run: dict) -> dict:
-    """
-    y = mean of all per-epoch 'average TFLOPs' values.
-    The training script already computes each epoch's throughput
-    (total_tflops / epoch_wall_time), so we just average across epochs.
-    """
-    avg_tflops = float(np.mean([e["avg_tflops"] for e in run["epochs"]]))
-    return {**run, "avg_tflops": avg_tflops}
 
 
 # ── Plotting ──────────────────────────────────────────────────────────────────
@@ -265,7 +251,7 @@ def plot(
 def collect_paths(path: str) -> list[Path]:
     p = Path(path)
     if p.is_dir():
-        return sorted(p.glob("*.out"))
+        return sorted(p.glob("run_*.out"))
     return sorted(Path(f) for f in glob.glob(path))
 
 
@@ -284,14 +270,10 @@ def main(
     records = []
     for p in paths:
         run = parse_log(p, x_axis)
-        if run:
-            m = compute_metrics(run)
-            records.append(m)
-            print(
-                f"  {p.name:45s}  fwd_tflop={m['forward_backward_tflops']:.4f}T  "
-                f"avg_tflops={m['avg_tflops']:.3f}  "
-                f"epochs={len(m['epochs'])}"
-            )
+        records.append(run)
+
+    print(records)
+    exit(0)
 
     if not records:
         print("No valid records parsed.")
