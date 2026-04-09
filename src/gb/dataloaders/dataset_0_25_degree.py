@@ -7,12 +7,21 @@ import torch.distributed as dist
 import xarray as xr
 from torch.utils.data import Dataset
 
+from gb.utils import execute_in_waves
+
 
 class ERA5DatasetDistributed(Dataset):
     """Define 3D dataset."""
 
     def __init__(
-        self, config, mode, process_group, normalize=True, dt=None, dtype=torch.float32
+        self,
+        config,
+        mode,
+        process_group,
+        device,
+        normalize=True,
+        dt=None,
+        dtype=torch.float32,
     ):
         """
         Initialize.
@@ -26,6 +35,7 @@ class ERA5DatasetDistributed(Dataset):
         """
         self.dt = config["data"]["dt"]
         self.dtype = dtype
+        self.device = device
         self.process_group = process_group
         self.local_rank = process_group.rank()
         self.datapath = config["data"]["train_data_path"]
@@ -44,25 +54,30 @@ class ERA5DatasetDistributed(Dataset):
         mask_list = config["data"]["constant_masks"]
 
         # Filter desired time points based on parameters and return file statistics.
-        self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
-        times = pd.to_datetime(self.zarr_data.time)
-        train_years = times[(times >= self.years[0]) & (times < self.years[1])]
-        self.zarr_data = self.zarr_data.sel(time=train_years)
-
-        self.n_data_items = len(self.zarr_data["time"])
-        self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
-
-        self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-        self.num_masks = self.constant_masks.shape[0]
-
-        # normalization for pressure levels and standard deviation
+        # start = time.perf_counter()
         self.norm_values = {}
-        self.norm_values["mean"] = np.load(
-            f"{config['data']['normalization_dir']}/norm_mean.npy"
-        )
-        self.norm_values["std"] = np.load(
-            f"{config['data']['normalization_dir']}/norm_std.npy"
-        )
+
+        def load_data():
+            self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
+
+            times = pd.to_datetime(self.zarr_data.time)
+            train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+            self.zarr_data = self.zarr_data.sel(time=train_years)
+
+            self.n_data_items = len(self.zarr_data["time"])
+            self.num_vars = len(self.zarr_data["feature"])  # self.num_vars
+
+            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+            self.num_masks = self.constant_masks.shape[0]
+
+            self.norm_values["mean"] = np.load(
+                f"{config['data']['normalization_dir']}/norm_mean.npy"
+            )
+            self.norm_values["std"] = np.load(
+                f"{config['data']['normalization_dir']}/norm_std.npy"
+            )
+
+        execute_in_waves(load_data)
 
         if self.process_group.size() > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -97,6 +112,7 @@ class ERA5DatasetDistributed(Dataset):
         idx: int
                 global index of item
         """
+
         target_idx = idx + self.dt
         x = self.zarr_data.isel(
             time=idx,
@@ -104,6 +120,7 @@ class ERA5DatasetDistributed(Dataset):
             latitude=range(0, self.xlat),
             longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
         )["fields"].values
+
         x = (
             x - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
         ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
@@ -168,10 +185,17 @@ class ERA5DatasetDistributed(Dataset):
 
 class ERA5TwoTimestepsDatasetDistributed(ERA5DatasetDistributed):
     def __init__(
-        self, config, mode, process_group, normalize=True, dt=None, dtype=torch.float32
+        self,
+        config,
+        mode,
+        process_group,
+        device,
+        normalize=True,
+        dt=None,
+        dtype=torch.float32,
     ):
         super().__init__(
-            config, mode, process_group, normalize=normalize, dt=dt, dtype=dtype
+            config, mode, process_group, device, normalize=normalize, dt=dt, dtype=dtype
         )
         if dist.get_rank(group=None) == 0:
             print("Loading two timeframes as input...")

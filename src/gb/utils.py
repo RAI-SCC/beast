@@ -2,8 +2,8 @@ import math
 import os
 import random
 import re
+import time
 import types
-from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -17,125 +17,32 @@ import yaml
 from jigsaw import normalization, utils_init
 from torch.utils.flop_counter import FlopCounterMode
 
+from gb.comm import get_process_group
 from gb.model.model_gb_tiny import NiceNorm
 
-_process_group_dict: dict[str, dist.ProcessGroup] = {}
-_mesh: dist.device_mesh.DeviceMesh
 
+def execute_in_waves(func, wave_size: int = 128):
+    world_size = dist.get_world_size(group=None)
+    num_groups = (world_size + wave_size - 1) // wave_size
+    global_rank = dist.get_rank(group=None)
+    result = None
 
-def init_gb_process_group(
-    mesh_dims: Sequence[int], backend: str = "nccl"
-) -> dict[str, dist.ProcessGroup]:
-    """Initialize the global process group for GrandBellbeast."""
-    rank = int(os.getenv("SLURM_PROCID"))  # Get individual process ID.
-    world_size = int(os.getenv("SLURM_NTASKS"))  # Total number of processes.
-    slurm_localid = int(os.getenv("SLURM_LOCALID", rank))  # Local GPU ID.
+    for group in range(num_groups):
+        wave_start = time.time()
+        start_rank = group * wave_size
+        end_rank = start_rank + wave_size
 
-    # print(f"Rank {rank}: world_size {world_size}, slurm_localid {slurm_localid}")
-    # # Initialize GPUs
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
-        device = torch.device("cuda", device_id)
-        torch.cuda.set_device(device)
+        if global_rank < end_rank and global_rank >= start_rank:
+            result = func()
 
-    dist.init_process_group(
-        backend=backend,
-        rank=rank,
-        world_size=world_size,
-        device_id=device,
-        init_method="env://",
-    )
-    if not dist.is_initialized():
-        raise RuntimeError("Process group initialization failed.")
+        dist.barrier(group=None)  # Synchronize after each wave
+        wave_end = time.time()
+        if global_rank == 0:
+            print(
+                f"R{global_rank}/{world_size}: Wave {group} of {func.__name__} executed in {wave_end - wave_start}"
+            )
 
-    # print(f"Rank {rank}: CUDA Available = {torch.cuda.is_available()}")
-    # print(f"Rank {rank}: CUDA Device count = {torch.cuda.device_count()}")
-
-    # # Initialize GPUs
-    device = "cuda" if backend == "nccl" else "cpu"
-    device_type = device
-    if backend == "nccl":
-        device_id = slurm_localid if torch.cuda.device_count() != 1 else 0
-        device = torch.device("cuda", device_id)
-        torch.cuda.set_device(device)
-
-    return _create_process_mesh_dict(mesh_dims, device_type=device_type)
-
-
-def _create_process_mesh_dict(
-    mesh_dims: Sequence[int],
-    device_type: str = "cuda",
-) -> dict[str, dist.ProcessGroup]:
-    """Create a process mesh given dimensions and names.
-
-    Input: 5D process mesh for (Expert, DP, SP, JCol, JRow)
-
-    Parallel Process Groups keys:
-     - JChannel: Jigsaw Row Tensor Parallel group (part of DTP)
-     - JSpatial: Jigsaw Column Tensor Parallel group (part of DTP)
-     - DTP: Domain Tensor Parallel group, equal to JSpatial x JChannel
-     - SP: Sample Parallel Group
-     - DP: Data Parallel Group
-     - DDP: Distributed Data Parallel Group (DP x SP), to be pased to the DDP module
-     - Expert: Top group for Mixture of Experts
-    """
-    if not dist.is_initialized():
-        raise RuntimeError("Distributed process group is not initialized.")
-
-    world_size = dist.get_world_size()
-
-    if torch.prod(torch.tensor(mesh_dims)).item() != world_size:
-        raise ValueError("Product of mesh dimensions must equal world size.")
-
-    if len(mesh_dims) == 4:
-        mesh_dims = [1] + list(mesh_dims)  # Add Expert dim if missing
-    elif len(mesh_dims) != 5:
-        raise ValueError("mesh_dims must be of length 4 or 5.")
-
-    mesh_dim_names = ["Expert", "DP", "SP", "JSpatial", "JChannel"]
-    _mesh = dist.device_mesh.init_device_mesh(
-        device_type=device_type,
-        mesh_shape=tuple(mesh_dims),
-        mesh_dim_names=tuple(mesh_dim_names),
-    )
-
-    # Create process groups
-    for dim_name, group in zip(mesh_dim_names, _mesh.get_all_groups()):
-        _process_group_dict[dim_name] = group
-
-    # Also create combined groups (Expert, DDP, DPT)
-    alternative_mesh = dist.device_mesh.init_device_mesh(
-        device_type=device_type,
-        mesh_shape=(
-            mesh_dims[0],
-            mesh_dims[1] * mesh_dims[2],
-            mesh_dims[3] * mesh_dims[4],
-        ),
-        mesh_dim_names=("Expert", "DDP", "DTP"),
-    )
-    alternative_mesh_ddp = dist.device_mesh.init_device_mesh(
-        device_type=device_type,
-        mesh_shape=(
-            mesh_dims[0],
-            mesh_dims[1] * mesh_dims[2] * mesh_dims[3],
-            mesh_dims[4],
-        ),
-        mesh_dim_names=("Expert", "DDP", "JChannel"),
-    )
-
-    _process_group_dict["DTP"] = alternative_mesh.get_group("DTP")
-    _process_group_dict["DDP"] = alternative_mesh_ddp.get_group("DDP")
-
-    return _process_group_dict
-
-
-def get_process_group(name: str) -> dist.ProcessGroup:
-    """Get a process group by name."""
-    if name not in _process_group_dict:
-        raise ValueError(f"Process group '{name}' not found.")
-    return _process_group_dict[name]
+    return result
 
 
 def download_1_5_degree_data(data_path):
