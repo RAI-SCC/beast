@@ -228,7 +228,7 @@ def training_loop(config_dict, prof=None):
             dtp_process_group=dtp_group,
             dp_process_group=dp_group,
             device=device,
-            mode="validate",
+            mode="validation",
             dtype=dtype,
         )
     else:
