@@ -326,6 +326,34 @@ def training_loop(config_dict, prof=None):
             print(
                 f"Epoch {epoch} average loss {avg_loss}, time [min]: {(end_time - start_time) / 60.0}, average TFLOPs = {total_flops * len(train_dataloader) / (end_time - start_time) / 1e12}"
             )
+        if bayesian:
+            data_fit_loss, prior_matching_loss = validate(
+                config_dict=config_dict,
+                model=model,
+                expert_weights=expert_loss_weighting,
+                n_samples=n_samples,
+                dataloader=valid_dataloader,
+                device=device,
+                epoch=epoch,
+                results_path=validation_results_path,
+            )
+        else:
+            data_fit_loss = validate_deterministic(
+                config_dict=config_dict,
+                model=model,
+                expert_weights=expert_loss_weighting,
+                dataloader=valid_dataloader,
+                device=device,
+                epoch=epoch,
+                results_path=validation_results_path,
+            )
+            prior_matching_loss = None
+
+        if dist.get_rank(group=None) == 0:
+            print(
+                f"Epoch {epoch} Validation: loss {data_fit_loss}, {prior_matching_loss}"
+            )
+
 
     if config_dict["timings"]:
         timings_path = os.path.join(results_path, "timings")
@@ -393,7 +421,7 @@ def train_one_epoch(
         print("Let's go... ")
 
     for i, (x, y, dl_start, dl_end) in enumerate(dataloader):
-        if epoch == 0 and i < 10000 and lr_scheduler is not None:
+        if (epoch == 0) and (i < 10000) and (lr_scheduler is not None) and not bayesian:
             max_values = lr_scheduler.get_last_lr()
             for index, g in enumerate(optimizer.param_groups):
                 warm = i * (max_values[index] - start_lr) / 10000 + start_lr

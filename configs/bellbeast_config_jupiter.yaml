@@ -21,22 +21,22 @@ data:
     n_in_timesteps: 2 #Can be 1 or 2, other not supported atm
 model:
     n_input_channels: 88 #Will be overwritten internally to fit the data set specifications
-    embedding_dimension: 512
+    embedding_dimension: 1536
     n_output_channels: 84
-    n_attn_heads: [16, 32, 16]
+    n_attn_heads: [12, 24, 12]
     patch_size: 2
     noise_dim: 32
     window_size_outer: [30, 60] # will work on JUPITER, not lumi due to divisibility
     window_size_inner: [20, 30]
-    n_attn_blocks: [2, 3, 2]
+    n_attn_blocks: [1,1,1]
     bayesian: True
     latent_rollout: 1
 training:
     tf32: True
-    n_samples: 2 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
+    n_samples: 1 #This is per SP Process, so the total number of samples is n_samples * process_group("SP").size()
     n_epochs: 10
     batch_size: 1
-    lr_scheduler: True
+    lr_scheduler: False
     low_lr: 0.00001
     normal_lr: 0.0001
     dtype: float32
