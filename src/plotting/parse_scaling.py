@@ -12,8 +12,11 @@ import glob
 import re
 import sys
 from pathlib import Path
+import pandas as pd
 
 import matplotlib
+
+import seaborn as sns
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -26,7 +29,7 @@ from utils import KIT_PALETTE
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
-def parse_log(path: Path, x_axis: str) -> dict | None:
+def parse_log(path: Path) -> dict | None:
     """
     Extract from each log:
       x-axis  forward_tflops : "Forward flops per iteration is X TFLOP"
@@ -36,8 +39,12 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
     """
     text = path.read_text()
 
+    # if not re.search("FINITE!", text):
+    #     print(f"  [skip] Run did not finish successfully: {path.name}")
+    #     return None
+
     # Slurm configuration
-    partition = re.search("SLURM_PARTITION:\s+([a-z\-])+", text).group(1)
+    partition = re.search("SLURM_PARTITION:\s+([a-z\-]+)", text).group(1)
     job_id = int(re.search("SLURM_JOB_ID:\s+(\d+)", text).group(1))
     nnodes = int(re.search("SLURM_NNODES:\s+(\d+)", text).group(1))
     ntasks = int(re.search("SLURM_NTASKS:\s+(\d+)", text).group(1))
@@ -57,9 +64,9 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
     timing_pattern = re.compile(
         r"Average time per batch\s*([\d.eE+\-]+)\s*ms",
     )
-    batch_timings = np.array([ float(tf) for tf in timing_pattern.findall(text) ])
+    batch_timings = np.array([float(tf) for tf in timing_pattern.findall(text) ])
 
-    if len(batch_timings) < 2:
+    if len(batch_timings) < 3:
         print(f"  [skip] Ran for less than 50 gradient updates {path.name}")
         return None
 
@@ -67,10 +74,6 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
     m_params = re.search(r"Parameters:\s*(\d+)", text)
     params = int(m_params.group(1)) if m_params else None
 
-    m_var = re.search(rf"--{x_axis}\s+(\d+)", text)
-    var = int(m_var.group(1)) if m_var else None
-
-    
     # Parse mesh dims
     mesh_str = re.search(r"mesh_dims=[\d-]+,[\d-]+,[\d-]+,[\d-]+,[\d-]+", text)
 
@@ -91,7 +94,8 @@ def parse_log(path: Path, x_axis: str) -> dict | None:
         "nodes": nnodes,
         "tasks": ntasks,
         "forward_backward_tflops": forward_backward,
-        "avg_batch_timing": batch_timings.mean(),
+        "avg_batch_timing": batch_timings[1:].mean(),
+        "std_batch_timing": batch_timings[1:].std(),
         "params": params,
         "exp_dim": mesh_dims[0],
         "dp_dim": mesh_dims[1],
@@ -258,8 +262,6 @@ def collect_paths(path: str) -> list[Path]:
 def main(
     logs_dir: str,
     out_path: str,
-    sweep_id: str | None = None,
-    x_axis: str = "Model size",
 ):
     paths = collect_paths(logs_dir)
     if not paths:
@@ -269,17 +271,22 @@ def main(
     print(f"Parsing {len(paths)} log file(s)...\n")
     records = []
     for p in paths:
-        run = parse_log(p, x_axis)
-        records.append(run)
-
-    print(records)
-    exit(0)
+        run = parse_log(p)
+        if run:
+            records.append(run)
 
     if not records:
         print("No valid records parsed.")
         sys.exit(1)
 
-    plot(records, out_path=Path(out_path), sweep_id=sweep_id, x_axis=x_axis)
+    df = pd.DataFrame.from_records(records)
+    df.info()
+
+    if not out_path:
+        p = Path(logs_dir).parent / "results.csv"
+    
+    df.to_csv(p)
+    print("Done!")
 
 
 if __name__ == "__main__":
@@ -291,14 +298,6 @@ if __name__ == "__main__":
         required=True,
         help="Directory of *.out log files, or a glob pattern.",
     )
-    parser.add_argument("--out_path", default="scaling.png", help="Output image path.")
-    parser.add_argument(
-        "--sweep_id", default=None, help="Sweep identifier for plot subtitle."
-    )
-    parser.add_argument(
-        "--x_axis",
-        default=None,
-        help="x axis indicates what to search for and plot on the x axis",
-    )
+    parser.add_argument("--out_path", default=None, help="By default, will choose the parent directory of the logs.")
     args = parser.parse_args()
-    main(args.logs_dir, args.out_path, sweep_id=args.sweep_id, x_axis=args.x_axis)
+    main(args.logs_dir, args.out_path)
