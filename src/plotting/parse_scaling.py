@@ -12,24 +12,18 @@ import glob
 import re
 import sys
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-
-import matplotlib
-
 import seaborn as sns
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-import numpy as np
-from matplotlib.lines import Line2D
-
-from utils import KIT_PALETTE
-
+from utils import KIT_GRAY60, init_matplotlib, set_size
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
-def parse_log(path: Path) -> dict | None:
+
+def parse_log(path: Path) -> list[dict[str, any]] | None:
     """
     Extract from each log:
       x-axis  forward_tflops : "Forward flops per iteration is X TFLOP"
@@ -52,7 +46,8 @@ def parse_log(path: Path) -> dict | None:
     # ── Forward TFLOP per iteration (x-axis) ──────────────────────────────────
     # "Forward flops per iteration is 4.282531261444092 TFLOP"
     m_fwd_bwd = re.search(
-        r"forward-backward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP", text, 
+        r"forward-backward flops per iteration is\s*([\d.eE+\-]+)\s*TFLOP",
+        text,
     )
     if not m_fwd_bwd:
         print(f"  [skip] no 'forward-backward flops per iteration' line in {path.name}")
@@ -64,7 +59,7 @@ def parse_log(path: Path) -> dict | None:
     timing_pattern = re.compile(
         r"Average time per batch\s*([\d.eE+\-]+)\s*ms",
     )
-    batch_timings = np.array([float(tf) for tf in timing_pattern.findall(text) ])
+    batch_timings = np.array([float(tf) for tf in timing_pattern.findall(text)])
 
     if len(batch_timings) < 3:
         print(f"  [skip] Ran for less than 50 gradient updates {path.name}")
@@ -86,167 +81,200 @@ def parse_log(path: Path) -> dict | None:
             tmp = np.abs(np.prod(mesh_dims))
             mesh_dims[i] = ntasks // tmp
 
+    records = []
+    for timing in batch_timings[1:]:
+        records.append(
+            {
+                "file": path.name,
+                "partition": partition,
+                "job_id": job_id,
+                "nodes": nnodes,
+                "tasks": ntasks,
+                "forward_backward_tflops": forward_backward,
+                "batch_timing": timing,
+                "params": params,
+                "exp_dim": mesh_dims[0],
+                "dp_dim": mesh_dims[1],
+                "up_dim": mesh_dims[2],
+                "jchannel_dim": mesh_dims[3],
+                "jspatial_dim": mesh_dims[4],
+            }
+        )
+    return records
 
-    return {
-        "file": path.name,
-        "partition": partition,
-        "job_id": job_id,
-        "nodes": nnodes,
-        "tasks": ntasks,
-        "forward_backward_tflops": forward_backward,
-        "avg_batch_timing": batch_timings[1:].mean(),
-        "std_batch_timing": batch_timings[1:].std(),
-        "params": params,
-        "exp_dim": mesh_dims[0],
-        "dp_dim": mesh_dims[1],
-        "up_dim": mesh_dims[2],
-        "jchannel_dim": mesh_dims[3],
-        "jspatial_dim": mesh_dims[4],
-    }
 
+def process_records(df: pd.DataFrame) -> pd.DataFrame:
+    df.rename(
+        columns={
+            "nodes": "Nodes",
+            "batch_timing": "Mean Batch Time (ms)",
+        },
+        inplace=True,
+    )
 
+    df["TFLOPs/s/Node"] = df["forward_backward_tflops"] / (
+        df["Mean Batch Time (ms)"] * 1e-3
+    )
+    df["TFLOPs/s"] = df["TFLOPs/s/Node"] * df["Nodes"]
+    df["Samples/s"] = df["dp_dim"] / (df["Mean Batch Time (ms)"] * 1e-3)
 
-# ── Plotting ──────────────────────────────────────────────────────────────────
-
-
-def _fmt_tflop(v, _=None):
-    if abs(v) >= 1000:
-        return f"{v / 1000:.2g}P"
-    return f"{v:.3g}T"
+    return df
 
 
 def plot(
-    records: list[dict],
+    df: pd.DataFrame,
     out_path: Path = Path("scaling_plot.png"),
-    sweep_id: str | None = None,
-    x_axis: str = "Model size",
+    show: bool = False,
 ):
 
-    records = sorted(records, key=lambda r: r["forward_backward_tflops"])
-    n = len(records)
+    init_matplotlib()
+    fig_size = set_size(width="thesis", fraction=1.0)
 
-    if x_axis == "embedding_dimension":
-        xs = np.array([r["forward_backward_tflops"] for r in records])
+    x_ticks = df["Nodes"].unique()
+    print(f"x_ticks: {x_ticks}")
+
+    # Batch timing plot
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=df,
+        x="Nodes",
+        y="Mean Batch Time (ms)",
+        marker="o",
+        ax=ax,
+    )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
+    ax.set_ylim(bottom=0, top=df["Mean Batch Time (ms)"].max() * 1.2)
+
+    ax.grid(True, which="major", ls="--", lw=0.5)
+    if show:
+        plt.show()
     else:
-        xs = np.array([r[f"{x_axis}"] for r in records])
+        plt.savefig(out_path / "batch_time.png")
 
-    ys = np.array([r["avg_tflops"] for r in records])
-    labels = [
-        (
-            f"{x_axis}={r[f'{x_axis}']}"
-            if r[f"{x_axis}"] is not None
-            else Path(r["file"]).stem
-        )
-        for r in records
-    ]
-    # print(f'records {records}')
-
-    # ── Figure ────────────────────────────────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
-
-    ax.grid(color=KIT_GRAY60, linewidth=0.8, zorder=0)
-    ax.set_axisbelow(True)
-
-    # Trend line
-    ax.plot(
-        xs,
-        ys,
-        color=KIT_BLUE,
-        linewidth=2.0,
-        zorder=2,
-        alpha=0.85,
-        solid_capstyle="round",
-        solid_joinstyle="round",
+    # TFLOPs/s plot
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=df,
+        x="Nodes",
+        y="TFLOPs/s",
+        marker="o",
+        ax=ax,
     )
 
-    # Points + point labels
-    for i, (x, y, lbl) in enumerate(zip(xs, ys, labels)):
-        color = KIT_PALETTE[i % len(KIT_PALETTE)]
-        ax.scatter(
-            x, y, color=color, s=90, zorder=4, edgecolors="white", linewidths=0.8
-        )
-        ax.annotate(
-            lbl,
-            (x, y),
-            textcoords="offset points",
-            xytext=(8, 6),
-            fontsize=13,
-            color="black",
-            fontfamily="monospace",
-        )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
 
-    # Spines: hide top/right, style bottom/left
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-    for spine in ["bottom", "left"]:
-        ax.spines[spine].set_color("black")
-        ax.spines[spine].set_linewidth(0.9)
+    ax.set_yscale("log", base=10)
+    ax.set_ylim(top=df["TFLOPs/s"].max() * 1.2)
+    ax.grid(True, which="major", ls="--", lw=0.5)
 
-    # ax.xaxis.set_major_formatter(ticker.FuncFormatter(_fmt_tflop))
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:.3g}"))
-    ax.tick_params(colors="black", labelsize=14, length=4, width=0.8)
-    ax.xaxis.label.set_color("black")
-    ax.yaxis.label.set_color("black")
-
-    if x_axis == "embedding_dimension":
-        ax.set_xlabel("Model size [TFLOP in forward pass]", fontsize=15, labelpad=8)
+    if show:
+        plt.show()
     else:
-        ax.set_xlabel(f"{x_axis}", fontsize=15, labelpad=8)
-    ax.set_ylabel("Throughput [TFLOPs/s/node]", fontsize=15, labelpad=8)
+        plt.savefig(out_path / "total_tflopss.png")
 
-    ax.set_title(
-        f"{x_axis} vs. Throughput",
-        fontsize=20,
-        fontweight="bold",
-        color=(0.1, 0.1, 0.1),
-        pad=14,
-        loc="left",
+    # Samples/s plot
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=df,
+        x="Nodes",
+        y="Samples/s",
+        marker="o",
+        ax=ax,
+    )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
+    # ax.set_yscale("log", base=10)
+    ax.set_ylim(bottom=0, top=df["Samples/s"].max() * 1.2)
+    ax.grid(True, which="major", ls="--", lw=0.5)
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig(out_path / "samples.png")
+
+    # TFLOPs/s/Node plot
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=df,
+        x="Nodes",
+        y="TFLOPs/s/Node",
+        marker="o",
+        ax=ax,
+    )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
+    # ax.set_yscale("log", base=10)
+    ax.set_ylim(bottom=0, top=df["TFLOPs/s/Node"].max() * 1.2)
+
+    ax.grid(True, which="major", ls="--", lw=0.5)
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig(out_path / "tflops_per_node.png")
+
+    # Weak scaling plot (batch_time(N) / batch time(1)  )
+    weak_df = df.groupby("Nodes").agg({"Mean Batch Time (ms)": "mean"}).reset_index()
+    weak_df["Weak Scaling Efficiency"] = (
+        weak_df["Mean Batch Time (ms)"] / weak_df["Mean Batch Time (ms)"].iloc[0]
     )
 
-    subtitle_parts = [""]
-    if sweep_id:
-        subtitle_parts.append(f"sweep: {sweep_id}")
-    ax.text(
-        0.0,
-        0.98,
-        "  ·  ".join(subtitle_parts),
-        transform=ax.transAxes,
-        fontsize=9,
-        color="black",
-        va="bottom",
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=weak_df,
+        x="Nodes",
+        y="Weak Scaling Efficiency",
+        marker="o",
+        ax=ax,
     )
 
-    if n <= 10:
-        handles = [
-            Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="w",
-                markerfacecolor=KIT_PALETTE[i % len(KIT_PALETTE)],
-                markersize=7,
-                label=lbl,
-                markeredgecolor="white",
-                markeredgewidth=0.6,
-            )
-            for i, lbl in enumerate(labels)
-        ]
-        ax.legend(
-            handles=handles,
-            fontsize=15,
-            frameon=True,
-            framealpha=0.9,
-            edgecolor=KIT_GRAY10,
-            loc="best",
-            title="runs",
-            title_fontsize=15,
-        )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
 
-    plt.tight_layout(pad=1.4)
-    fig.savefig(out_path, dpi=180, facecolor="white", bbox_inches="tight")
-    print(f"\nPlot saved → {out_path}")
+    ax.set_ylim(bottom=0, top=weak_df["Weak Scaling Efficiency"].max() * 1.2)
+    ax.grid(True, which="major", ls="--", lw=0.5)
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig(out_path / "weak_scaling_efficiency.png")
+
+    # Strong scaling plot (Speedup = samples/s(N) / samples/s(1)  )
+    strong_df = df.groupby("Nodes").agg({"Samples/s": "mean"}).reset_index()
+    strong_df["Speedup"] = strong_df["Samples/s"] / strong_df["Samples/s"].iloc[0]
+    fig, ax = plt.subplots(figsize=fig_size)
+    sns.lineplot(
+        data=strong_df,
+        x="Nodes",
+        y="Speedup",
+        marker="o",
+        ax=ax,
+    )
+
+    plt.plot(
+        x_ticks, x_ticks // 2, ls="--", color=KIT_GRAY60, label="Ideal Linear Scaling"
+    )
+
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_ticks)
+
+    ax.set_yscale("log", base=2)
+    ax.set_yticks(x_ticks)
+    ax.set_yticklabels(x_ticks)
+    ax.grid(True, which="major", ls="--", lw=0.5)
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig(out_path / "strong_scaling_speedup.png")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -262,6 +290,7 @@ def collect_paths(path: str) -> list[Path]:
 def main(
     logs_dir: str,
     out_path: str,
+    show: bool = False,
 ):
     paths = collect_paths(logs_dir)
     if not paths:
@@ -273,19 +302,29 @@ def main(
     for p in paths:
         run = parse_log(p)
         if run:
-            records.append(run)
+            records.extend(run)
 
     if not records:
         print("No valid records parsed.")
         sys.exit(1)
 
     df = pd.DataFrame.from_records(records)
+    df = process_records(df)
     df.info()
 
     if not out_path:
-        p = Path(logs_dir).parent / "results.csv"
-    
-    df.to_csv(p)
+        csv_out = Path(logs_dir).parent / "results.csv"
+    else:
+        csv_out = Path(out_path).with_suffix(".csv")
+
+    df.to_csv(csv_out)
+
+    if not out_path:
+        plot_out = Path(logs_dir).parent
+    else:
+        plot_out = Path(out_path)
+
+    plot(df, plot_out, show=show)
     print("Done!")
 
 
@@ -298,6 +337,13 @@ if __name__ == "__main__":
         required=True,
         help="Directory of *.out log files, or a glob pattern.",
     )
-    parser.add_argument("--out_path", default=None, help="By default, will choose the parent directory of the logs.")
+    parser.add_argument(
+        "--show", action="store_true", help="Whether to display the plot interactively."
+    )
+    parser.add_argument(
+        "--out_path",
+        default=None,
+        help="By default, will choose the parent directory of the logs.",
+    )
     args = parser.parse_args()
-    main(args.logs_dir, args.out_path)
+    main(args.logs_dir, args.out_path, show=args.show)
