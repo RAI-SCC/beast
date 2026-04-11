@@ -128,24 +128,6 @@ def training_loop(config_dict, prof=None):
             f"Parameters: {count_model_parameters(model, config_dict['jigsaw']['parallelism'], bayesian=bayesian)}"
         )
 
-    # Needs to happen here, before model is wrapped over and over again
-    optimizer = torch.optim.AdamW(
-        [
-            {
-                "params": model.params.low_lr.parameters(),
-                "lr": config_dict["training"]["low_lr"],
-            },
-            {
-                "params": model.params.normal_lr.parameters(),
-                "lr": config_dict["training"]["normal_lr"],
-            },
-        ],
-        lr=config_dict["training"]["normal_lr"],
-        betas=(0.9, 0.90),
-        eps=1e-6,
-        weight_decay=0,
-    )
-
     # Make model expert
     model = Expert(model, ep_group)
     expert_loss_weighting = model.get_loss_weights()
@@ -177,6 +159,36 @@ def training_loop(config_dict, prof=None):
         static_graph=True,
         bucket_cap_mb=50,
     )
+    low_lr_params, normal_lr_params = [], []
+    low_key = ["patch_embedding", "downsample", "upsample", "patch_recovery"]
+    for name, param in model.named_parameters():
+        if (
+            low_key[0] in name
+            or low_key[1] in name
+            or low_key[2] in name
+            or low_key[3] in name
+        ):
+            low_lr_params.append(param)
+        else:
+            normal_lr_params.append(param)
+
+    # This needs to happen AFTER THE MODEL IS WRAPPED!!!!!!!!
+    optimizer = torch.optim.AdamW(
+        [
+            {
+                "params": low_lr_params,
+                "lr": config_dict["training"]["low_lr"],
+            },
+            {
+                "params": normal_lr_params,
+                "lr": config_dict["training"]["normal_lr"],
+            },
+        ],
+        betas=(0.9, 0.90),
+        eps=1e-6,
+        weight_decay=0,
+    )
+
     if dist.get_rank(group=None) == 0:
         print("Model is data parallel")
 
@@ -207,7 +219,6 @@ def training_loop(config_dict, prof=None):
             optimizer, T_max=config_dict["training"]["n_epochs"], eta_min=1e-5
         )
     else:
-        # optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         scheduler = None
 
     # data_access_rank = up_group.rank() + up_group.size() * dp_group.rank()
@@ -244,6 +255,8 @@ def training_loop(config_dict, prof=None):
             up_group,
             dp_group,
             ep_group,
+            heat=0.1,
+            track=True,
         )
     else:
         loss_fn = torch.nn.MSELoss()
@@ -253,7 +266,7 @@ def training_loop(config_dict, prof=None):
     )  # Check if this works with Torch-blue
 
     torch.cuda.empty_cache()
-    set_all_seeds(16 + up_group.rank())
+    set_all_seeds(17 + up_group.rank())
 
     # Per-step forward, backward, and total flops
     # These numbers are already summed across all ranks (not just the dtp group)
@@ -484,8 +497,18 @@ def train_one_epoch(
             dist.all_reduce(loss, group=dtp_group)
             if dist.get_rank(group=None) == 0:
                 if bayesian:
+                    full_log = loss_fn.kl_loss.log
+                    loss_fn.kl_loss._init_log()
+                    full_df = torch.tensor(
+                        full_log["data_fitting"], requires_grad=False
+                    )
+                    full_pm = torch.tensor(
+                        full_log["prior_matching"], requires_grad=False
+                    )
+                    avg_df = full_df.mean(dim=0).item()
+                    avg_pm = full_pm.mean(dim=0).item()
                     print(
-                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, rmse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms"
+                        f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, mse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}. data fitting {avg_df} prior matching {avg_pm} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, "
                     )
                 else:
                     print(
