@@ -130,7 +130,8 @@ def plot(
     init_matplotlib()
     fig_size = set_size(width="thesis", fraction=1.0)
 
-    x_ticks = df["Nodes"].unique()
+    x_ticks = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    x_ticks = [x for x in x_ticks if df["Nodes"].min() <= x <= df["Nodes"].max()]
     print(f"x_ticks: {x_ticks}")
 
     # Batch timing plot
@@ -258,8 +259,14 @@ def plot(
         ax=ax,
     )
 
+    baseline_nodes = strong_df["Nodes"].iloc[0]
+
     plt.plot(
-        x_ticks, x_ticks // 2, ls="--", color=KIT_GRAY60, label="Ideal Linear Scaling"
+        x_ticks,
+        x_ticks // baseline_nodes,
+        ls="--",
+        color=KIT_GRAY60,
+        label="Ideal Linear Scaling",
     )
 
     ax.set_xscale("log", base=2)
