@@ -59,15 +59,12 @@ set -euo pipefail
 # Total dataset size stays the same
 # ---------------------------
 
-EXP_NAME="up_weak_scaling_baseline"
-VAR_NAME="training_batch_size"
-VARS=(1)
-EMBED_DIM=512
-LOCAL_SAMPLES=2
-MESH_STRING="1,1,-1,4,2"
-NODES=(1 4 8 16 32 64 128 256 512 1024)
-X_AXIS_NAME="nodes"
-SUBSET_SIZE=500
+# EXP_NAME="up_weak_scaling_baseline"
+# VAR_NAME="data_train_subset"
+# VARS=(500)
+# MESH_STRING="1,1,-1,4,2"
+# NODES=(4 8 16 32 64 128)
+# X_AXIS_NAME="nodes"
 
 # Exp 3.2: Increase global sampling number by increasing node count
 # Local sampling number and batch size stay the same
@@ -75,14 +72,11 @@ SUBSET_SIZE=500
 # ---------------------------
 
 # EXP_NAME="up_weak_scaling_realistic"
-# VAR_NAME="training_batch_size"
-# VARS=(1)
-# EMBED_DIM=512
-# LOCAL_SAMPLES=2
+# VAR_NAME="data_train_subset"
+# VARS=(8000)
 # MESH_STRING="1,16,-1,4,2"
-# NODES=(16 32 64 128 256 512 1024)
+# NODES=(64 128 256 512 1024 2048)
 # X_AXIS_NAME="nodes"
-# SUBSET_SIZE=500
 
 # ---------------------------
 # Exp 4.1: Increase global batch size by increasing node count
@@ -91,13 +85,10 @@ SUBSET_SIZE=500
 # ---------------------------
 
 # EXP_NAME="dp_strong_scaling_baseline"
-# VAR_NAME="training_batch_size"
-# VARS=(1)
-# EMBED_DIM=512
-# LOCAL_SAMPLES=2
-# MESH_STRING="1,-1,1,4,2"
-# NODES=(1 4 8 16 32 64 128 256 512 1024)
-# SUBSET_SIZE=4096
+# VAR_NAME="data_train_subset"
+# VARS=(500 1000 2000 4000 8000 16000 32000)
+# MESH_STRING="1,-1,2,4,2"
+# NODES=(4 8 16 32 64 128 256)
 # X_AXIS_NAME="nodes"
 
 # ---------------------------
@@ -106,15 +97,12 @@ SUBSET_SIZE=500
 # Total dataset is scaled with node count to ensure constant work per node
 # ---------------------------
 
-# EXP_NAME="dp_strong_scaling_realistic"
-# VAR_NAME="training_batch_size"
-# VARS=(1)
-# EMBED_DIM=512
-# LOCAL_SAMPLES=2
-# MESH_STRING="1,-1,8,4,2"
-# NODES=(8 16 32 64 128 256 512 1024)
-# SUBSET_SIZE=4096
-# X_AXIS_NAME="nodes"
+EXP_NAME="dp_strong_scaling_realistic"
+VAR_NAME="data_train_subset"
+VARS=(500 1000 2000 4000 8000 16000 32000)
+MESH_STRING="1,-1,16,4,2"
+NODES=(32 64 128 256 512 1024 2048)
+X_AXIS_NAME="nodes"
 
 # ── System (can be overridden via flags) ────────────────────────────────────
 # Choose the system that you are running on. Commene the other one out.
@@ -171,8 +159,15 @@ EOF
 RUN_ID=0
 JOB_IDS=()
 
-for NODE in "${NODES[@]}"; do
-for VAR in "${VARS[@]}"; do
+len_nodes=${#NODES[@]}
+len_vars=${#VARS[@]}
+
+for (( i=0; i < len_nodes; i++ )); do
+
+    NODE="${NODES[i]}"
+    var_idx=$(( len_vars == 1 ? 0 : i ))
+    VAR="${VARS[var_idx]}"
+
 
     RUN_NAME=$(printf "run_%03d_${VAR_NAME}-%04d_nodes-%04d" "$RUN_ID" "$VAR" "$NODE")
 
@@ -198,12 +193,9 @@ EOF
         experiments/run_gb_script.sh \
         systems/${CONTAINER_SETUP} \
         src/train_bellbeast.py \
-        --config_file "configs/bellbeast_config_jupiter.yaml" \
+        --config_file "configs/hero_config_jupiter.yaml" \
         --skip_validation \
         mesh_dims=${MESH_STRING} \
-        data_train_subset=${SUBSET_SIZE} \
-        training_n_samples=${LOCAL_SAMPLES} \
-        model_embedding_dimension=${EMBED_DIM} \
         ${VAR_NAME}=${VAR}
     )
 
@@ -211,85 +203,11 @@ EOF
     JOB_IDS+=("$JOB_ID")
 
     echo "  slurm_job_id: ${JOB_ID}" >> "$CONFIG_FILE"
-    cp configs/bellbeast_config_jupiter.yaml "${CONFIG_DIR}/"
+    cp configs/hero_config_jupiter.yaml "${CONFIG_DIR}/"
 
     echo "Submitted ${RUN_NAME} → SLURM job ${JOB_ID}"
     RUN_ID=$(( RUN_ID + 1 ))
 done
-done
 
 echo ""
 echo "All sweep jobs submitted. Experiment root: ${EXPERIMENT_DIR}"
-
-
-# ── Build afterany dependency string  job1:job2:job3 … ───────────────────────
-DEPENDENCY=$(IFS=:; echo "${JOB_IDS[*]}")
-SWEEP_TAG=$(basename "${EXPERIMENT_DIR}")
-PLOT_PATH="${ANALYSIS_DIR}/scaling_${SWEEP_TAG}.png"
-
-# ── Write self-contained plotting job script ──────────────────────────────────
-PLOT_SCRIPT="${EXPERIMENT_DIR}/plot_job.sh"
-cat > "${PLOT_SCRIPT}" <<PLOTEOF
-#!/bin/bash
-#SBATCH -A "$ACCOUNT"
-#SBATCH -p "$PARTITION"
-#SBATCH --nodes 1
-#SBATCH --tasks-per-node 1
-#SBATCH --cpus-per-task 4
-#SBATCH --time "$PLOT_TIME"
-#SBATCH --job-name="plot_${SWEEP_TAG}"
-#SBATCH --output="${LOG_DIR}/plot_${SWEEP_TAG}.out"
-#SBATCH --error="${LOG_DIR}/plot_${SWEEP_TAG}.err"
-
-# /etc/bashrc on Jupiter sets BASHRCSOURCED without exporting it first,
-# which trips up 'set -u'.  Source it with nounset temporarily disabled.
-set +u
-source /etc/bashrc 2>/dev/null || true
-set -u
-set -eo pipefail
-
-echo "========================================================"
-echo " Scaling plot job"
-echo " Sweep     : ${SWEEP_TAG}"
-echo " Logs dir  : ${LOG_DIR}"
-echo " Output    : ${PLOT_PATH}"
-echo " Started   : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "========================================================"
-
-python3 "${REPO_ROOT}/experiments/parse_scaling.py" \\
-    --logs_dir  "${LOG_DIR}" \\
-    --out_path  "${PLOT_PATH}" \\
-    --sweep_id  "${SWEEP_TAG}" \\
-    --x_axis "${X_AXIS_NAME}"
-
-echo ""
-echo "Plot written → ${PLOT_PATH}"
-echo "Finished    : \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-PLOTEOF
-
-chmod +x "${PLOT_SCRIPT}"
-
-# ── Submit plotting job with afterany dependency ──────────────────────────────
-# afterany fires after every listed job ends, regardless of exit status.
-PLOT_JOB_RAW=$(sbatch \
-    --dependency="afterany:${DEPENDENCY}" \
-    --kill-on-invalid-dep=yes \
-    "${PLOT_SCRIPT}")
-
-PLOT_JOB_ID=$(echo "$PLOT_JOB_RAW" | awk '{print $NF}')
-
-# Record the plotting job in the sweep metadata
-cat >> "${EXPERIMENT_DIR}/sweep_config.yaml" <<EOF
-  plot_job_id: ${PLOT_JOB_ID}
-  plot_dependency: "${DEPENDENCY}"
-  plot_output: "${PLOT_PATH}"
-EOF
-
-echo ""
-echo "Plot job submitted → SLURM job ${PLOT_JOB_ID}"
-echo "  dependency : afterany:${DEPENDENCY}"
-echo "  output     : ${PLOT_PATH}"
-echo ""
-echo "Monitor with:"
-echo "  squeue -j ${PLOT_JOB_ID}"
-echo "  squeue -u \$USER"

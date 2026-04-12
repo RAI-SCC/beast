@@ -117,13 +117,20 @@ class NewUP_AllGaussLoss(nn.Module):
         self.aggregate_statistics = FullAggregation.apply
 
     def data_fitting(self, mean, std, target):
+        # data_fit = (
+        #     -self.dataset_size
+        #     * self.kl_loss.predictive_distribution.log_prob_from_parameters(
+        #         target, (mean, std)
+        #     )
+        #     .mean(dim=0)
+        #     .sum()
+        # )
+        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std)).mean(dim=0)
+        log_prob = torch.fmod(log_prob, 1.0)
+
         data_fit = (
             -self.dataset_size
-            * self.kl_loss.predictive_distribution.log_prob_from_parameters(
-                target, (mean, std)
-            )
-            .mean(dim=0)
-            .sum()
+            * log_prob.sum()
         )
 
         return data_fit

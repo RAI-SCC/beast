@@ -429,6 +429,7 @@ def train_one_epoch(
                 print(f"Optimizer lr: {param_group['lr']}")
     start_lr = 1e-6
     print_every_i_steps = 50
+    dsync_steps = 200
 
     if hasattr(dataloader, "sampler") and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
@@ -451,7 +452,7 @@ def train_one_epoch(
                 g["lr"] = warm
 
         # Desync on first iteration
-        if i == 0:
+        if i % dsync_steps == 0:
             x, y, dl_start, dl_end = execute_in_waves(lambda: next(dl_iter))
         else:
             x, y, dl_start, dl_end = next(dl_iter)
@@ -510,12 +511,13 @@ def train_one_epoch(
                     print(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, mse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}. data fitting {avg_df} prior matching {avg_pm} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, "
                     )
+                    
                 else:
                     print(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"
                     )
-            cum_batch_time = 0
             time.sleep(data_access_rank * 0.001)
+            cum_batch_time = 0
 
     dist.all_reduce(loss_sum, group=dtp_group)
     average_loss = loss_sum.item() / max(1, len(dataloader))

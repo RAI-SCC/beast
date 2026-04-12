@@ -100,7 +100,7 @@ def _init_uniform_override(self, parameter, fan_in) -> None:
 
 def convert_jigsaw_vi(
     module,
-    variational_distribution=vidist.Normal(),
+    variational_distribution=vidist.Normal(std=0.15),
     prior=vidist.Normal(),
     rescale_prior=False,
     kaiming_initialization=True,
