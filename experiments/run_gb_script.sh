@@ -89,18 +89,21 @@ fi
 
 export PROFSYS=$profsys
 
-# 1.) Copy image file to dev/shm on each node
-SHM_DIR=/dev/shm/${SLURM_JOB_ID}
-export IMAGE_SHM=${SHM_DIR}/${CONTAINER_NAME}
-export IMAGE_REGISTRY=$SIF
-srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p $(dirname ${IMAGE_SHM}) && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying ${IMAGE_REGISTRY} to ${IMAGE_SHM}" && cp ${IMAGE_REGISTRY} ${IMAGE_SHM}'
 
-# 2.) Set apptainer temporary directories and pycache to dev shm as well
-export APPTAINER_TMPDIR=${SHM_DIR}/apptainer/tmp/
-export APPTAINER_CACHEDIR=${SHM_DIR}/apptainer/cache/
-export PYTHONPYCACHEPREFIX=${SHM_DIR}/pycache/
+# 1.) Set apptainer temporary directories and pycache to dev shm as well
+export TMPDIR=/tmp/${SLURM_JOB_ID}
+export APPTAINER_TMPDIR=${TMPDIR}/apptainer/tmp/
+export APPTAINER_CACHEDIR=${TMPDIR}/apptainer/cache/
+export PYTHONPYCACHEPREFIX=${TMPDIR}/pycache/
 # Create directories
 srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p ${APPTAINER_TMPDIR} ${PYTHONPYCACHEPREFIX} ${APPTAINER_CACHE_DIR}'
+
+# 2.) Copy image file to dev/shm on each node (JUPITER)
+export IMAGE_SIF=${TMPDIR}/${CONTAINER_NAME}
+srun -n $SLURM_NNODES --ntasks-per-node 1 bash -c 'mkdir -p $(dirname ${IMAGE_SIF}) && echo "[${SLURM_PROCID}|${SLURM_NTASKS}] copying ${SIF} to ${IMAGE_SIF}" && cp ${SIF} ${IMAGE_SIF}'
+
+# 2.) DON'T Copy image file to dev/shm on each node (LUMI)
+# export IMAGE_SIF=${SIF}
 
 # Run acutal job
 echo "Running cmd:"
@@ -108,4 +111,4 @@ echo "  srun ${SYSTEM_SLURM_PARAMS[@]} $PYTHON_CMD $WORKDIR/$python_script ${rem
 echo ""
 
 
-srun ${SYSTEM_SLURM_PARAMS[@]} ${IMAGE_SHM} systems/venv_entry.sh $PYTHON_CMD $WORKDIR/$python_script "${remaining_args[@]}"
+srun ${SYSTEM_SLURM_PARAMS[@]} ${IMAGE_SIF} systems/venv_entry.sh $PYTHON_CMD $WORKDIR/$python_script "${remaining_args[@]}"
