@@ -84,8 +84,11 @@ def get_dataloader(
                 dtype=dtype,
             )
 
-    if config_dict["data"]["train_subset"] > 0:
+    if mode == "train" and config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
+        dataset = Subset(dataset, subset_indices)
+    elif mode == "validation" and config_dict["data"]["valid_subset"] > 0:
+        subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices)
 
     sampler = DistributedSampler(
