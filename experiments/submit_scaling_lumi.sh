@@ -59,14 +59,14 @@ set -euo pipefail
 # Total dataset size stays the same
 # ---------------------------
 
-# EXP_NAME="up_weak_scaling_baseline"
-# VAR_NAME="data_train_subset"
-# VARS=(500)
-# EMBED_DIM=1024
-# LOCAL_SAMPLES=1
-# MESH_STRING="1,1,-1,4,2"
-# NODES=(2 4 8 16 32 64 128 256 512 1024)
-# X_AXIS_NAME="nodes"
+EXP_NAME="up_weak_scaling_baseline"
+VAR_NAME="data_train_subset"
+VARS=(500)
+EMBED_DIM=1024
+LOCAL_SAMPLES=1
+MESH_STRING="1,1,-1,4,2"
+NODES=(2 4 8 16 32 64 )
+X_AXIS_NAME="nodes"
 
 # Exp 3.2: Increase global sampling number by increasing node count
 # Local sampling number and batch size stay the same
@@ -103,24 +103,22 @@ set -euo pipefail
 # Total dataset is scaled with node count to ensure constant work per node
 # ---------------------------
 
-EXP_NAME="dp_strong_scaling_realistic"
-VAR_NAME="data_train_subset"
-VARS=( 500 1000 2000 4000 8000 16000 32000 )
-EMBED_DIM=1024
-LOCAL_SAMPLES=1
-MESH_STRING="1,-1,16,4,2"
-NODES=(16 32 64 128 256 512 1024)
-X_AXIS_NAME="nodes"
+# EXP_NAME="dp_strong_scaling_realistic"
+# VAR_NAME="data_train_subset"
+# VARS=( 500 1000 2000 4000 8000 16000 )
+# EMBED_DIM=1024
+# LOCAL_SAMPLES=1
+# MESH_STRING="1,-1,16,4,2"
+# NODES=(16 32 64 128 256 512 )
+# X_AXIS_NAME="nodes"
 
 # ── System (can be overridden via flags) ────────────────────────────────────
 SYSTEM_NAME="lumi"
 ACCOUNT="project_462001248"
 PARTITION="standard-g"
-NODE=2
 TASKS_PER_NODE=8
 GPUS=8
-TIME="01:00:00"
-PLOT_TIME="00:10:00"
+TIME="00:20:00"
 CONTAINER_SETUP="lumi_singularity.sh"
 
 # ── Parse remaining args, intercept SLURM overrides ──────────────────────────

@@ -8,13 +8,13 @@ data:
     normalization_dir: "data/normalization"
     train_subset: -1
     valid_subset: -1
-    train_time_range: ["1979-01-01", "2020-12-31"]
+    train_time_range: ["2000-01-01", "2020-12-31"]
     valid_time_range: ["2021-01-01", "2021-12-31"]
     test_time_range: ["2021-01-01", "2022-12-31"]
     dataset_subsampling: 1
     target_subsampling: 6
-    prefetch_factor: 2
-    num_workers: 7
+    prefetch_factor: 1
+    num_workers: 2
     xlat: 720
     xlon: 1440
     n_variables: 84
@@ -26,7 +26,7 @@ model:
     n_attn_heads: [8,16,8]
     patch_size: 2
     noise_dim: 32
-    window_size_outer: [30, 60] # will work on JUPITER, not lumi due to divisibility
+    window_size_outer: [30, 60] 
     window_size_inner: [20, 30]
     n_attn_blocks: [1,1,1]
     bayesian: True
