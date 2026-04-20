@@ -93,7 +93,7 @@ def get_dataloader(
 
     sampler = DistributedSampler(
         dataset,
-        shuffle=True,
+        shuffle=(True if mode == "train" else False),
         rank=dp_process_group.rank(),
         num_replicas=dp_process_group.size(),
         seed=42,
