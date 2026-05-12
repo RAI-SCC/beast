@@ -109,3 +109,8 @@ format = "markdown"
 members = [
     "libs/jigsaw",
 ]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.152.6",
+]

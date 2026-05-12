@@ -1,13 +1,14 @@
 import os
 import sys
 import warnings
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 
 import mpi4py.MPI as MPI
 import pytest
 import torch
 import torch.distributed as dist
+from hypothesis import strategies as st
 
 comm = MPI.COMM_WORLD
 mpi_size = comm.Get_size()
@@ -95,3 +96,17 @@ def dist_env(device: torch.device) -> Generator[None, None, None]:
         raise RuntimeError("Process group initialization failed.")
     yield None
     dist.destroy_process_group()
+
+
+@st.composite
+def dist_st(
+    draw: Callable[[st.SearchStrategy], Any], strategy: st.SearchStrategy
+) -> Any:
+    """Decorator to make a strategy MPI-aware."""
+    # Get the strategy
+    data = draw(strategy)
+
+    # Broadcast the strategy to all ranks
+    sync_data = comm.bcast(data, root=0)
+
+    return sync_data
