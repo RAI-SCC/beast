@@ -11,17 +11,16 @@ repos:
       pass_filenames: false
       always_run: true
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1 # Use the sha / tag you want to point at
+    rev: v2.1.0 # Use the sha / tag you want to point at
     hooks:
       - id: mypy
         args: [--config-file, pyproject.toml, --ignore-missing-imports]
         additional_dependencies:
           - torch
-          - jellyfish
-        pass_filenames: false
+        pass_filenames: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.0
+    rev: v0.15.12
     hooks:
       # Run the linter.
       - id: ruff
