@@ -511,7 +511,7 @@ def train_one_epoch(
                     print(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, mse: {torch.nn.functional.mse_loss(pred.mean(dim=(0)), y)}. data fitting {avg_df} prior matching {avg_pm} Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, "
                     )
-                    
+
                 else:
                     print(
                         f"{epoch}, after Step {i}/{len(dataloader)}. loss: {float(loss.detach())}, Average time per batch {cum_batch_time / 1e6 / print_every_i_steps} ms, Clipped norm {clipped_norm}"

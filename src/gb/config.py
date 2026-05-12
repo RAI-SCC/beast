@@ -64,10 +64,6 @@ def setup_config_dict(
     # we'll set this automatically, to avoid confusion when defining the config,
     # as n_input_channels depends on how many timesteps we use as concatenated input
     config_dict["model"]["n_input_channels"] = n_input_vars + n_masks
-    config_dict["model"]["embedding_dimension"] = (
-        config_dict["model"]["embedding_dimension"]
-        * config_dict["data"]["n_in_timesteps"]
-    )
 
     return config_dict
 

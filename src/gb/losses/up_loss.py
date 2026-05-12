@@ -125,13 +125,12 @@ class NewUP_AllGaussLoss(nn.Module):
         #     .mean(dim=0)
         #     .sum()
         # )
-        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(target, (mean, std)).mean(dim=0)
+        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(
+            target, (mean, std)
+        ).mean(dim=0)
         log_prob = torch.fmod(log_prob, 1.0)
 
-        data_fit = (
-            -self.dataset_size
-            * log_prob.sum()
-        )
+        data_fit = -self.dataset_size * log_prob.sum()
 
         return data_fit
 
