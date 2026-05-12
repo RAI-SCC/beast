@@ -17,8 +17,7 @@ repos:
         args: [--config-file, pyproject.toml, --ignore-missing-imports]
         additional_dependencies:
           - torch
-          - jellyfish
-        pass_filenames: false
+        pass_filenames: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.15.0
