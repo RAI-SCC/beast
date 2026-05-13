@@ -1,6 +1,5 @@
 import pytest
 import torch
-from torch import Tensor
 from torch.nn.functional import l1_loss, mse_loss
 
 from beast.evaluation import calculate_mae, calculate_mse
@@ -26,8 +25,12 @@ from beast.evaluation import calculate_mae, calculate_mse
     ],
 )
 def test_mae(
-    prediction: Tensor, reference: Tensor, target: Tensor, batch_dim: int
+    prediction: torch.Tensor,
+    reference: torch.Tensor,
+    target: torch.Tensor,
+    batch_dim: int,
 ) -> None:
+    """Test the MAE calculation."""
     mae = calculate_mae(prediction, reference, batch_dimension=batch_dim)
     assert mae == pytest.approx(target)
 
@@ -52,7 +55,11 @@ def test_mae(
     ],
 )
 def test_mse(
-    prediction: Tensor, reference: Tensor, target: Tensor, batch_dim: int
+    prediction: torch.Tensor,
+    reference: torch.Tensor,
+    target: torch.Tensor,
+    batch_dim: int,
 ) -> None:
+    """Test the MSE calculation."""
     mae = calculate_mse(prediction, reference, batch_dimension=batch_dim)
     assert mae == pytest.approx(target)

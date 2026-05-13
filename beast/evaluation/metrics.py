@@ -1,12 +1,12 @@
 """Functions to calculate simple metrics."""
 
-from torch import Tensor
+import torch
 from torch.nn.functional import l1_loss, mse_loss
 
 
 def calculate_mse(
-    prediction: Tensor, target: Tensor, batch_dimension: int = 0
-) -> Tensor:
+    prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
+) -> torch.Tensor:
     """
     Calculate mean squared error.
 
@@ -29,8 +29,8 @@ def calculate_mse(
 
 
 def calculate_mae(
-    prediction: Tensor, target: Tensor, batch_dimension: int = 0
-) -> Tensor:
+    prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
+) -> torch.Tensor:
     """
     Calculate mean absolute error.
 
