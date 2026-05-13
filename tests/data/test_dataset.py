@@ -1,11 +1,12 @@
-import pytest
 import numpy as np
-import xarray as xr
 import pandas as pd
+import pytest
+import torch
+import xarray as xr
 import zarr
 
+
 from beast.data.dataset import ERA5DatasetDistributed
-from jigsaw import normalization, utils_init
 
 def mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
     # Time: 24 datetime64[ns] steps (hourly starting from 2024-01-01)
@@ -61,6 +62,8 @@ def mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
         else:
             ds_step.to_zarr(zarr_path, append_dim="time")
 
+    return zarr_path
+
 def generate_masks(path, xlat, xlon, n_masks):
     """Generate n_masks numpy files, each containing an [xlat, xlon] array of ones.
 
@@ -87,8 +90,10 @@ def generate_normalization(path, n_features):
     np.save(path/f"norm_mean.npy", mean)
     np.save(path/f"norm_std.npy", std)
 
+
+
 class TestDataset:
-    # contents of test_image.py
+    contents of test_image.py
     @pytest.mark.parametrize("n_time, n_features, n_lat, n_lon", [(24,84,721,1440), (24,84,120,240)])
     def test_mock_dataset(self, tmp_path_factory, n_time, n_features, n_lat, n_lon):
         zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
@@ -111,18 +116,30 @@ class TestDataset:
             assert mask.shape == (n_lat, n_lon)
 
 
-    # def test_ERA5DatasetDistributed(): 
-    #     zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
-    #     mock_zarr_data(zarr_path, n_time,n_features,n_lat,n_lon)
-    #     dataset = ERA5DatasetDistributed(process_group,
-    #     mock_zarr_data,
-    #     constant_masks_path,
-    #     constant_masks,
-    #     normalization_dir,
-    #     time_range=None,
-    #     dt=6,
-    #     n_in_timesteps=1,
-    #     n_out_timesteps=1,
-    #     normalize=True,
-    #     dtype=torch.float32,)
+    @pytest.mark.parametrize("n_masks, n_time, n_features, n_lat, n_lon, in_timesteps, out_timesteps", [(3, 48,84,721,1440, 2,1), (3, 48,84,120,240,2,1)])
+    def test_ERA5DatasetDistributed(self,tmp_path_factory, n_masks, n_time, n_features, n_lat, n_lon,in_timesteps, out_timesteps): 
+        data_path = tmp_path_factory.mktemp("data") 
+        
+        zarr_path = mock_zarr_data((data_path/ "test_data.zarr"), n_time,n_features,n_lat,n_lon)
+        mask_list = generate_masks(data_path, n_lat, n_lon, n_masks)
+        generate_normalization(data_path, n_features)
+        rank = 1
+        world_size = 4
+
+        dataset = ERA5DatasetDistributed(
+            rank,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            normalize=True,
+            dtype=torch.float32,)
+
+        assert len(dataset) == n_time - (in_timesteps+out_timesteps)*6
+
 

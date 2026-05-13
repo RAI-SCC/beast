@@ -10,6 +10,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
+import time
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh

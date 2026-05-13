@@ -14,7 +14,8 @@ class ERA5DatasetDistributed(Dataset):
 
     def __init__(
         self,
-        process_group,
+        pg_rank,
+        pg_size,
         data_path,
         constant_masks_path,
         constant_masks,
@@ -27,22 +28,15 @@ class ERA5DatasetDistributed(Dataset):
         dtype=torch.float32,
     ):
         """
-        Initialize.
-
-        params: Dict
-            configuration file
-        mode: String
-            of value 'training', 'testing', 'validation'
-        process_group:
-            DTP Process group
+        TBD 
         """
         self.dt = dt
         self.in_timesteps = n_in_timesteps
         self.out_timesteps = n_out_timesteps
 
         self.dtype = dtype
-        self.process_group = process_group
-        self.local_rank = process_group.rank()
+        self.world_size = pg_size
+        self.local_rank = pg_rank
 
         self.datapath = data_path
         self.years = time_range
@@ -67,8 +61,9 @@ class ERA5DatasetDistributed(Dataset):
                 self.xlon -= 1
 
             times = pd.to_datetime(self.zarr_data.time)
-            train_years = times[(times >= self.years[0]) & (times < self.years[1])]
-            self.zarr_data = self.zarr_data.sel(time=train_years)
+            if self.years is not None:
+                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+                self.zarr_data = self.zarr_data.sel(time=train_years)
 
             self.n_data_items = self.zarr_data.dims["time"]
             self.num_vars = self.zarr_data.dims["feature"]  # self.num_vars
@@ -85,7 +80,7 @@ class ERA5DatasetDistributed(Dataset):
 
         execute_in_waves(load_data)
 
-        if self.process_group.size() > 1:
+        if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
             self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
@@ -116,8 +111,8 @@ class ERA5DatasetDistributed(Dataset):
             self.in_masks = [row * n_masks, (row + 1) * n_masks]
             # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
             self.in_out_xlon = [
-                col * self.xlon // (process_group.size() // 2),
-                (col + 1) * self.xlon // (process_group.size() // 2),
+                col * self.xlon // (self.world_size // 2),
+                (col + 1) * self.xlon // (self.world_size  // 2),
             ]
 
         else:
@@ -157,7 +152,7 @@ class ERA5DatasetDistributed(Dataset):
         input = torch.cat(input_list, dim=0)
 
         # For distributed dataset, we may create inbalances in the variables
-        if self.process_group.size() > 1:
+        if self.world_size  > 1:
             # Odd ranks load second half of variables, so they might have less masks
             if (self.input_pad_oddrank != 0) and (self.local_rank % 2 == 1):
                 input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, self.input_pad_oddrank))
@@ -181,7 +176,7 @@ class ERA5DatasetDistributed(Dataset):
         
         target = torch.cat(target_list, dim=0)
 
-        if self.process_group.size() > 1:
+        if self.world_size  > 1:
             # Odd ranks load second half of variables, so they might have less masks
             if (self.output_pad_oddrank != 0) and (self.local_rank % 2 == 1):
                 target = torch.nn.functional.pad(target, (0, 0, 0, 0, 0, self.output_pad_oddrank))
