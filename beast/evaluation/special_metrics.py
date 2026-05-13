@@ -9,7 +9,11 @@ from torch.distributed import ProcessGroup
 
 
 def calculate_crps(
-    prediction: Tensor, target: Tensor, up_group: Optional[ProcessGroup] = None
+    prediction: Tensor,
+    target: Tensor,
+    up_group: Optional[ProcessGroup] = None,
+    sample_dim: int = 0,
+    batch_dim: int = 1,
 ) -> Tensor:
     """
     Calculate the Continuous Ranked Probability Score (CRPS) for the given predictions and targets.
@@ -22,6 +26,10 @@ def calculate_crps(
         The true values.
     up_group : Optional[ProcessGroup], default=None
         The process group for uncertainty parallelization. If None, the calculation is done locally without.
+    sample_dim : int, default=0
+        The dimension along which the ensemble samples are located.
+    batch_dim : int, default=1
+        The dimension along which the batch is located.
 
     Returns
     -------
@@ -29,9 +37,11 @@ def calculate_crps(
         The calculated CRPS synchronized across UP processes.
     """
     if up_group is None or up_group.size() == 1:
-        return _calculate_crps_locally(prediction, target)
+        return _calculate_crps_locally(prediction, target, sample_dim, batch_dim)
 
-    mae_part = torch.abs((prediction - target.unsqueeze(dim=0))).mean(dim=0)
+    mae_part = torch.abs((prediction - target.unsqueeze(dim=sample_dim))).mean(
+        dim=sample_dim
+    )
     mae_handle = dist.all_reduce(
         mae_part, op=dist.ReduceOp.AVG, group=up_group, async_op=True
     )
@@ -39,14 +49,17 @@ def calculate_crps(
     local_rank = up_group.rank()
     world_size = up_group.size()
 
-    samples_per_worker = prediction.shape[0]
+    samples_per_worker = prediction.shape[sample_dim]
     total_samples = samples_per_worker * world_size
     denominator = 2 * total_samples * (total_samples - 1)
 
     # local spread
-    local_diffs = torch.abs((prediction.unsqueeze(0) - prediction.unsqueeze(1))).sum(
-        dim=(0, 1)
-    )
+    local_diffs = torch.abs(
+        (
+            prediction.unsqueeze(dim=sample_dim)
+            - prediction.unsqueeze(dim=(sample_dim + 1))
+        )
+    ).sum(dim=(sample_dim, sample_dim + 1))
     spread_part = local_diffs / denominator
 
     # MGR buffers
@@ -71,8 +84,11 @@ def calculate_crps(
 
         # calculate cross diffs
         cross_diffs = torch.abs(
-            (prediction.unsqueeze(dim=0) - recv_buffer.unsqueeze(dim=1))
-        ).sum(dim=(0, 1))
+            (
+                prediction.unsqueeze(dim=sample_dim)
+                - recv_buffer.unsqueeze(dim=sample_dim + 1)
+            )
+        ).sum(dim=(sample_dim, sample_dim + 1))
         spread_part += cross_diffs / denominator
 
         # adjust buffers for next loop
@@ -83,12 +99,16 @@ def calculate_crps(
 
     mae_handle.wait()
     crps = mae_part - spread_part
-    crps = crps.mean(dim=0)  # average over batch
+    crps = crps.mean(
+        dim=(batch_dim if batch_dim < sample_dim else batch_dim - 1)
+    )  # average over batch
 
     return crps
 
 
-def _calculate_crps_locally(prediction: Tensor, target: Tensor) -> Tensor:
+def _calculate_crps_locally(
+    prediction: Tensor, target: Tensor, sample_dim: int = 0, batch_dim: int = 1
+) -> Tensor:
     """
     Calculate the CRPS without parallelization of the samples.
 
@@ -98,19 +118,32 @@ def _calculate_crps_locally(prediction: Tensor, target: Tensor) -> Tensor:
         The predicted ensemble.
     target : Tensor
         The true values.
+    sample_dim : int, default=0
+        The dimension along which the ensemble samples are located.
+    batch_dim : int, default=1
+        The dimension along which the batch is located.
 
     Returns
     -------
     Tensor
         The calculated CRPS.
     """
-    crps = torch.mean(torch.abs(prediction - target.unsqueeze(dim=0)), dim=0)
+    crps = torch.mean(
+        torch.abs(prediction - target.unsqueeze(dim=sample_dim)), dim=sample_dim
+    )
 
-    sample_size = prediction.shape[0]
+    sample_size = prediction.shape[sample_dim]
     if sample_size > 1:
         crps -= torch.sum(
-            torch.abs(prediction.unsqueeze(dim=0) - prediction.unsqueeze(dim=1)),
-            dim=(0, 1),
+            torch.abs(
+                prediction.unsqueeze(dim=sample_dim)
+                - prediction.unsqueeze(dim=sample_dim + 1)
+            ),
+            dim=(sample_dim, sample_dim + 1),
         ) / (2 * sample_size * (sample_size - 1))
+
+    crps = crps.mean(
+        dim=(batch_dim if batch_dim < sample_dim else batch_dim - 1)
+    )  # average over batch
 
     return crps
