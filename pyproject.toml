@@ -32,6 +32,7 @@ dev = [
     "pytest",
     "coverage",
     "mpi4py>=4.1.1",
+    "hypothesis>=6.1.1",
 
     # QA
     "pre-commit",
@@ -104,13 +105,3 @@ command_line = "-m pytest"
 
 [tool.coverage.report]
 format = "markdown"
-
-[tool.uv.workspace]
-members = [
-    "libs/jigsaw",
-]
-
-[dependency-groups]
-dev = [
-    "hypothesis>=6.152.6",
-]
