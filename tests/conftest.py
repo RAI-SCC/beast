@@ -10,6 +10,11 @@ import torch
 import torch.distributed as dist
 from hypothesis import strategies as st
 
+import numpy as np
+import xarray as xr
+import pandas as pd
+import zarr
+
 comm = MPI.COMM_WORLD
 mpi_size = comm.Get_size()
 mpi_rank = comm.Get_rank()
@@ -110,3 +115,89 @@ def dist_st(
     sync_data = comm.bcast(data, root=0)
 
     return sync_data
+
+
+@pytest.fixture(scope="session")
+def mock_zarr_data(tmp_path_factory, n_time, n_features, n_lat, n_lon):
+    zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
+   # --- Create coordinates ---
+
+    # Time: 24 datetime64[ns] steps (hourly starting from 2024-01-01)
+    time_coords = pd.date_range("2024-01-01", periods=n_time, freq="h")
+
+    surf_vars = [
+        "mean_sea_level_pressure",
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "2m_temperature",
+        "sea_surface_temperature",
+        "total_precipitation",
+    ]
+    plev_vars = [
+        "geopotential",
+        "specific_humidity",
+        "temperature",
+        "u_component_of_wind",
+        "v_component_of_wind",
+        "vertical_velocity",
+    ]
+
+    levels = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+    feature_names = surf_vars + [var + "_" + str(p) for var in plev_vars for p in levels]
+
+    # Latitude and Longitude as float32
+    lat_coords = np.linspace(90, -90, n_lat, dtype=np.float32)
+    lon_coords = np.linspace(0, 360, n_lon, endpoint=False, dtype=np.float32)
+
+    # --- Write to Zarr one time step at a time (memory efficient) ---
+
+    for t in range(n_time):
+        np.random.seed(t)
+        data_step = np.random.rand(1, n_features, n_lat, n_lon).astype(np.float32)
+
+        ds_step = xr.Dataset(
+            data_vars={
+                "fields": xr.DataArray(
+                    data=data_step,
+                    dims=["time", "feature", "latitude", "longitude"],
+                    coords={
+                        "time": [time_coords[t]],
+                        "feature": feature_names,
+                        "latitude": lat_coords,
+                        "longitude": lon_coords,
+                    },
+                )
+            }
+        ).chunk({"time": 1, "feature": n_features, "latitude": n_lat, "longitude": n_lon})
+
+        if t == 0:
+            ds_step.to_zarr(zarr_path, mode="w")
+        else:
+            ds_step.to_zarr(zarr_path, append_dim="time")
+
+
+    # --- Remove unwanted attributes ---
+    store = zarr.open(zarr_path, mode="r+")
+
+    # Remove chunk and feature name attributes from all arrays and groups
+    def clean_attrs(node):
+        keys_to_remove = [k for k in node.attrs if "chunks" in k.lower() or "feature_names" in k.lower()]
+        for k in keys_to_remove:
+            del node.attrs[k]
+
+    # Clean root attrs
+    clean_attrs(store)
+
+    # Clean all array-level attrs
+    for key in store:
+        item = store[key]
+        clean_attrs(item)
+        if hasattr(item, "keys"):
+            for sub_key in item:
+                clean_attrs(item[sub_key])
+
+    return zarr_path
+
+
+
+
