@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 import xarray as xr
-from gb.utils import execute_in_waves
+from beast.comm import execute_in_waves
 from torch.utils.data import Dataset
 
 

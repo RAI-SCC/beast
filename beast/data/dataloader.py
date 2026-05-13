@@ -3,11 +3,11 @@ import time
 
 import torch
 import torch.distributed as dist
-from gb.dataloaders.dataset_0_25_degree import (
+from beast.data.dataset_0_25_degree import (
     ERA5DatasetDistributed,
     ERA5TwoTimestepsDatasetDistributed,
 )
-from gb.dataloaders.dataset_1_5_degree import (
+from beast.data.dataset_1_5_degree import (
     DummyDataset,
     ERA5PreprocessedDataset15degree,
     ERA5TwoTimestepsPreprocessedDataset15degree,

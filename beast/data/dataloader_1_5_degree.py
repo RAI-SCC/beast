@@ -2,8 +2,8 @@ import os
 
 import torch
 import torch.distributed as dist
-from gb.dataloaders.dataloader_0_25_degree import GBDataLoader
-from gb.dataloaders.dataset_1_5_degree import (
+from beast.data.dataloader_0_25_degree import GBDataLoader
+from beast.data.dataset_1_5_degree import (
     DummyDataset,
     ERA5PreprocessedDataset15degree,
     ERA5TwoTimestepsPreprocessedDataset15degree,

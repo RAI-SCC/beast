@@ -14,34 +14,11 @@ import torch_blue
 import torch_blue.vi.distributions as vidist
 import xarray as xr
 import yaml
-from gb.comm import get_process_group
-from gb.model.model_gb_tiny import NiceNorm
+from beast.comm import get_process_group
+from beast.model.model_gb_tiny import NiceNorm
 from jigsaw import normalization, utils_init
 from torch.utils.flop_counter import FlopCounterMode
 
-
-def execute_in_waves(func, wave_size: int = 128):
-    world_size = dist.get_world_size(group=None)
-    num_groups = (world_size + wave_size - 1) // wave_size
-    global_rank = dist.get_rank(group=None)
-    result = None
-
-    for group in range(num_groups):
-        wave_start = time.time()
-        start_rank = group * wave_size
-        end_rank = start_rank + wave_size
-
-        if global_rank < end_rank and global_rank >= start_rank:
-            result = func()
-
-        dist.barrier(group=None)  # Synchronize after each wave
-        wave_end = time.time()
-        if global_rank == 0:
-            print(
-                f"R{global_rank}/{world_size}: Wave {group} of {func.__name__} executed in {wave_end - wave_start}"
-            )
-
-    return result
 
 
 

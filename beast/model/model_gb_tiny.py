@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from gb.model.expert import ExpertWeightingLayer
+from beast.model.expert import ExpertWeightingLayer
 
 
 class TinyBellbeast(torch.nn.Module):
