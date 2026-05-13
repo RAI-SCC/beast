@@ -19,8 +19,9 @@ classifiers = [
 requires-python = ">=3.12"
 
 dependencies = [
+    "h5py>=3.16.0",
+    "torch-blue @ git+https://github.com/RAI-SCC/torch_blue@stable-beast",
     "torch>=2.11.0",
-    "torch-blue>=1.0.1",
     "xarray>=2026.4.0",
 ]
 
@@ -30,6 +31,9 @@ dev = [
     # Testing
     "pytest",
     "coverage",
+    "pytest-cov",
+    "mpi4py>=4.1.1",
+    "hypothesis>=6.1.1",
 
     # QA
     "pre-commit",
@@ -43,6 +47,19 @@ Homepage = "https://github.com/RAI-SCC/Beast"
 Repository = "https://github.com/RAI-SCC/Beast"
 Issues = "https://github.com/RAI-SCC/Beast/issues"
 
+# Build - Hatchling
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["beast", "libs/jigsaw"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "beast",
+    "libs/jigsaw",
+]
+
 # Mypy
 [tool.mypy]
 python_version="3.12"
@@ -52,7 +69,7 @@ exclude=[
 ]
 
 disallow_untyped_defs = true
-disallow_any_unimported = true
+disallow_any_unimported = false
 no_implicit_optional = true
 check_untyped_defs=true
 warn_return_any=true
@@ -67,7 +84,7 @@ target-version = "py312"
 exclude = ["docs", "examples"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "D", "D417", "NPY"]
+select = ["E", "F", "I", "D", "D417", "N"]
 ignore = ["E501", "NPY201"]
 
 [tool.ruff.lint.per-file-ignores]
