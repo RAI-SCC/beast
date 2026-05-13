@@ -1,10 +1,12 @@
-"""Submodule containing utils for the evaluation."""
+"""Util functions for the evaluation."""
 
 from typing import Any, Sequence
 
 import torch
 
-## TODO: This is bad - it should be defined centrally and checked at initialization to ensure the
+## TODO: This is bad - it should be defined centrally and checked at initialization to ensure the config is valid.
+## Not sure what this cleanest way to implement this is - I have seen different variants.
+
 DATA_KEY = "data"
 """Key to access the data section in the configuration file."""
 EVALUATION_KEY = "evaluation"
