@@ -7,34 +7,52 @@ from beast.evaluation import calculate_mae, calculate_mse
 
 
 @pytest.mark.parametrize(
-    "prediction,reference,target",
+    "prediction,reference,target,batch_dim",
     [
-        [torch.tensor(0.0), torch.tensor(1.0), torch.tensor(1.0)],
+        [torch.tensor(0.0), torch.tensor(1.0), torch.tensor(1.0), 0],
         [
             torch.tensor([0.0, 1.0, 2.0]),
-            torch.tensor([0.5, 0.5, 1.5]),
+            torch.tensor([0.5, 0.6, 1.4]),
             torch.tensor(0.5),
+            0,
         ],
-        [a := torch.randn(3, 4, 5), b := torch.randn(3, 4, 5), l1_loss(a, b)],
+        [
+            a := torch.randn(3, 4, 5),
+            b := torch.randn(3, 4, 5),
+            l1_loss(a, b, reduction="none").mean(dim=0),
+            0,
+        ],
+        [a, b, l1_loss(a, b, reduction="none").mean(dim=2), 2],
     ],
 )
-def test_mae(prediction: Tensor, reference: Tensor, target: Tensor) -> None:
-    mae = calculate_mae(prediction, reference)
+def test_mae(
+    prediction: Tensor, reference: Tensor, target: Tensor, batch_dim: int
+) -> None:
+    mae = calculate_mae(prediction, reference, batch_dimension=batch_dim)
     assert mae == pytest.approx(target)
 
 
 @pytest.mark.parametrize(
-    "prediction,reference,target",
+    "prediction,reference,target,batch_dim",
     [
-        [torch.tensor(0.0), torch.tensor(1.0), torch.tensor(1.0)],
+        [torch.tensor(0.0), torch.tensor(1.0), torch.tensor(1.0), 0],
         [
             torch.tensor([0.0, 1.0, 2.0]),
-            torch.tensor([0.5, 0.5, 1.5]),
-            torch.tensor(0.25),
+            torch.tensor([0.5, 0.9, 1.8]),
+            torch.tensor(0.1),
+            0,
         ],
-        [a := torch.randn(3, 4, 5), b := torch.randn(3, 4, 5), mse_loss(a, b)],
+        [
+            a := torch.randn(3, 4, 5),
+            b := torch.randn(3, 4, 5),
+            mse_loss(a, b, reduction="none").mean(dim=0),
+            0,
+        ],
+        [a, b, mse_loss(a, b, reduction="none").mean(dim=2), 2],
     ],
 )
-def test_mse(prediction: Tensor, reference: Tensor, target: Tensor) -> None:
-    mae = calculate_mse(prediction, reference)
+def test_mse(
+    prediction: Tensor, reference: Tensor, target: Tensor, batch_dim: int
+) -> None:
+    mae = calculate_mse(prediction, reference, batch_dimension=batch_dim)
     assert mae == pytest.approx(target)
