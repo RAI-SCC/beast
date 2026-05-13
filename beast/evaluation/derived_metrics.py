@@ -29,7 +29,7 @@ def calculate_rmse(metric_dict: Dict[str, Tensor]) -> Tensor:
     return rmse
 
 
-def calculate_ssr(metric_dict: Dict[str, Tensor]) -> Tensor:
+def calculate_spread_skill_ratio(metric_dict: Dict[str, Tensor]) -> Tensor:
     """
     Calculate the spread-skill ratio (SSR) from the Mean Squared Error (MSE) and the total variance provided in the metric_dict.
 

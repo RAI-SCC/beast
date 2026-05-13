@@ -99,9 +99,9 @@ def test_calculate_crps_distributed(
     local_rank = process_group.rank()
     world_size = process_group.size()
 
-    if world_size > prediction.shape[0]:
+    if prediction.shape[0] % world_size != 0:
         pytest.skip(
-            f"This parametrization of the test requires the world size to be at most {prediction.shape[0]}."
+            f"This parametrization of the test requires the world size to be a divisor of {prediction.shape[0]}."
         )
 
     local_slice = slice(
