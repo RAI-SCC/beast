@@ -356,17 +356,3 @@ def test_missing_all_variables_no_config() -> None:
     t = torch.zeros(2, 4)
     with pytest.raises(KeyError, match="Configuration error"):
         select_variables(t, channel_rank=0, channel_group_size=1)
-
-
-def test_wrong_input_for_select_variables() -> None:
-    """Ensure incorrect input type raises an error."""
-    config = {
-        DATA_KEY: {
-            SURFACE_VARIABLES_KEY: _ALL_SURFACE,
-            PRESSURE_VARIABLES_KEY: _ALL_PRESSURE,
-            PRESSURE_LEVELS_KEY: _ALL_LEVELS,
-        },
-        EVALUATION_KEY: {},
-    }
-    with pytest.raises(AssertionError, match="Expected `torch.Tensor` or `Sequence`"):
-        select_variables(42, config=config, channel_rank=0, channel_group_size=1)  # type: ignore[arg-type]

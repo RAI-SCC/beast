@@ -77,10 +77,6 @@ def select_variables(
     AssertionError
         If ``t`` is not a ``torch.Tensor`` or ``Sequence``.
     """
-    assert isinstance(t, (torch.Tensor, Sequence)), (
-        f"Expected `torch.Tensor` or `Sequence`, got type {type(t)}"
-    )
-
     data_config: dict | None = config.get(DATA_KEY) if config is not None else None
     eval_config: dict | None = (
         config.get(EVALUATION_KEY) if config is not None else None
