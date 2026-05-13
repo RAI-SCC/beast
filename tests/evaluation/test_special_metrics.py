@@ -16,7 +16,11 @@ from beast.evaluation.special_metrics import _calculate_crps_locally
         (torch.tensor([[[0.0, 0.0]], [[0.0, 0.0]]]), torch.tensor([[0.0, 0.0]])),
     ],
 )
-def test_calculate_crps_local_redirection(prediction: Tensor, target: Tensor) -> None:
+def test_calculate_crps_local_redirection(
+    prediction: Tensor, target: Tensor, device: torch.device
+) -> None:
+    prediction = prediction.to(device)
+    target = target.to(device)
     assert torch.allclose(
         calculate_crps(prediction, target), _calculate_crps_locally(prediction, target)
     ), "CRPS local calculation does not match expected local behavior."
@@ -48,8 +52,12 @@ def test_calculate_crps_local_redirection(prediction: Tensor, target: Tensor) ->
     ],
 )
 def test_calculate_crps_local_calculation(
-    prediction: Tensor, target: Tensor, result: Tensor
+    prediction: Tensor, target: Tensor, result: Tensor, device: torch.device
 ) -> None:
+    prediction = prediction.to(device)
+    target = target.to(device)
+    result = result.to(device)
+
     function_result = _calculate_crps_locally(prediction, target)
     assert torch.allclose(function_result, result), (
         "CRPS local calculation is incorrect."
@@ -83,12 +91,12 @@ def test_calculate_crps_local_calculation(
     ],
 )
 def test_calculate_crps_distributed(
-    prediction: Tensor, target: Tensor, result: Tensor
+    prediction: Tensor, target: Tensor, result: Tensor, device: torch.device
 ) -> None:
-    """
-    This test should be run in a distributed environment with multiple processes.
-    TODO: Implementation currently missing.
-    """
+    prediction = prediction.to(device)
+    target = target.to(device)
+    result = result.to(device)
+
     assert dist.is_initialized(), "Distributed environment is not initialized."
     assert dist.get_world_size() > 1, (
         "This test should only run if there is more than 1 rank."

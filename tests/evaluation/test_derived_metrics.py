@@ -9,8 +9,8 @@ from beast.evaluation import calculate_rmse, calculate_spread_skill_ratio
 
 
 @pytest.mark.parametrize("dimensions", [(3, 4), (5,), (2, 2, 2), (2, 3, 4, 5)])
-def test_calculate_rmse(dimensions: Tuple[int, ...]) -> None:
-    metric_dict = {"mse": torch.randn(*dimensions) ** 2}
+def test_calculate_rmse(dimensions: Tuple[int, ...], device: torch.device) -> None:
+    metric_dict = {"mse": torch.randn(*dimensions, device=device) ** 2}
     expected_rmse = torch.sqrt(metric_dict["mse"])
     assert torch.allclose(calculate_rmse(metric_dict), expected_rmse), (
         "RMSE calculation is incorrect."
@@ -24,10 +24,12 @@ def test_calculate_rmse(dimensions: Tuple[int, ...]) -> None:
 
 
 @pytest.mark.parametrize("dimensions", [(3, 4), (5,), (2, 2, 2), (2, 3, 4, 5)])
-def test_calculate_spread_skill_ratio(dimensions: Tuple[int, ...]) -> None:
+def test_calculate_spread_skill_ratio(
+    dimensions: Tuple[int, ...], device: torch.device
+) -> None:
     metric_dict = {
-        "mse": torch.randn(*dimensions) ** 2,
-        "variance": torch.randn(*dimensions) ** 2,
+        "mse": torch.randn(*dimensions, device=device) ** 2,
+        "variance": torch.randn(*dimensions, device=device) ** 2,
     }
     expected_ssr = metric_dict["variance"].sqrt() / metric_dict["mse"].sqrt()
     assert torch.allclose(calculate_spread_skill_ratio(metric_dict), expected_ssr), (
@@ -39,7 +41,7 @@ def test_calculate_spread_skill_ratio(dimensions: Tuple[int, ...]) -> None:
         match="Required metric 'mse' for 'spread-skill ratio' calculation not found in metric_dict",
     ):
         calculate_spread_skill_ratio(
-            {"variance": torch.tensor(2.0)}
+            {"variance": torch.tensor(2.0, device=device)}
         )  # Missing 'mse' key
 
     with pytest.raises(
@@ -47,5 +49,5 @@ def test_calculate_spread_skill_ratio(dimensions: Tuple[int, ...]) -> None:
         match="Required metric 'variance' for 'spread-skill ratio' calculation not found in metric_dict",
     ):
         calculate_spread_skill_ratio(
-            {"mse": torch.tensor(8.0)}
+            {"mse": torch.tensor(8.0, device=device)}
         )  # Missing 'variance' key
