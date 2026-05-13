@@ -84,8 +84,8 @@ def generate_masks(path, xlat, xlon, n_masks):
     return mask_list
 
 def generate_normalization(path, n_features):
-    mean = np.zeros((n_features, ), dtype=np.float32) 
-    std = np.ones((n_features, ), dtype=np.float32) 
+    mean = np.zeros((n_features, 1,1), dtype=np.float32) 
+    std = np.ones((n_features,1,1 ), dtype=np.float32) 
 
     np.save(path/f"norm_mean.npy", mean)
     np.save(path/f"norm_std.npy", std)
@@ -93,7 +93,6 @@ def generate_normalization(path, n_features):
 
 
 class TestDataset:
-    contents of test_image.py
     @pytest.mark.parametrize("n_time, n_features, n_lat, n_lon", [(24,84,721,1440), (24,84,120,240)])
     def test_mock_dataset(self, tmp_path_factory, n_time, n_features, n_lat, n_lon):
         zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
@@ -116,15 +115,16 @@ class TestDataset:
             assert mask.shape == (n_lat, n_lon)
 
 
-    @pytest.mark.parametrize("n_masks, n_time, n_features, n_lat, n_lon, in_timesteps, out_timesteps", [(3, 48,84,721,1440, 2,1), (3, 48,84,120,240,2,1)])
-    def test_ERA5DatasetDistributed(self,tmp_path_factory, n_masks, n_time, n_features, n_lat, n_lon,in_timesteps, out_timesteps): 
+    @pytest.mark.parametrize("n_masks, n_features, n_lat, n_lon, in_timesteps, out_timesteps", [(3, 84,721,1440, 2,1), (3, 84,120,240,2,1)])
+    def test_ERA5DatasetDistributed(self,tmp_path_factory, n_masks, n_features, n_lat, n_lon, in_timesteps, out_timesteps): 
         data_path = tmp_path_factory.mktemp("data") 
-        
+        n_time = 48
+        rank = 1
+        world_size = 4
+
         zarr_path = mock_zarr_data((data_path/ "test_data.zarr"), n_time,n_features,n_lat,n_lon)
         mask_list = generate_masks(data_path, n_lat, n_lon, n_masks)
         generate_normalization(data_path, n_features)
-        rank = 1
-        world_size = 4
 
         dataset = ERA5DatasetDistributed(
             rank,
@@ -141,5 +141,8 @@ class TestDataset:
             dtype=torch.float32,)
 
         assert len(dataset) == n_time - (in_timesteps+out_timesteps)*6
+
+        x, target = dataset[0]
+        assert list(x.shape) == [in_timesteps* n_features//2 + n_masks//2, n_lat-1, n_lon//2]
 
 
