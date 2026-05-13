@@ -1,3 +1,4 @@
 [submodule "jigsaw"]
 	path = libs/jigsaw
 	url = https://github.com/RAI-SCC/jigsaw.git
+	branch = vi
