@@ -19,6 +19,11 @@ def calculate_rmse(metric_dict: Dict[str, Tensor]) -> Tensor:
     -------
     Tensor
         The calculated RMSE.
+
+    Raises
+    ------
+    KeyError
+        If the required metric 'mse' for 'rmse' calculation is not found in metric_dict.
     """
     try:
         rmse = torch.sqrt(metric_dict["mse"])
@@ -42,6 +47,11 @@ def calculate_spread_skill_ratio(metric_dict: Dict[str, Tensor]) -> Tensor:
     -------
     Tensor
         The calculated SSR.
+
+    Raises
+    ------
+    KeyError
+        If either of the required metrics 'mse' or 'variance' for 'spread-skill ratio' calculation are not found in metric_dict.
     """
     try:
         ssr = torch.sqrt(metric_dict["variance"]) / torch.sqrt(metric_dict["mse"])
