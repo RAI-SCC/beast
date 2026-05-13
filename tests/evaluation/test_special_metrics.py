@@ -12,8 +12,8 @@ from beast.evaluation.special_metrics import _calculate_crps_locally
 @pytest.mark.parametrize(
     "prediction, target",
     [
-        (torch.tensor([[1.0, 2.0], [3.0, 4.0]]), torch.tensor([1.5, 2.5])),
-        (torch.tensor([[0.0, 0.0], [0.0, 0.0]]), torch.tensor([0.0, 0.0])),
+        (torch.tensor([[[1.0, 2.0]], [[3.0, 4.0]]]), torch.tensor([[1.5, 2.5]])),
+        (torch.tensor([[[0.0, 0.0]], [[0.0, 0.0]]]), torch.tensor([[0.0, 0.0]])),
     ],
 )
 def test_calculate_crps_local_redirection(prediction: Tensor, target: Tensor) -> None:
@@ -26,24 +26,24 @@ def test_calculate_crps_local_redirection(prediction: Tensor, target: Tensor) ->
     "prediction, target, result",
     [
         (
-            torch.tensor([[1.0, 2.0], [3.0, 4.0], [2.0, 3.0]]),
-            torch.tensor([1.5, 2.5]),
+            torch.tensor([[[1.0, 2.0]], [[3.0, 4.0]], [[2.0, 3.0]]]),
+            torch.tensor([[1.5, 2.5]]),
             torch.tensor([1.0 / 6, 1.0 / 6]),
         ),
         (
-            torch.tensor([[0.0, 0.0], [0.0, 0.0]]),
-            torch.tensor([0.0, 0.0]),
+            torch.tensor([[[0.0, 0.0]], [[0.0, 0.0]]]),
+            torch.tensor([[0.0, 0.0]]),
             torch.tensor([0.0, 0.0]),
         ),
         (
-            torch.tensor([[1.0, 2.0] for _ in range(6)]),
-            torch.tensor([1.5, 2.5]),
+            torch.tensor([[[1.0, 2.0]] for _ in range(6)]),
+            torch.tensor([[1.5, 2.5]]),
             torch.tensor([0.5, 0.5]),
         ),
         (
             torch.ones(10, 2, 3, 4, 5),
             torch.ones(2, 3, 4, 5) * 1.5,
-            torch.ones(2, 3, 4, 5) * 0.5,
+            torch.ones(3, 4, 5) * 0.5,
         ),
     ],
 )
@@ -61,24 +61,24 @@ def test_calculate_crps_local_calculation(
     "prediction, target, result",
     [
         (
-            torch.tensor([[1.0, 2.0], [3.0, 4.0], [2.0, 3.0]]),
-            torch.tensor([1.5, 2.5]),
+            torch.tensor([[[1.0, 2.0]], [[3.0, 4.0]], [[2.0, 3.0]]]),
+            torch.tensor([[1.5, 2.5]]),
             torch.tensor([1.0 / 6, 1.0 / 6]),
         ),
         (
             torch.tensor([[0.0, 0.0], [0.0, 0.0]]),
-            torch.tensor([0.0, 0.0]),
+            torch.tensor([[0.0, 0.0]]),
             torch.tensor([0.0, 0.0]),
         ),
         (
             torch.tensor([[1.0, 2.0] for _ in range(6)]),
-            torch.tensor([1.5, 2.5]),
+            torch.tensor([[1.5, 2.5]]),
             torch.tensor([0.5, 0.5]),
         ),
         (
             torch.ones(10, 2, 3, 4, 5),
             torch.ones(2, 3, 4, 5) * 1.5,
-            torch.ones(2, 3, 4, 5) * 0.5,
+            torch.ones(3, 4, 5) * 0.5,
         ),
     ],
 )

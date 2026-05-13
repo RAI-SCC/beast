@@ -83,6 +83,7 @@ def calculate_crps(
 
     mae_handle.wait()
     crps = mae_part - spread_part
+    crps = crps.mean(dim=0)  # average over batch
 
     return crps
 
