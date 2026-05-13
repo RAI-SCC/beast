@@ -31,6 +31,7 @@ dev = [
     # Testing
     "pytest",
     "coverage",
+    "pytest-cov",
     "mpi4py>=4.1.1",
     "hypothesis>=6.1.1",
 
