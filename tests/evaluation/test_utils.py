@@ -1,12 +1,12 @@
 """Tests util functions for the evaluation in beast."""
 
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import pytest
 import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from mypyc.ir.pprint import Sequence
 
 from beast.evaluation.utils import (
     DATA_KEY,
@@ -14,6 +14,7 @@ from beast.evaluation.utils import (
     PRESSURE_LEVELS_KEY,
     PRESSURE_VARIABLES_KEY,
     SURFACE_VARIABLES_KEY,
+    make_variable_names,
     select_variables,
 )
 
@@ -100,6 +101,40 @@ def _expected_indices(
     return indices, shard
 
 
+def _expected_names(
+    eval_surface: list[str],
+    eval_pressure: list[str],
+    eval_levels: list[int],
+) -> list[str]:
+    """
+    Compute expected variable name strings independently of the implementation.
+
+    Parameters
+    ==========
+    eval_surface: list[str]
+        List of surface variables to be selected.
+    eval_pressure: list[str]
+        List of pressure variables to be selected.
+    eval_levels: list[int]
+        List of pressure levels to be selected.
+
+    Returns
+    =======
+    list[str]
+        Expected variable name strings.
+    """
+    names = []
+    for s in eval_surface:
+        if s in _ALL_SURFACE:
+            names.append(s)
+    for pv in eval_pressure:
+        if pv in _ALL_PRESSURE:
+            for lv in eval_levels:
+                if lv in _ALL_LEVELS:
+                    names.append(f"{pv}_{lv}")
+    return names
+
+
 # Define strategies.
 _eval_surface_st = st.lists(
     st.sampled_from(_ALL_SURFACE), min_size=0, max_size=len(_ALL_SURFACE), unique=True
@@ -111,7 +146,7 @@ _eval_levels_st = st.lists(
     st.sampled_from(_ALL_LEVELS), min_size=0, max_size=len(_ALL_LEVELS), unique=True
 )
 
-# Valid group sizes given variable pools.
+# Valid group sizes that evenly divide _N_TOTAL (84).
 _VALID_GROUP_SIZES = [1, 2, 4]
 
 
@@ -179,7 +214,7 @@ def test_select_variables_via_config(
         },
     }
 
-    # Generate dummy input tensor.
+    # Generate dummy input tensor of shape (2, shard): use dim=1 explicitly.
     t = torch.arange(2 * shard, dtype=torch.float32).reshape(2, shard)
     inp = [t, t * 2] if as_list else t
 
@@ -188,6 +223,7 @@ def test_select_variables_via_config(
         config=config,
         channel_rank=channel_rank,
         channel_group_size=channel_group_size,
+        dim=1,
     )
 
     _assert_result(result, t, as_list, expected)
@@ -230,6 +266,7 @@ def test_select_variables_via_direct_args(
         eval_surface, eval_pressure, eval_levels, channel_rank, channel_group_size
     )
 
+    # Generate dummy input tensor of shape (2, shard): use dim=1 explicitly.
     t = torch.arange(2 * shard, dtype=torch.float32).reshape(2, shard)
     inp = [t, t * 2] if as_list else t
 
@@ -243,21 +280,52 @@ def test_select_variables_via_direct_args(
         eval_surface_variables=eval_surface,
         eval_pressure_variables=eval_pressure,
         eval_pressure_levels=eval_levels,
+        dim=1,
     )
 
     _assert_result(result, t, as_list, expected)
 
 
-def test_select_variables_dim() -> None:
-    """Test that dimension slicing selects along the correct tensor dimension."""
+@pytest.mark.parametrize(
+    "dim, shape, expected_shape_fn",
+    [
+        # dim=1: (batch=2, channels=N) → select along axis 1
+        (1, lambda n: (2, n), lambda n_sel: (2, n_sel)),
+        # dim=-3: (batch=2, channels=N, h=3, w=3) → select along axis -3 (axis 1)
+        (-3, lambda n: (2, n, 3, 3), lambda n_sel: (2, n_sel, 3, 3)),
+        # dim=0: (channels=N, batch=2) → select along axis 0
+        (0, lambda n: (n, 2), lambda n_sel: (n_sel, 2)),
+    ],
+)
+def test_select_variables_dim(
+    dim: int,
+    shape: Callable[[int], tuple[int, ...]],
+    expected_shape_fn: Callable[[int], tuple[int, ...]],
+) -> None:
+    """
+    Test that the ``dim`` argument selects along the correct tensor dimension.
 
-    t = torch.arange(_N_TOTAL * 2, dtype=torch.float32).reshape(_N_TOTAL, 2)
-
+    Parameters
+    ==========
+    dim: int
+        Dimension to select along.
+    shape : Callable[[int], tuple[int, ...]]
+        Callable that takes the shard size and returns the tensor shape.
+    expected_shape_fn : Callable[[int], tuple[int, ...]]
+        Callable that takes the number of selected variables and returns the expected output shape.
+    """
     eval_surface = _ALL_SURFACE[:2]
     eval_pressure = _ALL_PRESSURE[:1]
     eval_levels = _ALL_LEVELS[:1]
 
-    expected, _ = _expected_indices(eval_surface, eval_pressure, eval_levels, 0, 1)
+    expected_indices, shard = _expected_indices(
+        eval_surface, eval_pressure, eval_levels, 0, 1
+    )
+    n_sel = len(expected_indices)
+
+    t = torch.arange(
+        int(torch.tensor(shape(shard)).prod()), dtype=torch.float32
+    ).reshape(shape(shard))
 
     result = select_variables(
         t,
@@ -269,12 +337,12 @@ def test_select_variables_dim() -> None:
         eval_surface_variables=eval_surface,
         eval_pressure_variables=eval_pressure,
         eval_pressure_levels=eval_levels,
-        dim=0,
+        dim=dim,
     )
 
     assert isinstance(result, torch.Tensor)
-    assert result.shape == (len(expected), 2)
-    assert torch.equal(result, t[expected])
+    assert result.shape == expected_shape_fn(n_sel)
+    assert torch.equal(result, t.index_select(dim, torch.tensor(expected_indices)))
 
 
 def _assert_result(
@@ -283,7 +351,7 @@ def _assert_result(
     as_list: bool,
     expected: list[int],
 ) -> None:
-    """Shared assertions for select variables tests."""
+    """Check results and shapes are as expected."""
     results_to_check: list[tuple[torch.Tensor, torch.Tensor]]
     if as_list:
         assert isinstance(result, list)
@@ -304,6 +372,107 @@ def _assert_result(
 
     # No duplicate indices.
     assert len(expected) == len(set(expected)), "Duplicate channel indices detected"
+
+
+@given(
+    eval_surface=_eval_surface_st,
+    eval_pressure=_eval_pressure_st,
+    eval_levels=_eval_levels_st,
+)
+@settings(max_examples=100)
+def test_make_variable_names_via_config(
+    eval_surface: list[str],
+    eval_pressure: list[str],
+    eval_levels: list[int],
+) -> None:
+    """
+    Test make_variable_names using a config dict.
+
+    Parameters
+    ==========
+    eval_surface: list[str]
+        List of surface variables to be selected for the evaluation.
+    eval_pressure: list[str]
+        List of pressure variables to be selected for the evaluation.
+    eval_levels: list[int]
+        List of levels to be selected for the evaluation.
+    """
+    expected = _expected_names(eval_surface, eval_pressure, eval_levels)
+
+    config = {
+        DATA_KEY: {
+            SURFACE_VARIABLES_KEY: _ALL_SURFACE,
+            PRESSURE_VARIABLES_KEY: _ALL_PRESSURE,
+            PRESSURE_LEVELS_KEY: _ALL_LEVELS,
+        },
+        EVALUATION_KEY: {
+            SURFACE_VARIABLES_KEY: eval_surface,
+            PRESSURE_VARIABLES_KEY: eval_pressure,
+            PRESSURE_LEVELS_KEY: eval_levels,
+        },
+    }
+
+    result = make_variable_names(config=config)
+
+    assert result == expected
+
+
+@given(
+    eval_surface=_eval_surface_st,
+    eval_pressure=_eval_pressure_st,
+    eval_levels=_eval_levels_st,
+)
+@settings(max_examples=100)
+def test_make_variable_names_via_direct_args(
+    eval_surface: list[str],
+    eval_pressure: list[str],
+    eval_levels: list[int],
+) -> None:
+    """
+    Test make_variable_names using direct keyword arguments (no config dict).
+
+    Parameters
+    ==========
+    eval_surface: list[str]
+        List of surface variables to be selected for the evaluation.
+    eval_pressure: list[str]
+        List of pressure variables to be selected for the evaluation.
+    eval_levels: list[int]
+        List of levels to be selected for the evaluation.
+    """
+    expected = _expected_names(eval_surface, eval_pressure, eval_levels)
+
+    result = make_variable_names(
+        all_surface_variables=_ALL_SURFACE,
+        all_pressure_variables=_ALL_PRESSURE,
+        all_pressure_levels=_ALL_LEVELS,
+        eval_surface_variables=eval_surface,
+        eval_pressure_variables=eval_pressure,
+        eval_pressure_levels=eval_levels,
+    )
+
+    assert result == expected
+
+
+def test_make_variable_names_format() -> None:
+    """Verify the exact output format for surface and pressure variable names."""
+    result = make_variable_names(
+        all_surface_variables=_ALL_SURFACE,
+        all_pressure_variables=_ALL_PRESSURE,
+        all_pressure_levels=_ALL_LEVELS,
+        eval_surface_variables=["mean_sea_level_pressure", "2m_temperature"],
+        eval_pressure_variables=["temperature", "geopotential"],
+        eval_pressure_levels=[500, 850],
+    )
+
+    assert result == [
+        "mean_sea_level_pressure",
+        "2m_temperature",
+        "temperature_500",
+        "temperature_850",
+        "geopotential_500",
+        "geopotential_850",
+    ]
 
 
 @pytest.mark.parametrize(
