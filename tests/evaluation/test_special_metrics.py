@@ -33,7 +33,7 @@ def test_calculate_crps_local_redirection(
     "prediction, target, result",
     [
         (
-            torch.tensor([[[1.0, 2.0]]]), 
+            torch.tensor([[[1.0, 2.0]]]),
             torch.tensor([[1.5, 2.5]]),
             torch.tensor([0.5, 0.5]),
         ),
@@ -137,11 +137,13 @@ def test_calculate_crps_distributed(
         f"CRPS distributed calculation is incorrect on rank {local_rank} / {world_size}."
     )
 
+
 def _invert_permutation(perm: torch.Tensor) -> torch.Tensor:
     """Helper function to invert a permutation tensor."""
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(len(perm), device=perm.device)
     return inv_perm
+
 
 @pytest.mark.parametrize(
     "prediction, target, result",
@@ -162,19 +164,34 @@ def test_calculate_crps_dimensions(
 
     result_permutation = torch.randperm(target.ndim - 1, device=device)
     batch_dim = random.randint(0, target.ndim - 1)
-    target_permutation = torch.tensor((result_permutation + 1)[:batch_dim].tolist() + [0] + (result_permutation + 1)[batch_dim:].tolist(), device=device)
+    target_permutation = torch.tensor(
+        (result_permutation + 1)[:batch_dim].tolist()
+        + [0]
+        + (result_permutation + 1)[batch_dim:].tolist(),
+        device=device,
+    )
     sample_dim = random.randint(0, target.ndim)
-    prediction_permutation = torch.tensor((target_permutation + 1)[:sample_dim].tolist() + [0] + (target_permutation + 1)[sample_dim:].tolist(), device=device)
-    batch_dim = batch_dim if batch_dim < sample_dim else batch_dim + 1  # Adjust batch_dim index for prediction permutation
+    prediction_permutation = torch.tensor(
+        (target_permutation + 1)[:sample_dim].tolist()
+        + [0]
+        + (target_permutation + 1)[sample_dim:].tolist(),
+        device=device,
+    )
+    batch_dim = (
+        batch_dim if batch_dim < sample_dim else batch_dim + 1
+    )  # Adjust batch_dim index for prediction permutation
 
     target_permuted = target.permute(*target_permutation)
     prediction_permuted = prediction.permute(*prediction_permutation)
     permuted_result = result.permute(*result_permutation)
 
-    permuted_output = _calculate_crps_locally(prediction_permuted, target_permuted, sample_dim=sample_dim, batch_dim=batch_dim)
-    
-    print(f"shapes: prediction {prediction_permuted.shape}, target {target_permuted.shape}, result {permuted_result.shape}, output {permuted_output.shape}")
+    permuted_output = _calculate_crps_locally(
+        prediction_permuted, target_permuted, sample_dim=sample_dim, batch_dim=batch_dim
+    )
 
+    print(
+        f"shapes: prediction {prediction_permuted.shape}, target {target_permuted.shape}, result {permuted_result.shape}, output {permuted_output.shape}"
+    )
 
     assert torch.allclose(permuted_output, permuted_result), (
         "Local CRPS calculation does not produce the expected result when dimensions are permuted."
@@ -226,19 +243,39 @@ def test_calculate_crps_dimensions_distributed(
 
     result_permutation = torch.randperm(target.ndim - 1, device=device)
     batch_dim = random.randint(0, target.ndim - 1)
-    target_permutation = torch.tensor((result_permutation + 1)[:batch_dim].tolist() + [0] + (result_permutation + 1)[batch_dim:].tolist(), device=device)
+    target_permutation = torch.tensor(
+        (result_permutation + 1)[:batch_dim].tolist()
+        + [0]
+        + (result_permutation + 1)[batch_dim:].tolist(),
+        device=device,
+    )
     sample_dim = random.randint(0, target.ndim)
-    prediction_permutation = torch.tensor((target_permutation + 1)[:sample_dim].tolist() + [0] + (target_permutation + 1)[sample_dim:].tolist(), device=device)
-    batch_dim = batch_dim if batch_dim < sample_dim else batch_dim + 1  # Adjust batch_dim index for prediction permutation
+    prediction_permutation = torch.tensor(
+        (target_permutation + 1)[:sample_dim].tolist()
+        + [0]
+        + (target_permutation + 1)[sample_dim:].tolist(),
+        device=device,
+    )
+    batch_dim = (
+        batch_dim if batch_dim < sample_dim else batch_dim + 1
+    )  # Adjust batch_dim index for prediction permutation
 
     target_permuted = target.permute(*target_permutation).contiguous()
     prediction_permuted = local_prediction.permute(*prediction_permutation).contiguous()
     permuted_result = result.permute(*result_permutation).contiguous()
 
-    permuted_output = calculate_crps(prediction_permuted, target_permuted, sample_dim=sample_dim, batch_dim=batch_dim, up_group=process_group)
+    permuted_output = calculate_crps(
+        prediction_permuted,
+        target_permuted,
+        sample_dim=sample_dim,
+        batch_dim=batch_dim,
+        up_group=process_group,
+    )
     dist.barrier(process_group)  # Ensure all processes have finished their calculations
 
-    print(f"Rank {local_rank} / {world_size}: shapes: prediction {prediction_permuted.shape}, target {target_permuted.shape}, result {permuted_result.shape}, output {permuted_output.shape}")
+    print(
+        f"Rank {local_rank} / {world_size}: shapes: prediction {prediction_permuted.shape}, target {target_permuted.shape}, result {permuted_result.shape}, output {permuted_output.shape}"
+    )
 
     assert torch.allclose(permuted_output, permuted_result), (
         "Distributed CRPS calculation does not produce the expected result when dimensions are permuted."
