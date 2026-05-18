@@ -15,10 +15,6 @@ def save_checkpoint(
     step: int | None,
     loss: float,
 ):
-    # checkpoint_path = os.path.join(results_path, "checkpoints")
-    # if dist.get_rank() == 0:
-    #     os.makedirs(checkpoint_path, exist_ok=True)
-    # dist.barrier()
 
     channel_group = get_process_group("JChannel")
     ep_group = get_process_group("Expert")
