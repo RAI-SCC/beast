@@ -1,63 +1,221 @@
+"""Beast (Bayesian Exascale Atmospheric Swim Transformer) model definition."""
+
+from typing import Sequence
+
 import torch
-from gb.model.expert import ExpertWeightingLayer
+import torch.distributed as dist
 from jigsaw import attention, convolutions, linear
 
+from beast.layers import NiceWindowedTransformerBlock
 
-class Bellbeast(torch.nn.Module):
+
+class Beast(torch.nn.Module):
+    """Base class for the Beast model.
+    Bayesian Exascale Atmospheric Swim Transformer.
+
+    Parameters
+    ----------
+    height : int
+        Height of the input data.
+    width : int
+        Width of the input data.
+    in_channels : int
+        Number of input channels.
+    out_channels : int
+        Number of output channels.
+    embed_dim : int
+        Embedding dimension for the model.
+    heads : int
+        Number of attention heads.
+    kernel_size : int
+        Kernel size for the convolutional layers.
+    window_size_outer : int
+        Window size for the outer attention blocks.
+    window_size_inner : int
+        Window size for the inner attention blocks.
+    n_full_blocks : int
+        Number of full attention blocks.
+    noise_dim : int
+        Dimension of the noise input for the Bayesian model.
+    device : int
+        Device to run the model on.
+    parallelism : int
+        Degree of parallelism for the model.
+    dtp_group : dist.ProcessGroup
+        Process group for data parallelism.
+    spatial_group : dist.ProcessGroup
+        Process group for spatial parallelism.
+    channel_group : dist.ProcessGroup
+        Process group for channel parallelism.
+    ep_group : dist.ProcessGroup
+        Process group for expert parallelism.
+    up_group : dist.ProcessGroup
+        Process group for unsharded parallelism.
+    dtype : torch.dtype
+        Data type for the model parameters.
+    bayesian : bool
+        Whether to use the Bayesian version of the model.
+    flash_attn : bool
+        Whether to use Flash Attention for the attention blocks.
+    nice_norm : bool
+        Whether to use the NICE normalization for the attention blocks.
+
+    Notes
+    -----
+    TODO: Reference to papers and documentation
+    """
+
     def __init__(
         self,
-        xlat,
-        xlon,
-        in_channels,
-        embed_dim,
-        out_channels,
-        heads,
-        kernel_size,
-        window_size_outer,
-        window_size_inner,
-        n_full_blocks,
-        noise_dim,
-        dtp_rank,
-        device,
-        dtp_group,
-        spatial_group,
-        channel_group,
-        ep_group,
-        up_group,
-        bayesian,
-        parallelism,
-        dtype,
-        flash_attn,
-        nice_norm,
+        *,
+        # Input
+        height: int,
+        width: int,
+        in_channels: int,
+        # Output
+        out_channels: int,
+        # Model Architecture
+        embed_dim: int,
+        heads: int,
+        kernel_size: int,
+        stride: int,
+        padding: int,
+        dilation: int,
+        # Windows
+        window_size_outer: Sequence[int],
+        window_size_inner: Sequence[int],
+        n_full_blocks: int,
+        # Noise
+        noise_dim: int,
+        # Boolean flags
+        bayesian: bool,
+        flash_attn: bool,
+        nice_norm: bool,
+        # Device,
+        device: torch.device | None,
+        # Dtype
+        dtype: torch.dtype = torch.float32,
+        # Process Groups
+        channel_group: dist.ProcessGroup | None = None,
+        spatial_group: dist.ProcessGroup | None = None,
+        dtp_group: dist.ProcessGroup | None = None,
+        up_group: dist.ProcessGroup | None = None,
+        ep_group: dist.ProcessGroup | None = None,
+        **kwargs,
     ):
         super().__init__()
-        self.xlat, self.xlon = xlat, xlon
-        self.window_size_outer = window_size_outer
-        self.window_size_inner = window_size_inner
-        self.kernel_size = kernel_size
-        self.stride = kernel_size
-        self.padding = 0
-        self.dilation = 1
-        self.local_rank = dtp_rank
-        self.device = device
-        self.parallelism = parallelism
-        self.ep_group = ep_group
-        self.up_group = up_group
-        self.dtp_group = dtp_group
-        self.spatial_group = spatial_group
-        self.channel_group = channel_group
+
+        self.height = height
+        self.width = width
         self.in_channels = in_channels
+        self.out_channels = out_channels
         self.embed_dim = embed_dim
         self.heads = heads
-        self.out_channels = out_channels
-        self.bayesian = bayesian
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.window_size_outer = window_size_outer
+        self.window_size_inner = window_size_inner
+        self.n_full_blocks = n_full_blocks
         self.noise_dim = noise_dim
+        self.device = device
+        self.channel_group = channel_group
+        self.spatial_group = spatial_group
+        self.dtp_group = dtp_group
+        self.up_group = up_group
+        self.ep_group = ep_group
         self.dtype = dtype
+        self.bayesian = bayesian
         self.flash_attn = flash_attn
-        self.dropout = 0 if self.bayesian else 1e-1
         self.nice_norm = nice_norm
 
+        self._build_model()
+
+    def _build_model(self) -> None:
+
+        assert self.window_size_outer[0] % 2 == 0, (
+            "window_outer[0] size must be divisible by 2"
+        )
+        assert self.window_size_outer[1] % 2 == 0, (
+            "window_outer[1] size must be divisible by 2"
+        )
+        assert self.window_size_inner[0] % 2 == 0, (
+            "window_inner[0] size must be divisible by 2"
+        )
+        assert self.window_size_inner[1] % 2 == 0, (
+            "window_inner[1] size must be divisible by 2"
+        )
+
+        # Activation
         self.activation = torch.nn.GELU()
+        self.mask_in, self.mask_out = None, None
+
+        self.channel_group_size = (
+            dist.get_world_size(group=self.channel_group)
+            if self.channel_group is not None
+            else 1
+        )
+        self.spatial_group_size = (
+            dist.get_world_size(group=self.spatial_group)
+            if self.spatial_group is not None
+            else 1
+        )
+        self.dtp_group_size = (
+            dist.get_world_size(group=self.dtp_group)
+            if self.dtp_group is not None
+            else 1
+        )
+        self.up_group_size = (
+            dist.get_world_size(group=self.up_group) if self.up_group is not None else 1
+        )
+        self.ep_group_size = (
+            dist.get_world_size(group=self.ep_group) if self.ep_group is not None else 1
+        )
+
+        if self.dtp_group_size > 1:
+            self._parallelism = self.dtp_group_size
+        elif self.channel_group_size > 1 and self.spatial_group_size > 1:
+            self._parallelism = channel_group_size * spatial_group_size
+        else:
+            self._parallelism = 1
+
+        # Patch embedding
+        if self._parallelism > 1:
+            self._build_dist_model()
+        else:
+            self._build_sequential_model()
+
+        self.params = torch.nn.ModuleDict(
+            {
+                "low_lr": torch.nn.ModuleList(
+                    [
+                        self.patch_embedding,
+                        self.downsample,
+                        self.upsample,
+                        self.upsample_mix,
+                        self.patch_recovery,
+                    ]
+                ),
+                "normal_lr": torch.nn.ModuleList(
+                    [self.transformer_1, self.transformer_down, self.transformer_2]
+                ),
+            }
+        )
+
+    def _build_dist_model(self) -> None:
+
+        if self.dtp_group is not None or (
+            self.channel_group is not None and self.spatial_group is not None
+        ):
+            self._parallelism = self.dtp_group.size()
+        elif self.channel_group is not None and self.spatial_group is not None:
+            self._parallelism = self.channel_group.size() * self.spatial_group.size()
+        else:
+            raise ValueError(
+                "Either dtp_group or both channel_group and spatial_group must be provided for distributed training."
+            )
+
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
@@ -71,7 +229,7 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=self.parallelism,  # either 4 or 8 (# GPUs in node)
+            parallelism=self._parallelism,  # either 4 or 8 (# GPUs in node)
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
@@ -88,17 +246,8 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             bias=True,
-            bayesian=self.bayesian,
-            dtype=self.dtype,
-        )
-
-        self.expert_layer = ExpertWeightingLayer(
-            (self.ep_group.size(), 1, self.embed_dim, 1),
-            self.ep_group,
-            self.up_group,
-            device=self.device,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
@@ -115,18 +264,19 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             bias=True,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
+
         # each process would have weights: [embed //2 , embed]
         self.upsample_mix = linear.DistributedXWTSync(
             self.embed_dim // 2,
             self.embed_dim,
             bias=True,
             local_rank=self.local_rank,
-            device=device,
+            device=self.device,
             parallelism=2,
             model_group=self.channel_group,
             sync_group=self.spatial_group,
@@ -146,13 +296,12 @@ class Bellbeast(torch.nn.Module):
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
         # Transformer blocks
-        self.n_full_blocks = n_full_blocks
         if self.nice_norm:
             self.transformer_1 = torch.nn.ModuleList(
                 [
@@ -289,35 +438,25 @@ class Bellbeast(torch.nn.Module):
                 ]
             )
 
-        assert window_size_outer[0] % 2 == 0, (
-            "window_outer[0] size must be divisible by 2"
-        )
-        assert window_size_outer[1] % 2 == 0, (
-            "window_outer[1] size must be divisible by 2"
-        )
-        assert window_size_inner[0] % 2 == 0, (
-            "window_inner[0] size must be divisible by 2"
-        )
-        assert window_size_inner[1] % 2 == 0, (
-            "window_inner[1] size must be divisible by 2"
-        )
-
         self.roll_out = linear.DistributedRoll(
-            shifts=(window_size_outer[0] // 2, window_size_outer[1] // 2),
+            shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             spatial_group=self.spatial_group,
             dtype=dtype,
         )
 
         self.unroll_out = linear.DistributedRoll(
-            shifts=(-(window_size_outer[0] // 2), -(window_size_outer[1] // 2)),
+            shifts=(
+                -(self.window_size_outer[0] // 2),
+                -(self.window_size_outer[1] // 2),
+            ),
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             spatial_group=self.spatial_group,
             dtype=dtype,
         )
@@ -326,7 +465,7 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             spatial_group=self.spatial_group,
             dtype=dtype,
         )
@@ -336,30 +475,143 @@ class Bellbeast(torch.nn.Module):
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=self.parallelism,
+            parallelism=self._parallelism,
             spatial_group=self.spatial_group,
             dtype=dtype,
         )
-        self.mask_out, self.mask_in = None, None
 
-        self.params = torch.nn.ModuleDict(
-            {
-                "low_lr": torch.nn.ModuleList(
-                    [
-                        self.patch_embedding,
-                        self.downsample,
-                        self.upsample,
-                        self.upsample_mix,
-                        self.patch_recovery,
-                    ]
-                ),
-                "normal_lr": torch.nn.ModuleList(
-                    [self.transformer_1, self.transformer_down, self.transformer_2]
-                ),
-            }
+    def _build_sequential_model(self) -> None:
+
+        self.patch_embedding = torch.nn.Conv2d(
+            self.in_channels,
+            self.embed_dim,  # global values
+            self.kernel_size,
+            self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=1,
+            bias=True,
+            device=self.device,
+            dtype=self.dtype,
         )
 
-    @torch.compile
+        self.downsample = torch.nn.Conv2d(
+            self.embed_dim,
+            self.embed_dim * 2,  # global values
+            2,
+            2,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=1,
+            device=self.device,
+            bias=True,
+            dtype=self.dtype,
+        )
+
+        self.upsample = torch.nn.ConvTranspose2d(
+            self.embed_dim * 2,
+            self.embed_dim,  # global values
+            2,
+            2,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=1,
+            device=self.device,
+            bias=True,
+            dtype=self.dtype,
+        )
+
+        self.upsample_mix = torch.nn.Linear(
+            self.embed_dim,
+            self.embed_dim,
+            bias=True,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        self.patch_recovery = torch.nn.ConvTranspose2d(
+            self.embed_dim * 2,
+            self.out_channels,  # global values
+            self.kernel_size,
+            self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            bias=True,
+            groups=1,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        self.transformer_1 = torch.nn.ModuleList(
+            [
+                NiceWindowedTransformerBlock(
+                    embed_dim=self.embed_dim,
+                    output_dim=self.embed_dim,
+                    heads=self.heads[0],
+                    noise_dim=self.noise_dim,
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    device=self.device,
+                    dtype=self.dtype,
+                ).to(self.device)
+                for i in torch.arange(2 * self.n_full_blocks[0])
+            ]
+        )
+
+        self.transformer_down = torch.nn.ModuleList(
+            [
+                NiceWindowedTransformerBlock(
+                    self.embed_dim * 2,
+                    self.embed_dim * 2,
+                    heads=self.heads[1],
+                    noise_dim=self.noise_dim,
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    device=self.device,
+                    dtype=self.dtype,
+                ).to(self.device)
+                for i in torch.arange(2 * self.n_full_blocks[1])
+            ]
+        )
+
+        self.transformer_2 = torch.nn.ModuleList(
+            [
+                NiceWindowedTransformerBlock(
+                    embed_dim=self.embed_dim,
+                    output_dim=self.embed_dim,
+                    heads=self.heads[2],
+                    noise_dim=self.noise_dim,
+                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    device=self.device,
+                    dtype=self.dtype,
+                ).to(self.device)
+                for i in torch.arange(2 * self.n_full_blocks[2])
+            ]
+        )
+
+        self.roll_out = lambda x: torch.roll(
+            x,
+            shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
+            dims=(-3, -2),
+        )
+
+        self.unroll_out = lambda x: torch.roll(
+            x,
+            shifts=(-self.window_size_outer[0] // 2, -self.window_size_outer[1] // 2),
+            dims=(-3, -2),
+        )
+
+        self.roll_in = lambda x: torch.roll(
+            x,
+            shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
+            dims=(-3, -2),
+        )
+
+        self.unroll_in = lambda x: torch.roll(
+            x,
+            shifts=(-window_size_inner[0] // 2, -window_size_inner[1] // 2),
+            dims=(-3, -2),
+        )
+
+    # @torch.compile
     def _get_windows(self, x, window_size):
         B, xlat, xlon, channels = x.shape
         x = x.reshape(
@@ -374,7 +626,7 @@ class Bellbeast(torch.nn.Module):
         x = x.reshape(-1, window_size[0] * window_size[1], channels)  # windows
         return x
 
-    @torch.compile
+    # @torch.compile
     def _reverse_windows(self, x, B, xlat, xlon, channels, window_size):
         x = x.reshape(
             B,
@@ -454,7 +706,20 @@ class Bellbeast(torch.nn.Module):
         )
         return self.mask_out, self.mask_in
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the Beast model.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (batch, in_channels, height, width).
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape (batch, out_channels, height, width).
+        """
         # noise has shape [(sample), batch, noise_dim]
         noise = (
             torch.randn(x.shape[0], self.noise_dim, device=self.device).to(self.dtype)
@@ -464,13 +729,14 @@ class Bellbeast(torch.nn.Module):
         # Define masks once upon initialization (dependent on batch dimension)
         # Note: Masks do not currently work with torch flash.
         # self.mask_out, self.mask_in = self._define_masks(x.shape)
-        self.mask_out, self.mask_in = None, None
 
-        # x has global shape (B, xlat, xlon, channels)
+        # x has global shape (B, channels, xlat, xlon)
         x = self.patch_embedding(x)
         x_res = x.clone()
         B, channels, xlat, xlon = x.shape
+        # TODO: fuse as x.permute(0, 2, 3, 1)
         x = x.reshape(B, channels, xlat * xlon).mT.view(B, xlat, xlon, channels)
+        print(x.shape)
 
         # attention
         for i in range(self.n_full_blocks[0]):
