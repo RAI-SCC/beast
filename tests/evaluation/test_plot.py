@@ -30,5 +30,5 @@ def test_save_plot(close_fig: bool, tmp_path: Path) -> None:
 
     save_plot(fig, tmp_path, "test.pdf", close_fig)
 
-    assert plt.fignum_exists(fignum) is not close_fig
+    assert (not plt.fignum_exists(fignum)) is close_fig
     assert os.path.exists(tmp_path / "test.pdf")
