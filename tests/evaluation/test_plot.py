@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -26,9 +25,9 @@ def test_save_plot(close_fig: bool, tmp_path: Path) -> None:
     fignum = fig.number
 
     assert plt.fignum_exists(fignum)
-    assert not os.path.exists(tmp_path / "test.pdf")
+    assert not (tmp_path / "test.pdf").exists()
 
     save_plot(fig, tmp_path, "test.pdf", close_fig)
 
     assert (not plt.fignum_exists(fignum)) is close_fig
-    assert os.path.exists(tmp_path / "test.pdf")
+    assert (tmp_path / "test.pdf").exists()
