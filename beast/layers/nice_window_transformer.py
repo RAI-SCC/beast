@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import torch
 
 
@@ -10,8 +12,8 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
         noise_dim: int,
         dropout: float,
         device: torch.device,
-        dtype,
-    ):
+        dtype: torch.dtype,
+    ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.heads = heads
@@ -40,7 +42,9 @@ class NiceWindowedTransformerBlock(torch.nn.Module):
 
         # _average_weights(self, spatial_group, device)
 
-    def forward(self, x: torch.tensor, noise: torch.tensor, mask=None):
+    def forward(
+        self, x: torch.Tensor, noise: torch.Tensor, mask: torch.Tensor = None
+    ) -> torch.Tensor:
         x = self.attention_block(self.layer_norm1(x, noise), mask) + x
         x = self.MLP(self.layer_norm2(x, noise)) + x
 
@@ -56,11 +60,11 @@ class WindowedAttention(torch.nn.Module):
 
     def __init__(
         self,
-        embed_dim,
-        output_dim,
-        num_heads,
-        dtype,
-    ):
+        embed_dim: int,
+        output_dim: int,
+        num_heads: int,
+        dtype: torch.dtype,
+    ) -> None:
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -77,7 +81,7 @@ class WindowedAttention(torch.nn.Module):
         self.scale = (self.embed_dim // self.num_heads) ** -0.5
 
     @torch.compile(mode="reduce-overhead")
-    def _attention_core(self, qkv):
+    def _attention_core(self, qkv: torch.Tensor) -> torch.Tensor:
         qkv = qkv.reshape(
             (
                 qkv.shape[0],
@@ -100,7 +104,7 @@ class WindowedAttention(torch.nn.Module):
         return out
 
     @torch.compile(mode="reduce-overhead")
-    def forward(self, x, mask):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of 2D attention mechanism with absolute positional bias term.
 
@@ -137,13 +141,13 @@ class MLP(torch.nn.Module):
 
     def __init__(
         self,
-        input_dim,
-        hidden_dim,
-        output_dim,
-        device=None,
-        dtype=None,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        device: torch.Device | None = None,
+        dtype: torch.dtype | None = None,
         # dropout_rate
-    ):
+    ) -> None:
         """
         Initialize MLP.
 
@@ -161,7 +165,7 @@ class MLP(torch.nn.Module):
         )
         self.activation = torch.nn.GELU()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward function of MLP."""
         x = self.linear1(x)
         x = self.activation(x)
@@ -170,7 +174,14 @@ class MLP(torch.nn.Module):
 
 
 class NiceNorm(torch.nn.Module):
-    def __init__(self, normalized_shape, noise_dim, eps=1e-5, device=None, dtype=None):
+    def __init__(
+        self,
+        normalized_shape: Sequence[int],
+        noise_dim: int,
+        eps=1e-5,
+        device=None,
+        dtype=None,
+    ) -> None:
         super().__init__()
 
         self.norm = torch.nn.LayerNorm(
@@ -187,7 +198,7 @@ class NiceNorm(torch.nn.Module):
         self.scale_mlp = MLP(self.noise_dim, self.shape, self.shape)
         self.shift_mlp = MLP(self.noise_dim, self.shape, self.shape)
 
-    def forward(self, x, noise):
+    def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         x = self.norm(x)
 
         scale = self.scale_mlp(noise)

@@ -1,3 +1,7 @@
+"""Factory for creating model instances based on configuration."""
+
+import torch
+
 # from beast.model.model_gb import Bellbeast
 # from beast.model.model_gb_tiny import TinyBellbeast
 # from beast.model.expert import Expert
@@ -6,7 +10,8 @@
 # from beast.comm import get_process_group # to be removed but for now
 
 
-def get_model():
+def get_model() -> torch.nn.Module:
+    """Create a model based on a string id and a configuration dictionary. The string id can be used to specify a particular model architecture, while the configuration dictionary can contain hyperparameters and other settings for the model."""
     raise NotImplementedError(
         "Model factory is not yet implemented. Please use the Beast class directly for now."
     )
@@ -32,60 +37,6 @@ def get_model():
 #         total = total * 2  # Count every parameter twice, if bayesian
 
 #     return total
-
-# def convert_jigsaw_vi(
-#     module,
-#     variational_distribution=vidist.Normal(std=0.15),
-#     prior=vidist.Normal(),
-#     rescale_prior=False,
-#     kaiming_initialization=True,
-#     prior_initialization=False,
-#     return_log_probs=True,
-# ):
-#     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
-#     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
-#     torch_blue.vi.utils.convert.ban_convert(NiceNorm)
-#     torch_blue.vi.utils.convert.ban_convert(
-#         normalization.DistributedNICENorm, ban_mode="submodule"
-#     )
-#     torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
-
-#     torch_blue.vi.convert_to_vimodule(
-#         module,
-#         variational_distribution=variational_distribution,
-#         prior=prior,
-#         rescale_prior=rescale_prior,
-#         kaiming_initialization=kaiming_initialization,
-#         prior_initialization=prior_initialization,
-#         return_log_probs=return_log_probs,
-#         keep_weights=False,
-#     )
-
-#     num_jchannel = get_process_group("JChannel").size()
-
-#     def new_cf_channel(self, variable_shapes=None):
-#         previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
-#         return previous * num_jchannel
-
-#     fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
-
-#     weight_sync_list = [
-#         "VIConv2d",
-#         "AVIConvTranspose2d",
-#         "AVIDistributedXWTSync",
-#         "AVIDistributedXWT_Nice",
-#     ]
-
-#     for mname, m in module.named_modules():
-#         class_name = m.__class__.__name__
-
-#         if class_name in fan_in_rescale_list:
-#             m._old_calculate_fan_in = m._calculate_fan_in
-#             m._calculate_fan_in = types.MethodType(new_cf_channel, m)
-#             m.reset_variational_parameters()
-
-#         if class_name in weight_sync_list:
-#             utils_init.average_weights_module(m, get_process_group("JSpatial"))
 
 
 # def get_model(

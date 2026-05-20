@@ -9,7 +9,14 @@ class JLR(torch.autograd.Function):
     """Autograd function for batched joint latent representation mixing distributed across n processes."""
 
     @staticmethod
-    def forward(x, w, ep_group, sp_group, bayesian, device):
+    def forward(
+        x: torch.Tensor,
+        w: torch.Tensor,
+        ep_group: dist.ProcessGroup,
+        sp_group: dist.ProcessGroup,
+        bayesian: bool,
+        device: torch.device,
+    ) -> torch.Tensor:
         num_experts = ep_group.size()
         B, channels, xlat, xlon = x.shape
         if bayesian:
@@ -22,7 +29,7 @@ class JLR(torch.autograd.Function):
         xc = x.clone()
         dist.all_reduce(xc, op=dist.ReduceOp.AVG, group=sp_group)
 
-        expert_x = [
+        expert_x_list = [
             torch.empty(
                 (B, channels, xlat, xlon),
                 requires_grad=False,
@@ -31,9 +38,10 @@ class JLR(torch.autograd.Function):
             )
             for _ in range(num_experts)
         ]
-        dist.all_gather(expert_x, xc, group=ep_group)
+        dist.all_gather(expert_x_list, xc, group=ep_group)
 
-        expert_x = torch.cat(expert_x, dim=0)
+        expert_x = torch.cat(expert_x_list, dim=0)
+        del expert_x_list
 
         # expert_x is of shape (num_experts, batch, channel, xlat, xlon)
         expert_x = expert_x.view(num_experts, B, channels, xlat * xlon)

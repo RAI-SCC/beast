@@ -87,6 +87,8 @@ class Beast(torch.nn.Module):
         n_full_blocks: int,
         # Noise
         noise_dim: int,
+        # Dropout
+        dropout: float = 1e-1,
         # Boolean flags
         bayesian: bool,
         flash_attn: bool,
@@ -119,6 +121,7 @@ class Beast(torch.nn.Module):
         self.window_size_inner = window_size_inner
         self.n_full_blocks = n_full_blocks
         self.noise_dim = noise_dim
+        self.dropout = dropout
         self.device = device
         self.channel_group = channel_group
         self.spatial_group = spatial_group
@@ -169,16 +172,15 @@ class Beast(torch.nn.Module):
         self.up_group_size = (
             dist.get_world_size(group=self.up_group) if self.up_group is not None else 1
         )
-        self.ep_group_size = (
-            dist.get_world_size(group=self.ep_group) if self.ep_group is not None else 1
-        )
 
         if self.dtp_group_size > 1:
             self._parallelism = self.dtp_group_size
         elif self.channel_group_size > 1 and self.spatial_group_size > 1:
-            self._parallelism = channel_group_size * spatial_group_size
+            self._parallelism = self.channel_group_size * self.spatial_group_size
         else:
             self._parallelism = 1
+
+        self.local_rank = self.dtp_group.rank() if self.dtp_group is not None else 0
 
         # Patch embedding
         if self._parallelism > 1:
@@ -204,17 +206,6 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
-
-        if self.dtp_group is not None or (
-            self.channel_group is not None and self.spatial_group is not None
-        ):
-            self._parallelism = self.dtp_group.size()
-        elif self.channel_group is not None and self.spatial_group is not None:
-            self._parallelism = self.channel_group.size() * self.spatial_group.size()
-        else:
-            raise ValueError(
-                "Either dtp_group or both channel_group and spatial_group must be provided for distributed training."
-            )
 
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
@@ -445,7 +436,7 @@ class Beast(torch.nn.Module):
             device=self.device,
             parallelism=self._parallelism,
             spatial_group=self.spatial_group,
-            dtype=dtype,
+            dtype=self.dtype,
         )
 
         self.unroll_out = linear.DistributedRoll(
@@ -458,26 +449,29 @@ class Beast(torch.nn.Module):
             device=self.device,
             parallelism=self._parallelism,
             spatial_group=self.spatial_group,
-            dtype=dtype,
+            dtype=self.dtype,
         )
         self.roll_in = linear.DistributedRoll(
-            shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
+            shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
             parallelism=self._parallelism,
             spatial_group=self.spatial_group,
-            dtype=dtype,
+            dtype=self.dtype,
         )
 
         self.unroll_in = linear.DistributedRoll(
-            shifts=(-(window_size_inner[0] // 2), -(window_size_inner[1] // 2)),
+            shifts=(
+                -(self.window_size_inner[0] // 2),
+                -(self.window_size_inner[1] // 2),
+            ),
             dims=(-3, -2),
             local_rank=self.local_rank,
             device=self.device,
             parallelism=self._parallelism,
             spatial_group=self.spatial_group,
-            dtype=dtype,
+            dtype=self.dtype,
         )
 
     def _build_sequential_model(self) -> None:
@@ -601,13 +595,13 @@ class Beast(torch.nn.Module):
 
         self.roll_in = lambda x: torch.roll(
             x,
-            shifts=(window_size_inner[0] // 2, window_size_inner[1] // 2),
+            shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
 
         self.unroll_in = lambda x: torch.roll(
             x,
-            shifts=(-window_size_inner[0] // 2, -window_size_inner[1] // 2),
+            shifts=(-self.window_size_inner[0] // 2, -self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
 
@@ -736,7 +730,6 @@ class Beast(torch.nn.Module):
         B, channels, xlat, xlon = x.shape
         # TODO: fuse as x.permute(0, 2, 3, 1)
         x = x.reshape(B, channels, xlat * xlon).mT.view(B, xlat, xlon, channels)
-        print(x.shape)
 
         # attention
         for i in range(self.n_full_blocks[0]):
