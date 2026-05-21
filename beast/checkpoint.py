@@ -1,5 +1,6 @@
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 import re
 import os
@@ -79,7 +80,7 @@ def parse_checkpoint(fname):
     }
 
 
-def load_latest_model_states(directory):
+def parse_latest_model_states(directory):
     end_of_epoch_directory = os.path.join(directory, "checkpoints")
     path_base = end_of_epoch_directory
     checkpoints = [
@@ -134,40 +135,33 @@ def load_latest_model_states(directory):
 
 
 def load_state_dict(
-    model_ddp,
+    model,
     optimizer,
     model_state_dict,
     optimizer_state_dict,
     last_epoch,
 ):
+    # DDP checks
+    is_state_dict_ddp = any(k.startswith('module.') for k in model_state_dict.keys()) 
+    if isinstance(model, DDP) and not is_state_dict_ddp:
+        model_state_dict = {f'module.{k}': v for k, v in model_state_dict.items()}
+    elif not isinstance(model, DDP) and is_state_dict_ddp:
+        model_state_dict = {k.replace('module.', '', 1): v for k, v in model_state_dict.items()}
+        
     try:
-        model_ddp.load_state_dict(model_state_dict)
-        optimizer.load_state_dict(optimizer_state_dict)
-        start_epoch = last_epoch + 1
+        model.load_state_dict(model_state_dict)
+        if optimizer is not None:
+            optimizer.load_state_dict(optimizer_state_dict)
+        if last_epoch is not None:
+            start_epoch = last_epoch + 1
     except Exception as err:
         if dist.get_rank() == 0:
             print(err)
             print("Model cannot be loaded from checkpoint. Reinitializing model.")
+
         start_epoch = 0
 
-    return model_ddp, optimizer, start_epoch
-
-
-def transplant_weights(model, state_dict_path):
-    if dist.get_rank() == 0:
-        print(f"Transplanting weights from {state_dict_path}")
-
-    model_state_dict, *_ = load_latest_model_states(state_dict_path)
-
-    try:
-        state_dict = {}
-        for key in model_state_dict.keys():
-            state_dict[key[7:]] = model_state_dict[key]
-
-        model.load_state_dict(state_dict)
-    except Exception as err:
-        if dist.get_rank() == 0:
-            print(err)
-            print("Model cannot be loaded from checkpoint. Reinitializing model.")
-
-    return model
+    if optimizer is None:
+        return model
+    else:
+        return model, optimizer, start_epoch
