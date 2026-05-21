@@ -27,8 +27,10 @@ class KeyedTensor(Tensor):
 
     def __init__(self, data: Tensor, keys: Dict[str, int]) -> None:
         super().__init__()
-        assert len(keys) == len(data)
-        assert sorted(keys.values()) == list(range(len(data)))
+        assert len(keys) == len(data), "keys and data must have the same length"
+        assert sorted(keys.values()) == list(range(len(data))), (
+            "keys must map uniquely to all indices"
+        )
         self._keys = keys
 
     def keys(self) -> KeysView:
