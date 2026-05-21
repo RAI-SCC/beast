@@ -348,10 +348,14 @@ def latitude_weighted_average(
     latitudes = torch.linspace(
         -torch.pi / 2.0, torch.pi / 2.0, data.shape[lat_dim] + 1, device=data.device
     )[:-1]
+
     cosines = torch.cos(latitudes)
     cosine_mean = cosines.mean()
     weights = (cosines / cosine_mean).reshape(
-        *[-1 if i == lat_dim else 1 for i in range(data.dim())]
+        *[
+            -1 if i == ((lat_dim + data.dim()) % data.dim()) else 1
+            for i in range(data.dim())
+        ]
     )  # Normalize weights to have a mean of 1
 
     # Apply weights and compute the average.

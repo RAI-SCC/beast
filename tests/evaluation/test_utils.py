@@ -8,6 +8,7 @@ import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from beast.evaluation import latitude_weighted_average
 from beast.evaluation.utils import (
     DATA_KEY,
     EVALUATION_KEY,
@@ -525,3 +526,30 @@ def test_missing_all_variables_no_config() -> None:
     t = torch.zeros(2, 4)
     with pytest.raises(KeyError, match="Configuration error"):
         select_variables(t, channel_rank=0, channel_group_size=1)
+
+
+def test_latitude_weighted_average(device: torch.device) -> None:
+    """Test that latitude weighted average computes correct weights and applies them."""
+    # Create a dummy input tensor of shape (batch=2, channels=3, lat=4, lon=5)
+    x = torch.ones(2, 3, 4, 5, device=device)
+
+    # Compute latitude weighted average
+    result = latitude_weighted_average(x)
+
+    assert torch.allclose(result, torch.ones(2, 3, device=device)), (
+        f"Expected torch.ones(2, 3), got {result}"
+    )
+
+    # Compute latitude weighted average
+    result = latitude_weighted_average(x, lat_dim=2, lon_dim=0)
+
+    assert torch.allclose(result, torch.ones(3, 5, device=device)), (
+        f"Expected ones(3, 5), got {result}"
+    )
+
+    x2 = torch.eye(10, device=device)
+
+    result = latitude_weighted_average(x2, lat_dim=0, lon_dim=1)
+    assert torch.allclose(result, torch.tensor(0.1, device=device)), (
+        f"Expected torch.tensor(0.1), got {result}"
+    )

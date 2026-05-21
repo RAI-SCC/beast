@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.distributed as dist
 
-from beast.evaluation.comm import gather_along_dimension
+from beast.evaluation import gather_along_dimension
 
 
 @pytest.mark.dist
@@ -40,6 +40,29 @@ def test_gather_along_dimension_variable_size(device: torch.device) -> None:
     # Total size should be sum of sizes: 1 + 2 + ... + world_size
     expected_total_size = sum(range(1, dist.get_world_size() + 1))
     assert result.shape == (expected_total_size, 3)
+
+    if rank < dist.get_world_size() // 2:
+        x2 = torch.zeros(size_at_rank, 3, device=device)
+    else:
+        x2 = torch.ones(size_at_rank, 3, device=device)
+
+    result2 = gather_along_dimension(
+        x2, group=dist.group.WORLD, dim=0, variable_size=True
+    )
+
+    expected_result2 = torch.cat(
+        [
+            torch.zeros(i + 1, 3, device=device)
+            if i < dist.get_world_size() // 2
+            else torch.ones(i + 1, 3, device=device)
+            for i in range(dist.get_world_size())
+        ],
+        dim=0,
+    )
+
+    assert torch.allclose(result2, expected_result2), (
+        "Gathered tensor does not match expected result."
+    )
 
 
 def test_gather_along_dimension_no_group(device: torch.device) -> None:
