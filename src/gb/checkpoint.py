@@ -30,7 +30,7 @@ def save_checkpoint(
             "step": step,
             "ep_group_rank": ep_group.rank(),
             "channel_group_rank": channel_group.rank(),
-            "loss": loss,
+            "loss": loss.item(),
             "format": 1,
         }
         model_name = (
@@ -44,7 +44,6 @@ def load_checkpoint(
     checkpoint_path: str, map_location="cpu"
 ) -> tuple[dict, dict, int, int | None, int, int, float]:
     """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, expert group rank, and channel group rank."""
-    print(f"checkpoint_path = {checkpoint_path}")
     checkpoint = torch.load(
         checkpoint_path, map_location=map_location, weights_only=False
     )
@@ -158,8 +157,7 @@ def transplant_weights(model, state_dict_path):
     if dist.get_rank() == 0:
         print(f"Transplanting weights from {state_dict_path}")
 
-    # this is not very nice, but how to change?
-    model_state_dict, _, _, _, _, _, _ = load_latest_model_states(state_dict_path)
+    model_state_dict, *_ = load_latest_model_states(state_dict_path)
 
     try:
         state_dict = {}
