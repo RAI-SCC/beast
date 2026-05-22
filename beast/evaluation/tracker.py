@@ -13,6 +13,8 @@ class Tracker(object):
     all attributes.
     """
 
+    _keys: List[str] = []
+
     def __init__(self) -> None:
         self._keys: List[str] = []
 
@@ -28,8 +30,9 @@ class Tracker(object):
         attr.append(value)
 
     def _init_attr(self, key: str, value: Any) -> None:
-        assert key not in self.keys(), f"Attribute {key} already exists"
-        assert not hasattr(self, key), f"Attribute {key} already exists"
+        assert not (key in self.keys() or hasattr(self, key)), (
+            f"Attribute {key} already exists"
+        )
         self._keys.append(key)
         super().__setattr__(
             "_" + key,
@@ -119,12 +122,16 @@ class Tracker(object):
             value = getattr(self, key)
             if len(value) == 1:
                 value = value[0]
-            elif len(value) < item:
+            elif len(value) < item + 1:
                 value = None
             else:
                 value = value[item]
             out_dict[key] = value
         return out_dict
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Index setting falls back to attribute setting."""
+        self.__setattr__(key, value)
 
     def __repr__(self) -> str:
         """Class representation."""
