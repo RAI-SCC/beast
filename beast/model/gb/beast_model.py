@@ -4,13 +4,14 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, convolutions, linear
+from jigsaw import attention, convolutions, linear  # type: ignore
 
 from beast.layers import NiceWindowedTransformerBlock
 
 
 class Beast(torch.nn.Module):
-    """Base class for the Beast model.
+    """Base class for the BEAST model.
+
     Bayesian Exascale Atmospheric Swim Transformer.
 
     Parameters
@@ -62,7 +63,7 @@ class Beast(torch.nn.Module):
 
     Notes
     -----
-    TODO: Reference to papers and documentation
+    TODO: Reference to papers and documentation.
     """
 
     def __init__(
@@ -76,7 +77,7 @@ class Beast(torch.nn.Module):
         out_channels: int,
         # Model Architecture
         embed_dim: int,
-        heads: int,
+        heads: Sequence[int],
         kernel_size: int,
         stride: int,
         padding: int,
@@ -84,7 +85,7 @@ class Beast(torch.nn.Module):
         # Windows
         window_size_outer: Sequence[int],
         window_size_inner: Sequence[int],
-        n_full_blocks: int,
+        n_full_blocks: Sequence[int],
         # Noise
         noise_dim: int,
         # Dropout
@@ -103,8 +104,8 @@ class Beast(torch.nn.Module):
         dtp_group: dist.ProcessGroup | None = None,
         up_group: dist.ProcessGroup | None = None,
         ep_group: dist.ProcessGroup | None = None,
-        **kwargs,
-    ):
+        **kwargs: dict,
+    ) -> None:
         super().__init__()
 
         self.height = height
@@ -206,6 +207,12 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
+        assert self.channel_group is not None, (
+            "channel_group must not be None for distributed model"
+        )
+        assert self.spatial_group is not None, (
+            "spatial_group must not be None for distributed model"
+        )
 
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
@@ -606,10 +613,10 @@ class Beast(torch.nn.Module):
         )
 
     # @torch.compile
-    def _get_windows(self, x, window_size):
-        B, xlat, xlon, channels = x.shape
+    def _get_windows(self, x: torch.Tensor, window_size: Sequence[int]) -> torch.Tensor:
+        batch_size, xlat, xlon, channels = x.shape
         x = x.reshape(
-            B,
+            batch_size,
             xlat // window_size[0],
             window_size[0],
             xlon // window_size[1],
@@ -621,9 +628,17 @@ class Beast(torch.nn.Module):
         return x
 
     # @torch.compile
-    def _reverse_windows(self, x, B, xlat, xlon, channels, window_size):
+    def _reverse_windows(
+        self,
+        x: torch.Tensor,
+        batch_size: int,
+        xlat: int,
+        xlon: int,
+        channels: int,
+        window_size: Sequence[int],
+    ) -> torch.Tensor:  # noqa: N803
         x = x.reshape(
-            B,
+            batch_size,
             xlat // window_size[0],
             xlon // window_size[1],
             window_size[0],
@@ -631,10 +646,16 @@ class Beast(torch.nn.Module):
             channels,
         )
         x = x.permute(0, 1, 3, 2, 4, 5)
-        x = x.reshape(B, xlat, xlon, channels)
+        x = x.reshape(batch_size, xlat, xlon, channels)
         return x
 
-    def _gen_mask_(self, batch_dim, n_patch_lat, n_patch_lon, window_size):
+    def _gen_mask_(
+        self,
+        batch_dim: int,
+        n_patch_lat: int,
+        n_patch_lon: int,
+        window_size: Sequence[int],
+    ) -> torch.Tensor:
         """
         Generate mask for attention mechanism when fields are rolled.
 
@@ -671,11 +692,11 @@ class Beast(torch.nn.Module):
         # This assumes constant batch dimension within a run (restarting a job is ok)
         return attention_mask
 
-    def _define_masks(self, x_shape):
-        B, C, lat, lon = x_shape
+    def _define_masks(self, x_shape: torch.Size) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, _, lat, lon = x_shape
         self.mask_out = (
             self._gen_mask_(
-                B,
+                batch_size,
                 lat // self.kernel_size,
                 lon // self.kernel_size,
                 self.window_size_outer,
@@ -688,7 +709,7 @@ class Beast(torch.nn.Module):
 
         self.mask_in = (
             self._gen_mask_(
-                B,
+                batch_size,
                 lat // self.kernel_size // 2,
                 lon // self.kernel_size // 2,
                 self.window_size_inner,
@@ -727,15 +748,17 @@ class Beast(torch.nn.Module):
         # x has global shape (B, channels, xlat, xlon)
         x = self.patch_embedding(x)
         x_res = x.clone()
-        B, channels, xlat, xlon = x.shape
+        batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         # TODO: fuse as x.permute(0, 2, 3, 1)
-        x = x.reshape(B, channels, xlat * xlon).mT.view(B, xlat, xlon, channels)
+        x = x.reshape(batch_size, channels, xlat * xlon).mT.view(
+            batch_size, xlat, xlon, channels
+        )
 
         # attention
         for i in range(self.n_full_blocks[0]):
             x = self._get_windows(x, self.window_size_outer)
             # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
-            n_windows = x.shape[0] // B
+            n_windows = x.shape[0] // batch_size
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
             if self.nice_norm:
@@ -743,7 +766,7 @@ class Beast(torch.nn.Module):
             else:
                 x = self.transformer_1[i * 2](x, mask=None)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_outer
+                x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
@@ -754,7 +777,7 @@ class Beast(torch.nn.Module):
             else:
                 x = self.transformer_1[i * 2 + 1](x, mask=self.mask_out)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_outer
+                x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
 
@@ -764,19 +787,19 @@ class Beast(torch.nn.Module):
         x = self.downsample(x)
         # (B, 2*channels, lat/2, lon/2)
 
-        B, channels, xlat, xlon = x.shape
+        batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         x = x.permute(0, 2, 3, 1).contiguous()
 
         for i in range(self.n_full_blocks[1]):
             x = self._get_windows(x, self.window_size_inner)
-            n_windows = x.shape[0] // B
+            n_windows = x.shape[0] // batch_size
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
             if self.nice_norm:
                 x = self.transformer_down[i * 2](x, noise_transformer_down, mask=None)
             else:
                 x = self.transformer_down[i * 2](x, mask=None)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_inner
+                x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
             x = self.roll_in(x)
             x = self._get_windows(x, self.window_size_inner)
@@ -787,7 +810,7 @@ class Beast(torch.nn.Module):
             else:
                 x = self.transformer_down[i * 2 + 1](x, mask=self.mask_in)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_inner
+                x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
             x = self.unroll_in(x)  # [B, lat, lon, channels]
 
@@ -795,18 +818,18 @@ class Beast(torch.nn.Module):
 
         x = self.upsample(x)
 
-        B, channels, xlat, xlon = x.shape
+        batch_size, channels, xlat, xlon = x.shape
 
         x = x.permute(0, 2, 3, 1).flatten(start_dim=1, end_dim=2).contiguous()
         x = self.activation(x)
         x = self.upsample_mix(x)
-        x = x.reshape(B, xlat, xlon, channels)
+        x = x.reshape(batch_size, xlat, xlon, channels)
 
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
             x = self._get_windows(x, self.window_size_outer)
-            n_windows = x.shape[0] // B
+            n_windows = x.shape[0] // batch_size
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
 
             if self.nice_norm:
@@ -814,7 +837,7 @@ class Beast(torch.nn.Module):
             else:
                 x = self.transformer_2[i * 2](x, mask=None)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_outer
+                x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
             x = self.roll_out(x)
             x = self._get_windows(x, self.window_size_outer)
@@ -825,10 +848,10 @@ class Beast(torch.nn.Module):
             else:
                 x = self.transformer_2[i * 2 + 1](x, mask=self.mask_out)
             x = self._reverse_windows(
-                x, B, xlat, xlon, channels, self.window_size_outer
+                x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
             x = self.unroll_out(x)  # [B, lat, lon, channels]
-        B, xlat, xlon, channels = x.shape
+        batch_size, xlat, xlon, channels = x.shape  # noqa: N806
         x = x.permute(0, 3, 1, 2).contiguous()
 
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
