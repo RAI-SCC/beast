@@ -14,7 +14,7 @@ class TestBeastlingModel:
     def test_beastling(
         self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
     ) -> None:
-        small_config = BEAST_CONFIGURATIONS["BEASTLING"]
+        small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
         small_config["bayesian"] = bayesian
         small_config["in_channels"] = small_config["in_channels"] * n_timesteps
         model = Beast(**small_config, dropout=0 if bayesian else 1e-1, device=device)
@@ -63,7 +63,7 @@ class TestDistBeastlingModel:
         jspatial_pg = mesh_dict["JSpatial"]
         dtp_pg = mesh_dict["DTP"]
 
-        small_config = BEAST_CONFIGURATIONS["BEASTLING"]
+        small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
         small_config["bayesian"] = bayesian
         small_config["in_channels"] = small_config["in_channels"] * n_timesteps
         model = Beast(

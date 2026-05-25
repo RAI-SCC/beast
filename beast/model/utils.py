@@ -92,3 +92,43 @@ def convert_jigsaw_vi(
 
         if class_name in weight_sync_list:
             jigsaw.utils_init.average_weights_module(m, spatial_pg)
+
+
+# TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.
+def count_model_parameters(
+    model: torch.nn.Module, parallelism: int, bayesian: bool
+) -> int:
+    """
+    Count the number of parameters in a model, taking into account parallelism and whether the model is Bayesian.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The model for which to count parameters.
+    parallelism : int
+        The degree of parallelism (e.g., number of experts).
+    bayesian : bool
+        Whether the model is Bayesian (which would double the parameter count).
+
+    Returns
+    -------
+    int
+        The total number of parameters in the model, adjusted for parallelism and Bayesian nature.
+    """
+    if parallelism == 1:
+        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        param_sum = 0
+        for module in model.modules():
+            # Skip the top-level model itself if it has the method
+            if module is model:
+                continue
+            if hasattr(module, "get_parameter_count"):
+                param_sum += module.get_parameter_count()  # type: ignore
+
+        total = param_sum * parallelism
+
+    if bayesian:
+        total = total * 2  # Count every parameter twice, if bayesian
+
+    return total

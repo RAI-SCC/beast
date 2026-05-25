@@ -48,8 +48,6 @@ class Beast(torch.nn.Module):
         Process group for spatial parallelism.
     channel_group : dist.ProcessGroup
         Process group for channel parallelism.
-    ep_group : dist.ProcessGroup
-        Process group for expert parallelism.
     up_group : dist.ProcessGroup
         Process group for unsharded parallelism.
     dtype : torch.dtype
@@ -103,7 +101,6 @@ class Beast(torch.nn.Module):
         spatial_group: dist.ProcessGroup | None = None,
         dtp_group: dist.ProcessGroup | None = None,
         up_group: dist.ProcessGroup | None = None,
-        ep_group: dist.ProcessGroup | None = None,
         **kwargs: dict,
     ) -> None:
         super().__init__()
@@ -128,7 +125,6 @@ class Beast(torch.nn.Module):
         self.spatial_group = spatial_group
         self.dtp_group = dtp_group
         self.up_group = up_group
-        self.ep_group = ep_group
         self.dtype = dtype
         self.bayesian = bayesian
         self.flash_attn = flash_attn
@@ -174,12 +170,7 @@ class Beast(torch.nn.Module):
             dist.get_world_size(group=self.up_group) if self.up_group is not None else 1
         )
 
-        if self.dtp_group_size > 1:
-            self._parallelism = self.dtp_group_size
-        elif self.channel_group_size > 1 and self.spatial_group_size > 1:
-            self._parallelism = self.channel_group_size * self.spatial_group_size
-        else:
-            self._parallelism = 1
+        self._parallelism = self.dtp_group_size
 
         self.local_rank = self.dtp_group.rank() if self.dtp_group is not None else 0
 
@@ -212,6 +203,10 @@ class Beast(torch.nn.Module):
         )
         assert self.spatial_group is not None, (
             "spatial_group must not be None for distributed model"
+        )
+
+        assert self.dtp_group is not None, (
+            "dtp_group must not be None for distributed model"
         )
 
         self.patch_embedding = convolutions.DistributedConv2D(
