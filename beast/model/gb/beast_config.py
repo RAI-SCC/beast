@@ -1,6 +1,4 @@
-"""
-Official beast configurations, which can be used with the get_model factory function. This is a work in progress and will be filled in as we go.
-"""
+"""Official BEAST configurations for the get_model factory function."""
 
 from typing import Any
 

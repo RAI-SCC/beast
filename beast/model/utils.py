@@ -2,12 +2,12 @@
 
 import types
 
-import jigsaw.normalization as normalization
+import jigsaw.normalization as normalization  # type: ignore[import-not-found]
+import jigsaw.utils_init  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi.distributions as vidist
 import torch_blue.vi.utils.convert
-import torch_blue.vi.utils.init as utils_init
 
 from beast.layers.nice_window_transformer import NiceNorm
 
@@ -16,13 +16,13 @@ def convert_jigsaw_vi(
     module: torch.nn.Module,
     channel_pg: dist.ProcessGroup,
     spatial_pg: dist.ProcessGroup,
-    variational_distribution=vidist.Normal(std=0.15),
-    prior=vidist.Normal(),
-    rescale_prior=False,
-    kaiming_initialization=True,
-    prior_initialization=False,
-    return_log_probs=True,
-):
+    variational_distribution: vidist.base.Distribution = vidist.Normal(std=0.15),
+    prior: vidist.base.Distribution = vidist.Normal(),
+    rescale_prior: bool = False,
+    kaiming_initialization: bool = True,
+    prior_initialization: bool = False,
+    return_log_probs: bool = True,
+) -> None:
     """Convert a PyTorch module to a VI module using torch_blue, with custom handling for Jigsaw's specific layers and normalization.
 
     Parameters
@@ -67,8 +67,10 @@ def convert_jigsaw_vi(
 
     num_jchannel = dist.get_world_size(channel_pg)
 
-    def new_cf_channel(self, variable_shapes=None):
-        previous = self._old_calculate_fan_in(variable_shapes=variable_shapes)
+    def new_cf_channel(
+        self: torch.nn.Module, variable_shapes: dict[str, torch.Size] | None = None
+    ) -> int:
+        previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
     fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
@@ -89,4 +91,4 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            utils_init.average_weights_module(m, dist.get_world_size(spatial_pg))
+            jigsaw.utils_init.average_weights_module(m, spatial_pg)
