@@ -1,6 +1,6 @@
 """A tracking utility class."""
 
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Mapping, cast, overload
 
 
 class Tracker(object):
@@ -30,9 +30,6 @@ class Tracker(object):
         attr.append(value)
 
     def _init_attr(self, key: str, value: Any) -> None:
-        assert not (key in self.keys() or hasattr(self, key)), (
-            f"Attribute {key} already exists"
-        )
         self._keys.append(key)
         super().__setattr__(
             "_" + key,
@@ -54,44 +51,33 @@ class Tracker(object):
             self._append_attr("_" + key, value)
             return
 
-        try:
-            self._init_attr(key, value)
-        except AssertionError:
+        if hasattr(self, key) or hasattr(self, "_" + key):
             super().__setattr__(key, value)
-
-    def overwrite(self, key: str, value: Any) -> None:
-        """
-        Overwrite a tracking attribute.
-
-        Hard sets a tracking attribute instead of appending. Type compatibility of the
-        new attribute with the old one is enforced. If the attribute does not exist it
-        is initialized.
-
-        Parameters
-        ----------
-        key: str
-            Attribute name
-        value: Any
-            Attribute value
-        """
-        if hasattr(self, key):
-            raise ValueError(f"Standard attribute {key} cannot be overwritten")
-        if key in self.keys():
-            super().__setattr__("_" + key, value)
         else:
             self._init_attr(key, value)
 
-    def store(self, data: Dict[str, Any]) -> None:
+    @overload
+    def update(self, /, hard: bool = False, **kwargs: Any) -> None: ...
+    @overload
+    def update(self, mapping: Mapping[str, Any], /, hard: bool = True) -> None: ...
+    def update(self, mapping=None, /, hard=True, **kwargs) -> None:  # type: ignore [no-untyped-def,misc]
         """
-        Store dictinary values to attributes named by the keys.
+        Update one or more tracking attributes.
 
-        Parameters
-        ----------
-        data: Dict[str, Any]
-            Data dictionary to store
+        Updates attributes based on a mapping or keyword arguments. If ``hard`` is
+        ``True`` (default), this will overwrite the respective attributes. Else the
+        provided values will be appended to the tracking lists.
         """
-        for key, value in data.items():
-            setattr(self, key, value)
+        mapping = mapping or kwargs
+
+        for key, value in mapping.items():
+            if key in self.keys():
+                if hard:
+                    super().__setattr__("_" + key, value)
+                else:
+                    self._append_attr(key, value)
+            else:
+                self._init_attr(key, value)
 
     def __getitem__(self, item: str | int) -> List | Dict:
         """

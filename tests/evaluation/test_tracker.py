@@ -68,3 +68,19 @@ class TestTracker:
 
         assert tracker[1] == ref_dict1
         assert tracker[2] == ref_dict2
+
+    def test_update(
+        self, dummy: Tuple[Tracker, Tuple[str, ...], Tuple[List[Any], ...]]
+    ) -> None:
+        tracker, keys, values = dummy
+
+        tracker.update(int=None)
+        assert tracker.int is None
+
+        tracker.update({"int": [1, 2, 3]})
+        assert tracker.int == [1, 2, 3]
+
+        tracker.update(hard=False, int=4, float=6.6, other=None)
+        assert tracker.int == [1, 2, 3, 4]
+        assert tracker.float == [1.1, 2.2, 3.3, 4.4, 5.5, 6.6]
+        assert tracker.other == [None]
