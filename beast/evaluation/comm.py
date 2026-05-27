@@ -57,7 +57,7 @@ def gather_along_dimension(
         torch.tensor(local_size, device=x.device, dtype=torch.int32),
         group=group,
     )
-    global_max_size = max([size.item() for size in all_sizes])
+    global_max_size = torch.stack(all_sizes).max().item()
 
     # Pad local tensor to the global maximum size
     if local_size < global_max_size:
@@ -66,11 +66,11 @@ def gather_along_dimension(
         padding = torch.zeros(pad_size, device=x.device, dtype=x.dtype)
         x_padded = torch.cat([x, padding], dim=dim)
     else:
-        x_padded = x.clone()
+        x_padded = x
 
     # Gather tensors as objects to handle the padding/structure
     gathered_t_obj = [torch.zeros_like(x_padded) for _ in range(group.size())]
-    dist.all_gather_object(gathered_t_obj, x_padded, group=group)
+    dist.all_gather(gathered_t_obj, x_padded, group=group)
 
     # Remove padding and concatenate
     multislice = [[slice(None)] * x.dim() for _ in range(group.size())]

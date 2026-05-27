@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 import torch
 import torch.distributed as dist
@@ -23,6 +25,35 @@ def test_gather_along_dimension_fixed_size(device: torch.device) -> None:
         x, group=dist.group.WORLD, dim=1, variable_size=False
     )
     assert result_dim1.shape == (2, 3 * dist.get_world_size())
+
+    max_size = 10
+    x2 = torch.zeros(max_size, max_size, device=device, dtype=torch.float32)
+    local_random_index1 = torch.randint(0, max_size, (1,)).item()
+    local_random_index2 = torch.randint(0, max_size, (1,)).item()
+    x2[cast(int, local_random_index1), cast(int, local_random_index2)] = 1.0
+
+    local_indices = torch.tensor(
+        [local_random_index1, local_random_index2], device=device, dtype=torch.int32
+    )
+    all_indices = [
+        torch.zeros(2, device=device, dtype=torch.int32)
+        for _ in range(dist.get_world_size())
+    ]
+    dist.all_gather(all_indices, local_indices, group=dist.group.WORLD)
+
+    result2 = gather_along_dimension(
+        x2, group=dist.group.WORLD, dim=0, variable_size=False
+    )
+
+    target2 = torch.zeros_like(result2)
+    for i, indices in enumerate(all_indices):
+        target2[
+            cast(int, indices[0].item() + i * max_size), cast(int, indices[1].item())
+        ] = 1.0
+
+    assert torch.allclose(result2, target2), (
+        "Gathered tensor does not match expected result for fixed size case."
+    )
 
 
 @pytest.mark.dist
@@ -62,6 +93,17 @@ def test_gather_along_dimension_variable_size(device: torch.device) -> None:
 
     assert torch.allclose(result2, expected_result2), (
         "Gathered tensor does not match expected result."
+    )
+
+    x3 = x2.mT.clone()
+    result3 = gather_along_dimension(
+        x3, group=dist.group.WORLD, dim=1, variable_size=True
+    )
+
+    expected_result3 = expected_result2.mT.clone()
+
+    assert torch.allclose(result3, expected_result3), (
+        "Gathered tensor does not match expected result for dim=1 case."
     )
 
 
