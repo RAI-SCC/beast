@@ -322,3 +322,43 @@ def make_variable_names(
                     names.append(f"{pressure_variable}_{level}")
 
     return names
+
+
+def latitude_weighted_average(
+    data: torch.Tensor, lat_dim: int = -2, lon_dim: int = -1
+) -> torch.Tensor:
+    """
+    Compute the latitude-weighted average of the input data.
+
+    Parameters
+    ----------
+    data: torch.Tensor
+        The input data tensor with a latitude dimension.
+    lat_dim: int, optional
+        The dimension corresponding to latitude. Defaults to -2.
+    lon_dim: int, optional
+        The dimension corresponding to longitude. Defaults to -1.
+
+    Returns
+    -------
+    torch.Tensor
+        The latitude-weighted average of the input data.
+    """
+    # Compute latitude weights based on the cosine of the latitude values.
+    latitudes = torch.linspace(
+        -torch.pi / 2.0, torch.pi / 2.0, data.shape[lat_dim] + 1, device=data.device
+    )[:-1]
+
+    cosines = torch.cos(latitudes)
+    cosine_mean = cosines.mean()
+    weights = (cosines / cosine_mean).reshape(
+        *[
+            -1 if i == ((lat_dim + data.dim()) % data.dim()) else 1
+            for i in range(data.dim())
+        ]
+    )  # Normalize weights to have a mean of 1
+
+    # Apply weights and compute the average.
+    weighted_data = data * weights
+
+    return weighted_data.mean(dim=(lat_dim, lon_dim))

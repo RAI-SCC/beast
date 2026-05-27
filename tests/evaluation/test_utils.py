@@ -1,13 +1,14 @@
 """Tests util functions for the evaluation in beast."""
 
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from beast.evaluation import latitude_weighted_average
 from beast.evaluation.utils import (
     DATA_KEY,
     EVALUATION_KEY,
@@ -525,3 +526,71 @@ def test_missing_all_variables_no_config() -> None:
     t = torch.zeros(2, 4)
     with pytest.raises(KeyError, match="Configuration error"):
         select_variables(t, channel_rank=0, channel_group_size=1)
+
+
+def test_latitude_weighted_average(device: torch.device) -> None:
+    """Test that latitude weighted average computes correct weights and applies them."""
+    # Create a dummy input tensor of shape (batch=2, channels=3, lat=4, lon=5)
+    x = torch.ones(2, 3, 4, 5, device=device)
+
+    # Compute latitude weighted average
+    result = latitude_weighted_average(x)
+
+    assert torch.allclose(result, torch.ones(2, 3, device=device)), (
+        f"Expected torch.ones(2, 3), got {result}"
+    )
+
+    # Compute latitude weighted average
+    result = latitude_weighted_average(x, lat_dim=2, lon_dim=0)
+
+    assert torch.allclose(result, torch.ones(3, 5, device=device)), (
+        f"Expected ones(3, 5), got {result}"
+    )
+
+    x2 = torch.eye(10, device=device)
+
+    result = latitude_weighted_average(x2, lat_dim=0, lon_dim=1)
+    assert torch.allclose(result, torch.tensor(0.1, device=device)), (
+        f"Expected torch.tensor(0.1), got {result}"
+    )
+
+    max_size = 10
+    x2 = torch.zeros(max_size, max_size, device=device, dtype=torch.float32)
+    local_random_index1 = torch.randint(0, max_size, (1,)).item()
+    local_random_index2 = torch.randint(0, max_size, (1,)).item()
+    local_random_index3 = torch.randint(0, max_size, (1,)).item()
+    local_random_index4 = torch.randint(0, max_size, (1,)).item()
+    while (
+        local_random_index3 == local_random_index1
+        and local_random_index4 == local_random_index2
+    ):
+        local_random_index3 = torch.randint(0, max_size, (1,)).item()
+        local_random_index4 = torch.randint(0, max_size, (1,)).item()
+
+    x2[cast(int, local_random_index1), cast(int, local_random_index2)] = 1.0
+    x2[cast(int, local_random_index3), cast(int, local_random_index4)] = 1.0
+
+    result2 = latitude_weighted_average(x2, lat_dim=0, lon_dim=1)
+
+    local_cosines = torch.cos(
+        -torch.pi / 2.0
+        + torch.pi
+        * torch.tensor(
+            [local_random_index1, local_random_index3],
+            device=device,
+            dtype=torch.float32,
+        )
+        / max_size
+    )
+    all_cosine_sum = torch.cos(
+        -torch.pi / 2.0
+        + torch.pi
+        * torch.arange(max_size, device=device, dtype=torch.float32)
+        / max_size
+    ).sum()
+
+    expected_result2 = local_cosines.sum() / (all_cosine_sum * max_size)
+
+    assert torch.allclose(result2, expected_result2), (
+        f"Expected {expected_result2}, got {result2}"
+    )
