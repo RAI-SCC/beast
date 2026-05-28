@@ -106,13 +106,8 @@ class DistributedMLPNICE(torch.nn.Module):
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
-        self.linear1 = linear.DistributedXWTNice(
-            in_dim,
-            hidden_dim // channel_group.size(),
-            bias,
-            device,
-            spatial_group=spatial_group,
-            channel_group=channel_group,
+        self.linear1 = torch.nn.Linear(
+            in_dim, hidden_dim // channel_group.size(), bias, device
         )
         self.linear2 = linear.DistributedXWT(
             hidden_dim // channel_group.size(),
@@ -123,17 +118,24 @@ class DistributedMLPNICE(torch.nn.Module):
             parallelism=channel_group.size(),
             model_group=channel_group,
             spatial_group=spatial_group,
-            bayesian=False,
-            synchronized_layer=True,
-            sync_group=spatial_group,
+            bayesian=False
         )
-        
+
+        # linear1 should remain the same across all ranks
+        # ensure that the weights are synchronized upon initialization
         for p in self.linear1.parameters():
             dist.broadcast(p, group_src=0, group=self.model_group)
-            p.register_post_accumulate_grad_hook(hooks.make_grad_sync_hook(self.dtp_group))    
-        
-        if self.bias is not None:
-            self.bias.register_post_accumulate_grad_hook(
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.dtp_group)
+            )
+            
+        # The second layer should only be parallel across the channel group
+        # thus, all spatial groups need to ensure they remain synchronized
+        self.linear2.weight.register_post_accumulate_grad_hook(
+            hooks.make_grad_sync_hook(self.spatial_group)
+        )
+        if self.linear2.bias is not None:
+            self.linear2.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.spatial_group)
             )
             dist.broadcast(self.bias.data, group_src=0, group=self.spatial_group)
@@ -153,7 +155,8 @@ class DistributedMLPNICE(torch.nn.Module):
         x = self.activation(x)
         x = self.linear2(x)
         return x
-    
+
+
 class DistributedSynchronizedMLP(torch.nn.Module):
     """Distributed MLP across n processes."""
 
@@ -177,25 +180,22 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.parallelism = parallelism
         self.model_group = model_group
 
-        
         # in, hidden, out dim are global sizes for two-way model parallelism
         # required to maintain partitioning across final dimension
 
         # local X has shape [seq_length, in_dim//2]
         self.linear1 = linear.DistributedXWT(
-            in_dim // parallelism.size(),
+            in_dim // model_group.size(),
             hidden_dim,
             bias,
             local_rank,
             device,
             parallelism=parallelism,
             model_group=model_group,
-            synchronized_layer=True,
-            sync_group=sync_group,
             bayesian=bayesian,
         )
 
-        self.linear2 = linear.DistributedXWTSync(
+        self.linear2 = linear.DistributedXWT(
             hidden_dim // 2,
             out_dim,
             bias,
@@ -203,11 +203,15 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             device,
             parallelism=parallelism,
             model_group=model_group,
-            synchronzied_layer=True,
-            sync_group=sync_group,
             bayesian=bayesian,
         )
 
+        for p in self.parameters():
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.spatial_group)
+            )
+            
         self.activation = torch.nn.GELU()
         self.drop = torch.nn.Dropout(p=dropout)
         self.drop2 = torch.nn.Dropout(p=dropout)
@@ -231,4 +235,3 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         x = self.drop2(x)
 
         return x
-
