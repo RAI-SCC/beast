@@ -274,8 +274,7 @@ class NiceNorm(torch.nn.Module):
         self.noise_dim = noise_dim
         self.shape = normalized_shape
 
-        self.scale_mlp = MLP(self.noise_dim, self.shape, self.shape)
-        self.shift_mlp = MLP(self.noise_dim, self.shape, self.shape)
+        self.shift_scale_mlp = MLP(self.noise_dim, self.shape, self.shape * 2)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Forward pass of NICE normalization.
@@ -294,9 +293,8 @@ class NiceNorm(torch.nn.Module):
         """
         x = self.norm(x)
 
-        scale = self.scale_mlp(noise)
-        shift = self.shift_mlp(noise)
-
-        x = scale.unsqueeze(dim=1) * x + shift.unsqueeze(dim=1)
+        scale_shift = self.shift_scale_mlp(noise).unsqueeze(dim=1)
+        scale, shift = torch.chunk(scale_shift, 2, dim=-1)
+        x = scale * x + shift
 
         return x
