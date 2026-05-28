@@ -5,7 +5,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import re
 import os
 
-from gb.comm import get_process_group
+from beast.comm import get_process_group
 
 
 def save_checkpoint(
@@ -22,23 +22,24 @@ def save_checkpoint(
 
     # rank = dist.get_rank()
     ddp_rank = get_process_group("DDP").rank()
+    cp = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch": epoch,
+        "step": step,
+        "ep_group_rank": ep_group.rank(),
+        "channel_group_rank": channel_group.rank(),
+        "loss": loss.item(),
+        "format": 1,
+    }
+    model_name = (
+        f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
+    )
 
     if ddp_rank == 0:
-        cp = {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "epoch": epoch,
-            "step": step,
-            "ep_group_rank": ep_group.rank(),
-            "channel_group_rank": channel_group.rank(),
-            "loss": loss.item(),
-            "format": 1,
-        }
-        model_name = (
-            f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
-        )
-
-        torch.save(cp, checkpoint_path + f"/{model_name}.pt")
+        torch.save(cp, f"{checkpoint_path}/{model_name}.pt")
+        
+    return f"{checkpoint_path}/{model_name}.pt"
 
 
 def load_checkpoint(
@@ -48,24 +49,7 @@ def load_checkpoint(
     checkpoint = torch.load(
         checkpoint_path, map_location=map_location, weights_only=False
     )
-    model_state_dict = checkpoint["model_state_dict"]
-    optimizer_state_dict = checkpoint["optimizer_state_dict"]
-    epoch = checkpoint["epoch"]
-    step = checkpoint.get("step", None)
-    ep_group_rank = checkpoint["ep_group_rank"]
-    channel_group_rank = checkpoint["channel_group_rank"]
-    loss = checkpoint["loss"]
-
-    return (
-        model_state_dict,
-        optimizer_state_dict,
-        epoch,
-        step,
-        ep_group_rank,
-        channel_group_rank,
-        loss,
-    )
-
+    return checkpoint
 
 def parse_checkpoint(fname):
     m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-e(\d+)-jc(\d+)\.pt$", fname)
@@ -80,7 +64,7 @@ def parse_checkpoint(fname):
     }
 
 
-def parse_latest_model_states(directory):
+def parse_latest_model_state(directory):
     end_of_epoch_directory = os.path.join(directory, "checkpoints")
     path_base = end_of_epoch_directory
     checkpoints = [
@@ -142,12 +126,14 @@ def load_state_dict(
     last_epoch,
 ):
     # DDP checks
-    is_state_dict_ddp = any(k.startswith('module.') for k in model_state_dict.keys()) 
+    is_state_dict_ddp = any(k.startswith("module.") for k in model_state_dict.keys())
     if isinstance(model, DDP) and not is_state_dict_ddp:
-        model_state_dict = {f'module.{k}': v for k, v in model_state_dict.items()}
+        model_state_dict = {f"module.{k}": v for k, v in model_state_dict.items()}
     elif not isinstance(model, DDP) and is_state_dict_ddp:
-        model_state_dict = {k.replace('module.', '', 1): v for k, v in model_state_dict.items()}
-        
+        model_state_dict = {
+            k.replace("module.", "", 1): v for k, v in model_state_dict.items()
+        }
+
     try:
         model.load_state_dict(model_state_dict)
         if optimizer is not None:

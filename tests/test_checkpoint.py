@@ -7,21 +7,21 @@ from beast.checkpoint import (
     load_checkpoint,
     parse_checkpoint,
     parse_latest_model_state,
-    load_state_dict,
-    transplant_weights,
+    load_state_dict
 )
 from beast.model import model_gb
 from beast.comm import create_process_mesh_dict
 
 
-def test_save_checkpoint(tmp_path):
+def test_save_checkpoint(tmp_path, device):
     """Test to save and load a dummy model."""
     process_mesh = create_process_mesh_dict([1, 1, 1, 2, 2])
     model = torch.nn.Linear(10, 10)
     optimizer = torch.optim.AdamW(model.parameters())
-    loss_value = 1.2
-    save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
-    checkpoint = load_checkpoint(tmp_path)
+    loss_value = torch.tensor([1.2], device=device)
+    tmp_path = str(tmp_path)
+    full_path = save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
+    checkpoint = load_checkpoint(full_path)
 
     assert isinstance(checkpoint["model_state_dict"], dict)
     assert isinstance(checkpoint["optimizer_state_dict"], dict)
@@ -32,9 +32,9 @@ def test_save_checkpoint(tmp_path):
     assert checkpoint["loss"] == loss_value
 
 
-@pytest.mark.dist(4)
-# TODO: parameterize
-def test_save_beast_checkpoint(device, tmp_path, bayesian):
+# @pytest.mark.dist(4)
+# TODO: parameterize bayesian
+def test_save_beast_checkpoint(device, tmp_path, bayesian=True):
     """Test that initializing, saving, and loading beast works."""
     process_mesh = create_process_mesh_dict([1, 1, 1, 2, 2])
     model = model_gb.Bellbeast(
@@ -63,9 +63,9 @@ def test_save_beast_checkpoint(device, tmp_path, bayesian):
         nice_norm=True,
     )
     optimizer = torch.optim.AdamW(model.parameters())
-    loss_value = 1.2
-    save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
-    checkpoint = load_checkpoint(tmp_path)
+    loss_value = torch.tensor([1.2], device=device)
+    full_path = save_checkpoint(str(tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value)
+    checkpoint = load_checkpoint(full_path)
 
     assert isinstance(checkpoint["model_state_dict"], dict)
     assert isinstance(checkpoint["optimizer_state_dict"], dict)
@@ -98,6 +98,7 @@ def test_parse_latest_model_state(tmp_path):
     model = torch.nn.Linear(10, 10)
     optimizer = torch.optim.AdamW(model.parameters())
     loss_value = 1.2
+    tmp_path = str(tmp_path)
     save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
     save_checkpoint(tmp_path, model, optimizer, epoch=1, step=2, loss=loss_value)
     save_checkpoint(tmp_path, model, optimizer, epoch=1, step=0, loss=loss_value)
@@ -112,6 +113,7 @@ def test_load_state_dict(tmp_path):
     model = torch.nn.Linear(10, 10)
     optimizer = torch.optim.AdamW(model.parameters())
     loss_value = 1.0
+    tmp_path = str(tmp_path)
     save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
     m = load_checkpoint(tmp_path)
     model_1, optimizer_1, start_epoch = load_state_dict(

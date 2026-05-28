@@ -1,6 +1,6 @@
 import torch
-from gb.model.expert import ExpertWeightingLayer
-from jigsaw import attention, convolutions, linear
+from beast.model.expert import ExpertWeightingLayer
+from libs.jigsaw.jigsaw import attention, convolutions, linear
 
 
 class Bellbeast(torch.nn.Module):
