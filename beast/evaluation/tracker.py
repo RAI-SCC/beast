@@ -79,6 +79,10 @@ class Tracker(object):
             else:
                 self._init_attr(key, value)
 
+    @overload
+    def __getitem__(self, item: str) -> List: ...
+    @overload
+    def __getitem__(self, item: int) -> Dict: ...
     def __getitem__(self, item: str | int) -> List | Dict:
         """
         Get tracking attribute by name or sequence index.
