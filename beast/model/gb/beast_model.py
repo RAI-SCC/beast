@@ -4,7 +4,6 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, convolutions, linear  # type: ignore
 
 from beast.layers import NiceWindowedTransformerBlock
 
@@ -757,9 +756,9 @@ class Beast(torch.nn.Module):
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
             if self.nice_norm:
-                x = self.transformer_1[i * 2](x, noise_transformer, mask=None)
+                x = self.transformer_1[i * 2](x, noise_transformer)
             else:
-                x = self.transformer_1[i * 2](x, mask=None)
+                x = self.transformer_1[i * 2](x)
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
@@ -767,10 +766,13 @@ class Beast(torch.nn.Module):
             x = self._get_windows(x, self.window_size_outer)
             if self.nice_norm:
                 x = self.transformer_1[i * 2 + 1](
-                    x, noise_transformer, mask=self.mask_out
+                    x,
+                    noise_transformer,
                 )
             else:
-                x = self.transformer_1[i * 2 + 1](x, mask=self.mask_out)
+                x = self.transformer_1[i * 2 + 1](
+                    x,
+                )
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
@@ -790,9 +792,14 @@ class Beast(torch.nn.Module):
             n_windows = x.shape[0] // batch_size
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
             if self.nice_norm:
-                x = self.transformer_down[i * 2](x, noise_transformer_down, mask=None)
+                x = self.transformer_down[i * 2](
+                    x,
+                    noise_transformer_down,
+                )
             else:
-                x = self.transformer_down[i * 2](x, mask=None)
+                x = self.transformer_down[i * 2](
+                    x,
+                )
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
@@ -800,10 +807,13 @@ class Beast(torch.nn.Module):
             x = self._get_windows(x, self.window_size_inner)
             if self.nice_norm:
                 x = self.transformer_down[i * 2 + 1](
-                    x, noise_transformer_down, mask=self.mask_in
+                    x,
+                    noise_transformer_down,
                 )
             else:
-                x = self.transformer_down[i * 2 + 1](x, mask=self.mask_in)
+                x = self.transformer_down[i * 2 + 1](
+                    x,
+                )
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
@@ -828,9 +838,14 @@ class Beast(torch.nn.Module):
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
 
             if self.nice_norm:
-                x = self.transformer_2[i * 2](x, noise_transformer, mask=None)
+                x = self.transformer_2[i * 2](
+                    x,
+                    noise_transformer,
+                )
             else:
-                x = self.transformer_2[i * 2](x, mask=None)
+                x = self.transformer_2[i * 2](
+                    x,
+                )
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
@@ -838,10 +853,13 @@ class Beast(torch.nn.Module):
             x = self._get_windows(x, self.window_size_outer)
             if self.nice_norm:
                 x = self.transformer_2[i * 2 + 1](
-                    x, noise_transformer, mask=self.mask_out
+                    x,
+                    noise_transformer,
                 )
             else:
-                x = self.transformer_2[i * 2 + 1](x, mask=self.mask_out)
+                x = self.transformer_2[i * 2 + 1](
+                    x,
+                )
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
