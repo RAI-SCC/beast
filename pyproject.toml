@@ -53,10 +53,12 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["beast"]
+packages = ["beast", "libs/jigsaw/jigsaw"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "beast",
+    "libs/jigsaw/jigsaw",
 ]
 
 # Mypy
