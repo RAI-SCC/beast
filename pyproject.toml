@@ -52,12 +52,12 @@ Issues = "https://github.com/RAI-SCC/Beast/issues"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["beast", "libs/jigsaw"]
+packages = ["beast", "libs/jigsaw/jigsaw"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "beast",
-    "libs/jigsaw",
+    "libs/jigsaw/jigsaw",
 ]
 
 # Mypy
