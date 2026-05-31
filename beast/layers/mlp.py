@@ -63,6 +63,13 @@ class MLP(torch.nn.Module):
         x = self.dropout(x)
         return x
 
+def make_grad_input_hook(group):
+    """All-reduce grad_input (activation grad) across the channel group."""
+    def hook(grad):
+        grad = grad.contiguous()
+        dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
+        return grad                                               # replaces grad
+    return hook
 
 class DistributedMLPNICE(torch.nn.Module):
     """Distributed MLP across n processes."""
@@ -120,25 +127,14 @@ class DistributedMLPNICE(torch.nn.Module):
             spatial_group=spatial_group,
             bayesian=False
         )
-
-        # linear1 should remain the same across all ranks
-        # ensure that the weights are synchronized upon initialization
-        for p in self.linear1.parameters():
-            dist.broadcast(p, group_src=0, group=self.model_group)
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.dtp_group)
-            )
             
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
-        self.linear2.weight.register_post_accumulate_grad_hook(
-            hooks.make_grad_sync_hook(self.spatial_group)
-        )
-        if self.linear2.bias is not None:
-            self.linear2.register_post_accumulate_grad_hook(
+        for p in self.linear2.parameters():
+            self.linear2.weight.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.spatial_group)
             )
-            dist.broadcast(self.bias.data, group_src=0, group=self.spatial_group)
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
         self.activation = torch.nn.GELU()
 
@@ -151,6 +147,9 @@ class DistributedMLPNICE(torch.nn.Module):
         x : torch.Tensor
             Local input tensor of shape (B, x_in, in_dim).
         """
+        # hook ensures the grad_input is synchronized across the channels in the backward pass
+        if x.requires_grad:
+            x.register_hook(make_grad_input_hook(self.channel_group))
         x = self.linear1(x)
         x = self.activation(x)
         x = self.linear2(x)
@@ -179,6 +178,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.device = device
         self.parallelism = parallelism
         self.model_group = model_group
+        self.sync_group = sync_group
 
         # in, hidden, out dim are global sizes for two-way model parallelism
         # required to maintain partitioning across final dimension
@@ -207,9 +207,9 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         )
 
         for p in self.parameters():
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            dist.broadcast(p.data, group_src=0, group=self.sync_group)
             p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
+                hooks.make_grad_sync_hook(self.sync_group)
             )
             
         self.activation = torch.nn.GELU()
