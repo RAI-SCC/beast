@@ -4,6 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
+from jigsaw import attention, convolutions, linear, roll  # type: ignore
 
 from beast.layers import NiceWindowedTransformerBlock
 
@@ -133,18 +134,18 @@ class Beast(torch.nn.Module):
 
     def _build_model(self) -> None:
 
-        assert self.window_size_outer[0] % 2 == 0, (
-            "window_outer[0] size must be divisible by 2"
-        )
-        assert self.window_size_outer[1] % 2 == 0, (
-            "window_outer[1] size must be divisible by 2"
-        )
-        assert self.window_size_inner[0] % 2 == 0, (
-            "window_inner[0] size must be divisible by 2"
-        )
-        assert self.window_size_inner[1] % 2 == 0, (
-            "window_inner[1] size must be divisible by 2"
-        )
+        assert (
+            self.window_size_outer[0] % 2 == 0
+        ), "window_outer[0] size must be divisible by 2"
+        assert (
+            self.window_size_outer[1] % 2 == 0
+        ), "window_outer[1] size must be divisible by 2"
+        assert (
+            self.window_size_inner[0] % 2 == 0
+        ), "window_inner[0] size must be divisible by 2"
+        assert (
+            self.window_size_inner[1] % 2 == 0
+        ), "window_inner[1] size must be divisible by 2"
 
         # Activation
         self.activation = torch.nn.GELU()
@@ -197,16 +198,16 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
-        assert self.channel_group is not None, (
-            "channel_group must not be None for distributed model"
-        )
-        assert self.spatial_group is not None, (
-            "spatial_group must not be None for distributed model"
-        )
+        assert (
+            self.channel_group is not None
+        ), "channel_group must not be None for distributed model"
+        assert (
+            self.spatial_group is not None
+        ), "spatial_group must not be None for distributed model"
 
-        assert self.dtp_group is not None, (
-            "dtp_group must not be None for distributed model"
-        )
+        assert (
+            self.dtp_group is not None
+        ), "dtp_group must not be None for distributed model"
 
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
@@ -263,7 +264,7 @@ class Beast(torch.nn.Module):
         )
 
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix = linear.DistributedXWTSync(
+        self.upsample_mix = linear.DistributedXWT(
             self.embed_dim // 2,
             self.embed_dim,
             bias=True,
@@ -273,6 +274,7 @@ class Beast(torch.nn.Module):
             model_group=self.channel_group,
             sync_group=self.spatial_group,
             bayesian=self.bayesian,
+            synchronized=True,
         )
 
         self.patch_recovery = convolutions.DistributedConvTranspose2D(
@@ -311,8 +313,8 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        ring_attn=False,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
                 ]
@@ -335,7 +337,7 @@ class Beast(torch.nn.Module):
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
+                        ring_attn=False,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
                 ]
@@ -357,8 +359,8 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        ring_attn=False,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
                 ]
@@ -582,31 +584,23 @@ class Beast(torch.nn.Module):
             ]
         )
 
-        self.roll_out = lambda x: torch.roll(
-            x,
+        self.roll_out = roll.Roll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-
-        self.unroll_out = lambda x: torch.roll(
-            x,
+        self.unroll_out = roll.Roll(
             shifts=(-self.window_size_outer[0] // 2, -self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-
-        self.roll_in = lambda x: torch.roll(
-            x,
+        self.roll_in = roll.Roll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
-
-        self.unroll_in = lambda x: torch.roll(
-            x,
+        self.unroll_in = roll.Roll(
             shifts=(-self.window_size_inner[0] // 2, -self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
 
-    # @torch.compile
     def _get_windows(self, x: torch.Tensor, window_size: Sequence[int]) -> torch.Tensor:
         batch_size, xlat, xlon, channels = x.shape
         x = x.reshape(
@@ -621,7 +615,6 @@ class Beast(torch.nn.Module):
         x = x.reshape(-1, window_size[0] * window_size[1], channels)  # windows
         return x
 
-    # @torch.compile
     def _reverse_windows(
         self,
         x: torch.Tensor,
