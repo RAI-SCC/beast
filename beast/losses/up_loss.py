@@ -20,16 +20,16 @@ class UPAllGaussLoss(nn.Module):
         The variational inference model.
     dataset_size : int
         Size of the dataset.
-    up_group : dist.ProcessGroup
-        Process group for Uncertainty Parallelism aggregation.
-    loss_weights : Tensor | None, optional
-        Weights for the loss calculation if there are multiple experts. Defaults to None.
-    heat : float, optional
-        Heat / cold posterior parameter for the KL loss. Defaults to 1.0.
-    track : bool, optional
-        Whether to track loss components. Defaults to False.
-    fmodded : bool, optional
-        Whether to use the fmodded data fitting method. Defaults to False.
+    up_group : dist.ProcessGroup, default: None
+        Process group for Uncertainty Parallelism aggregation. If None, defaults to dist.group.WORLD.
+    loss_weights : Tensor, default: None
+        Weights for the loss calculation if there are multiple experts.
+    heat : float, default: 1.0
+        Heat / cold posterior parameter for the KL loss.
+    track : bool, default: False
+        Whether to track loss components.
+    fmodded : bool, default: False
+        Whether to use the fmodded data fitting method.
     """
 
     def __init__(
@@ -225,8 +225,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Means of the variational distributions.
         variational_log_stds : Tensor
             Log standard deviations of the variational distributions.
-        loss_weights : Tensor | None, optional
-            Expert weights to apply to the aggregation. Defaults to None.
+        loss_weights : Tensor, default: None
+            Expert weights to apply to the aggregation.
 
         Returns
         -------
