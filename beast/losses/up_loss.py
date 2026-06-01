@@ -1,6 +1,6 @@
 """Implements loss function for Variational Inference BNNs with Uncertainty Parallelism."""
 
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import torch
 import torch.distributed as dist
@@ -22,7 +22,7 @@ class UPAllGaussLoss(nn.Module):
         Size of the dataset.
     up_group : dist.ProcessGroup
         Process group for Uncertainty Parallelism aggregation.
-    loss_weights : torch.Tensor | None, optional
+    loss_weights : Tensor | None, optional
         Weights for the loss calculation if there are multiple experts. Defaults to None.
     heat : float, optional
         Heat / cold posterior parameter for the KL loss. Defaults to 1.0.
@@ -36,15 +36,15 @@ class UPAllGaussLoss(nn.Module):
         self,
         model: vi.VIModule,
         dataset_size: int,
-        up_group: dist.ProcessGroup,
-        loss_weights: torch.Tensor | None = None,
+        up_group: Optional[dist.ProcessGroup] = None,
+        loss_weights: Optional[Tensor] = None,
         heat: float = 1.0,
         track: bool = False,
         fmodded: bool = False,
     ) -> None:
         super().__init__()
 
-        self.up_group = up_group
+        self.up_group = up_group if up_group is not None else dist.group.WORLD
 
         self.kl_loss = vi.AnalyticalKullbackLeiblerLoss(
             model,
@@ -155,8 +155,8 @@ class UPAllGaussLoss(nn.Module):
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
             expert_output,
             self.up_group,
-            self.loss_weights,
             *self.kl_loss._get_flat_params(),
+            self.loss_weights,
         )
 
         data_fit = self.data_fitting(mean, std, expert_target)
@@ -204,7 +204,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         prior_log_stds: Tensor,
         variational_means: Tensor,
         variational_log_stds: Tensor,
-        loss_weights: Tensor | None = None,
+        loss_weights: Optional[Tensor] = None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """
         Forward pass for mean-std / prior matching aggregation.
@@ -261,8 +261,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         )
 
         handle.wait()
-        mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
-        var = local_sum_result[1, :, :, :].unsqueeze(dim=0)
+        mean = local_sum_result[0, ...].unsqueeze(dim=0)
+        var = local_sum_result[1, ...].unsqueeze(dim=0)
 
         var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
