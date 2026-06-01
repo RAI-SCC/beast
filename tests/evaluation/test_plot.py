@@ -1,10 +1,7 @@
-from pathlib import Path
-
-import pytest
 import torch
 from matplotlib import pyplot as plt
 
-from beast.evaluation import plot, save_plot
+from beast.evaluation import pred_target_bias_plot
 
 
 def test_plot() -> None:
@@ -13,11 +10,10 @@ def test_plot() -> None:
     target = torch.randn(50, 50)
     label = "Something"
 
-    plot(prediction, target, label)
+    pred_target_bias_plot(prediction, target, label)
 
 
-@pytest.mark.parametrize("close_fig", [True, False])
-def test_save_plot(close_fig: bool, tmp_path: Path) -> None:
+def test_save_plot() -> None:
     """Test plot saving."""
     fig, ax = plt.subplots()
     ax.imshow(torch.randn(50, 50))
@@ -25,9 +21,3 @@ def test_save_plot(close_fig: bool, tmp_path: Path) -> None:
     fignum = fig.number
 
     assert plt.fignum_exists(fignum)
-    assert not (tmp_path / "test.pdf").exists()
-
-    save_plot(fig, tmp_path, "test.pdf", close_fig)
-
-    assert (not plt.fignum_exists(fignum)) is close_fig
-    assert (tmp_path / "test.pdf").exists()

@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch.nn.functional import l1_loss, mse_loss
 
-from beast.evaluation import calculate_mae, calculate_mse
+from beast.evaluation import mae, mse
 
 
 @pytest.mark.parametrize(
@@ -31,8 +31,8 @@ def test_mae(
     batch_dim: int,
 ) -> None:
     """Test the MAE calculation."""
-    mae = calculate_mae(prediction, reference, batch_dimension=batch_dim)
-    assert mae == pytest.approx(target)
+    mae_val = mae(prediction, reference, batch_dimension=batch_dim)
+    assert mae_val == pytest.approx(target)
 
 
 @pytest.mark.parametrize(
@@ -61,5 +61,5 @@ def test_mse(
     batch_dim: int,
 ) -> None:
     """Test the MSE calculation."""
-    mae = calculate_mse(prediction, reference, batch_dimension=batch_dim)
-    assert mae == pytest.approx(target)
+    mse_val = mse(prediction, reference, batch_dimension=batch_dim)
+    assert mse_val == pytest.approx(target)

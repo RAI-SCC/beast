@@ -1,14 +1,12 @@
 """Plotting functionality."""
 
-from pathlib import Path
-
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import Figure
 from torch import Tensor
 
 
-def plot(
+def pred_target_bias_plot(
     prediction: Tensor,
     target: Tensor,
     label: str,
@@ -71,36 +69,3 @@ def plot(
 
     plt.tight_layout()
     return fig
-
-
-def save_plot(
-    figure: Figure,
-    plot_dir: Path,
-    save_file: str,
-    close_figure: bool = True,
-) -> None:
-    """
-    Save figure to file.
-
-    Parameters
-    ----------
-    figure: Figure
-        Figure to save.
-    plot_dir: Path
-        Directory to save figure.
-    save_file: str
-        Filename to save figure including file extension.
-    close_figure: bool, default=True
-        If True close figure after saving.
-
-    Returns
-    -------
-    None
-    """
-    plot_dir.mkdir(parents=True, exist_ok=True)
-    save_path = plot_dir / save_file
-    figure.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"Saved plot: {save_path}")
-
-    if close_figure:
-        plt.close(figure)

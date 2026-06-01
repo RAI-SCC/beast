@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from torch import Tensor
 
-from beast.evaluation import calculate_crps
+from beast.evaluation import crps
 from beast.evaluation.special_metrics import _calculate_crps_locally
 
 
@@ -25,7 +25,7 @@ def test_calculate_crps_local_redirection(
     prediction = prediction.to(device)
     target = target.to(device)
     assert torch.allclose(
-        calculate_crps(prediction, target), _calculate_crps_locally(prediction, target)
+        crps(prediction, target), _calculate_crps_locally(prediction, target)
     ), "CRPS local calculation does not match expected local behavior."
 
 
@@ -130,19 +130,12 @@ def test_calculate_crps_distributed(
         )
     local_prediction = prediction[local_slice, ...]
 
-    local_result = calculate_crps(local_prediction, target, up_group=process_group)
+    local_result = crps(local_prediction, target, up_group=process_group)
     dist.barrier(process_group)  # Ensure all processes have finished their calculations
 
     assert torch.allclose(local_result, result), (
         f"CRPS distributed calculation is incorrect on rank {local_rank} / {world_size}."
     )
-
-
-def _invert_permutation(perm: torch.Tensor) -> torch.Tensor:
-    """Helper function to invert a permutation tensor."""
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(len(perm), device=perm.device)
-    return inv_perm
 
 
 @pytest.mark.parametrize(
@@ -264,7 +257,7 @@ def test_calculate_crps_dimensions_distributed(
     prediction_permuted = local_prediction.permute(*prediction_permutation).contiguous()
     permuted_result = result.permute(*result_permutation).contiguous()
 
-    permuted_output = calculate_crps(
+    permuted_output = crps(
         prediction_permuted,
         target_permuted,
         sample_dim=sample_dim,

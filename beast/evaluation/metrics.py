@@ -4,7 +4,7 @@ import torch
 from torch.nn.functional import l1_loss, mse_loss
 
 
-def calculate_mse(
+def mse(
     prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
 ) -> torch.Tensor:
     """
@@ -28,7 +28,7 @@ def calculate_mse(
     return mse_loss(prediction, target, reduction="none").mean(dim=batch_dimension)
 
 
-def calculate_mae(
+def mae(
     prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
 ) -> torch.Tensor:
     """

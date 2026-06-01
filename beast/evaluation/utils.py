@@ -47,7 +47,7 @@ def _resolve_variables(
 
     Returns
     -------
-    list[str]list[str], list, list[str], list[str], list]
+    list[str]
         All surface variables available.
     list[str]
         All pressure variables available.

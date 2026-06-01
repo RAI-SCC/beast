@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.distributed import ProcessGroup
 
 
-def calculate_crps(
+def crps(
     prediction: Tensor,
     target: Tensor,
     up_group: Optional[ProcessGroup] = None,
