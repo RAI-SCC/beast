@@ -6,7 +6,7 @@ class NiceNorm(torch.nn.Module):
 
     Parameters
     ----------
-    normalized_shape : int
+    normalized_dim : int
         Shape of the normalized dimension.
     noise_dim : int
         Noise dimension.
@@ -20,7 +20,7 @@ class NiceNorm(torch.nn.Module):
 
     def __init__(
         self,
-        normalized_shape: int,
+        normalized_dim: int,
         noise_dim: int,
         eps: float = 1e-5,
         device: torch.device | None = None,
@@ -29,7 +29,7 @@ class NiceNorm(torch.nn.Module):
         super().__init__()
 
         self.norm = torch.nn.LayerNorm(
-            normalized_shape,
+            normalized_dim,
             eps=eps,
             device=device,
             dtype=dtype,
@@ -37,7 +37,7 @@ class NiceNorm(torch.nn.Module):
         )
 
         self.noise_dim = noise_dim
-        self.shape = normalized_shape
+        self.shape = normalized_dim
 
         self.shift_scale_mlp = mlp.MLP(self.noise_dim, self.shape, self.shape * 2)
 
