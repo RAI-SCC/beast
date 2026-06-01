@@ -14,7 +14,7 @@ class DistributedWindowedTransformer(torch.nn.Module):
 
     def __init__(
         self,
-        x_features: int,
+        in_dim: int,
         embed_dim: int,
         output_dim: int,
         heads: int,
@@ -32,7 +32,7 @@ class DistributedWindowedTransformer(torch.nn.Module):
         super().__init__()
 
         self.attention_block = DistributedAttention(
-            x_features,
+            in_dim,
             embed_dim,
             output_dim,
             heads,
@@ -60,7 +60,6 @@ class DistributedWindowedTransformer(torch.nn.Module):
             dropout=dropout,
             local_rank=local_rank,
             device=device,
-            parallelism=parallelism,
             model_group=channel_group,
             sync_group=spatial_group,
             bayesian=bayesian,

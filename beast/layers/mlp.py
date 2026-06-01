@@ -35,7 +35,7 @@ class MLP(torch.nn.Module):
         super().__init__()
 
         self.linear1 = torch.nn.Linear(
-            input_dim, hidden_dim, bias=bias, device=device, dtype=dtype
+            input_dim, hidden_dim, bias=bias, device=device, dtype=dtype,
         )
         self.linear2 = torch.nn.Linear(
             hidden_dim, output_dim, bias=bias, device=device, dtype=dtype
@@ -114,22 +114,28 @@ class DistributedMLPNICE(torch.nn.Module):
         self.channel_group = channel_group
 
         self.linear1 = torch.nn.Linear(
-            in_dim, hidden_dim // channel_group.size(), bias, device
+            in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
         self.linear2 = linear.DistributedXWT(
-            hidden_dim // channel_group.size(),
+            hidden_dim,
             out_dim,
             bias,
             local_rank,
             device,
-            parallelism=channel_group.size(),
             model_group=channel_group,
             spatial_group=spatial_group,
+            channel_group=channel_group,
             bayesian=False
         )
             
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
+        for p in self.linear1.parameters():
+            self.linear2.weight.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.spatial_group)
+            )
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            
         for p in self.linear2.parameters():
             self.linear2.weight.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.spatial_group)
@@ -168,7 +174,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         dropout: float,
         local_rank: int,
         device: torch.device,
-        parallelism: int,
         model_group: dist.ProcessGroup = None,
         sync_group: dist.ProcessGroup = None,
         bayesian: bool = False,
@@ -176,33 +181,31 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         super().__init__()
         self.local_rank = local_rank
         self.device = device
-        self.parallelism = parallelism
         self.model_group = model_group
         self.sync_group = sync_group
 
-        # in, hidden, out dim are global sizes for two-way model parallelism
-        # required to maintain partitioning across final dimension
-
-        # local X has shape [seq_length, in_dim//2]
+        # pass in global dimensions for linear layers.
         self.linear1 = linear.DistributedXWT(
-            in_dim // model_group.size(),
+            in_dim,
             hidden_dim,
             bias,
             local_rank,
             device,
-            parallelism=parallelism,
             model_group=model_group,
+            spatial_group=sync_group,
+            channel_group=model_group,
             bayesian=bayesian,
         )
 
         self.linear2 = linear.DistributedXWT(
-            hidden_dim // 2,
+            hidden_dim,
             out_dim,
             bias,
             local_rank,
             device,
-            parallelism=parallelism,
             model_group=model_group,
+            spatial_group=sync_group,
+            channel_group=model_group,
             bayesian=bayesian,
         )
 
