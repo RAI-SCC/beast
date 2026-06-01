@@ -142,8 +142,10 @@ class UPAllGaussLoss(nn.Module):
 
         Returns
         -------
-        tuple[Tensor, Tensor]
-            A tuple containing (data_fit, prior_matching).
+        Tensor
+            The data fitting loss term. Captures how well the model fits the data.
+        Tensor
+            The prior matching loss term. Captures how well the variational distribution matches the prior distribution.
         """
         if self.loss_weights is not None:
             expert_output = model_output * self.loss_weights
@@ -181,7 +183,7 @@ class UPAllGaussLoss(nn.Module):
         Returns
         -------
         Tensor
-            The combined loss.
+            The combined KL loss consisting of the data fitting and prior matching terms.
         """
         data_fit, prior_matching = self.split_forward(model_output, target)
 
@@ -228,8 +230,16 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
 
         Returns
         -------
-        tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
-            A tuple containing (mean, std, prior_matching, variance_ratio, mse_part_half).
+        Tensor
+            The aggregated mean across the UP group.
+        Tensor
+            The aggregated standard deviation across the UP group.
+        Tensor
+            The computed prior matching loss.
+        Tensor
+            The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+        Tensor
+            The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
@@ -275,7 +285,9 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         return mean, std, prior_matching, variance_ratio, mse_part_half
 
     @staticmethod
-    def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
+    def setup_context(
+        ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Any, ...]
+    ) -> None:
         """
         Set up the context for the backward pass.
 
@@ -285,8 +297,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             The autograd context.
         inputs : tuple[Any, ...]
             The inputs to the forward pass.
-        output : Any
-            The output from the forward pass.
+        outputs : tuple[Any, ...]
+            The outputs from the forward pass.
         """
         (
             samples,
@@ -297,7 +309,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             variational_log_stds,
             loss_weights,
         ) = inputs
-        mean, std, prior_matching, variance_ratio, mse_part_half = output
+        mean, std, prior_matching, variance_ratio, mse_part_half = outputs
 
         ctx.mark_non_differentiable(variance_ratio, mse_part_half)
         ctx.up_process_group = up_process_group
@@ -332,8 +344,20 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
 
         Returns
         -------
-        tuple[Tensor, None, None, None, Tensor, Tensor, None]
-            Gradients corresponding to the forward inputs for the samples and the variational distribution parameters.
+        Tensor
+            Gradient with respect to the input samples.
+        None
+            No gradient for the up_process_group.
+        None
+            No gradient for the prior_means.
+        None
+            No gradient for the prior_log_stds.
+        Tensor
+            Gradient with respect to the variational_means.
+        Tensor
+            Gradient with respect to the variational_log_stds.
+        None
+            No gradient for the loss_weights.
         """
         up_process_group = ctx.up_process_group
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
@@ -380,8 +404,12 @@ def gaussian_prior_matching(
 
     Returns
     -------
-    tuple[Tensor, Tensor, Tensor]
-        A tuple containing (prior_matching, variance_ratio, mse_part_half).
+    Tensor
+        The computed prior matching loss.
+    Tensor
+        The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+    Tensor
+        The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
     """
     variational_variance = torch.exp(2 * variational_log_stds)
     prior_variance = torch.exp(
