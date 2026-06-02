@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from beast.comm import create_process_mesh_dict
+from beast.comm import create_process_mesh_dict, shutdown_comm
 from beast.layers import transformer
 
 
@@ -88,6 +88,13 @@ class TestNiceTransformer:
         noise = torch.randn(1, noise_dim, device=device)
         y = model(x, noise)
         assert isinstance(y, torch.Tensor)
+
+
+@pytest.fixture(scope="module")
+def process_mesh_dict():
+    process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+    yield process_mesh_dict
+    shutdown_comm()
 
 
 class TestDistributedTransformer:

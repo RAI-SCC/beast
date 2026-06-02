@@ -483,7 +483,7 @@ class Beast(torch.nn.Module):
 
     def _build_sequential_model(self) -> None:
 
-        self.patch_embedding= torch.nn.Conv2d(
+        self.patch_embedding = torch.nn.Conv2d(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -496,7 +496,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample= torch.nn.Conv2d(
+        self.downsample = torch.nn.Conv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -509,7 +509,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample= torch.nn.ConvTranspose2d(
+        self.upsample = torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -522,7 +522,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample_mix= torch.nn.Linear(
+        self.upsample_mix = torch.nn.Linear(
             self.embed_dim,
             self.embed_dim,
             bias=True,
@@ -530,7 +530,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.patch_recovery= torch.nn.ConvTranspose2d(
+        self.patch_recovery = torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
