@@ -48,8 +48,8 @@ class TestBeastlingModel:
                 )
 
 
-@pytest.mark.gpu
 class TestDistBeastlingModel:
+    @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("n_timesteps", [1, 2])
     @pytest.mark.parametrize("bayesian", [False, True])
@@ -57,7 +57,9 @@ class TestDistBeastlingModel:
     def test_4way_beastling(
         self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
     ) -> None:
-        mesh_dict = create_process_mesh_dict([1, 1, 1, 2, 2], device_type=str(device.type))
+        mesh_dict = create_process_mesh_dict(
+            [1, 1, 1, 2, 2], device_type=str(device.type)
+        )
         jchannel_pg = mesh_dict["JChannel"]
         jspatial_pg = mesh_dict["JSpatial"]
         dtp_pg = mesh_dict["DTP"]
@@ -78,9 +80,9 @@ class TestDistBeastlingModel:
         with torch.no_grad():
             x = torch.rand(
                 batch_size,
-                small_config["in_channels"]//2,
+                small_config["in_channels"] // 2,
                 small_config["height"],
-                small_config["width"]//2,
+                small_config["width"] // 2,
                 device=device,
             )
             if bayesian:
