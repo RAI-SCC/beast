@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, convolutions, linear, roll  # type: ignore
+from jigsaw import attention, convolutions, linear, roll, hooks  # type: ignore
 
 from beast.layers import nice_window_transformer
 
@@ -265,17 +265,20 @@ class Beast(torch.nn.Module):
 
         # each process would have weights: [embed //2 , embed]
         self.upsample_mix = linear.DistributedXWT(
-            self.embed_dim // 2,
+            self.embed_dim,
             self.embed_dim,
             bias=True,
             local_rank=self.local_rank,
             device=self.device,
-            parallelism=2,
             model_group=self.channel_group,
             sync_group=self.spatial_group,
             bayesian=self.bayesian,
-            synchronized=True,
         )
+        for p in self.upsample_mix.parameters():
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.spatial_group)
+            )
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
         self.patch_recovery = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
@@ -299,21 +302,19 @@ class Beast(torch.nn.Module):
         if self.nice_norm:
             self.transformer_1 = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICEWindowedTransformer(
-                        x_features=self.embed_dim,
+                    attention.DistributedNICETransformer(
+                        in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
-                        output_dim=self.embed_dim,
+                        out_dim=self.embed_dim,
                         heads=self.heads[0],
                         noise_dim=self.noise_dim,
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        ring_attn=False,
+                        qk_norm=False,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
@@ -322,22 +323,20 @@ class Beast(torch.nn.Module):
 
             self.transformer_down = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICEWindowedTransformer(
-                        self.embed_dim * 2,
-                        self.embed_dim * 2,
-                        self.embed_dim * 2,
+                    attention.DistributedNICETransformer(
+                        in_dim=self.embed_dim * 2,
+                        embed_dim=self.embed_dim * 2,
+                        out_dim=self.embed_dim * 2,
                         heads=self.heads[1],
                         noise_dim=self.noise_dim,
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        qk_norm=False,
                         dtype=self.dtype,
-                        ring_attn=False,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
                 ]
@@ -345,21 +344,19 @@ class Beast(torch.nn.Module):
 
             self.transformer_2 = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICEWindowedTransformer(
-                        x_features=self.embed_dim,
+                    attention.DistributedNICETransformer(
+                        in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
-                        output_dim=self.embed_dim,
+                        out_dim=self.embed_dim,
                         heads=self.heads[2],
                         noise_dim=self.noise_dim,
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        ring_attn=False,
+                        qk_norm=False,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
@@ -368,21 +365,19 @@ class Beast(torch.nn.Module):
         else:
             self.transformer_1 = torch.nn.ModuleList(
                 [
-                    attention.DistributedWindowedTransformer(
-                        x_features=self.embed_dim,
+                    attention.DistributedTransformer(
+                        in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
-                        output_dim=self.embed_dim,
+                        out_dim=self.embed_dim,
                         heads=self.heads[0],
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        qk_norm=False,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
                 ]
@@ -390,21 +385,19 @@ class Beast(torch.nn.Module):
 
             self.transformer_down = torch.nn.ModuleList(
                 [
-                    attention.DistributedWindowedTransformer(
-                        self.embed_dim * 2,
-                        self.embed_dim * 2,
-                        self.embed_dim * 2,
+                    attention.DistributedTransformer(
+                        in_dim=self.embed_dim * 2,
+                        embed_dim=self.embed_dim * 2,
+                        out_dim=self.embed_dim * 2,
                         heads=self.heads[1],
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        qk_norm=False,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
                 ]
@@ -412,21 +405,19 @@ class Beast(torch.nn.Module):
 
             self.transformer_2 = torch.nn.ModuleList(
                 [
-                    attention.DistributedWindowedTransformer(
-                        x_features=self.embed_dim,
+                    attention.DistributedTransformer(
+                        in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
-                        output_dim=self.embed_dim,
+                        out_dim=self.embed_dim,
                         heads=self.heads[2],
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
-                        parallelism=self.channel_group.size(),
-                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
+                        qk_norm=False,
                         dtype=self.dtype,
-                        flash_attn=self.flash_attn,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
                 ]
@@ -542,8 +533,9 @@ class Beast(torch.nn.Module):
         self.transformer_1 = torch.nn.ModuleList(
             [
                 nice_window_transformer.NiceTransformer(
+                    in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
-                    output_dim=self.embed_dim,
+                    out_dim=self.embed_dim,
                     heads=self.heads[0],
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
@@ -557,8 +549,9 @@ class Beast(torch.nn.Module):
         self.transformer_down = torch.nn.ModuleList(
             [
                 nice_window_transformer.NiceTransformer(
-                    self.embed_dim * 2,
-                    self.embed_dim * 2,
+                    in_dim=self.embed_dim * 2,
+                    embed_dim=self.embed_dim * 2,
+                    out_dim=self.embed_dim * 2,
                     heads=self.heads[1],
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
@@ -572,8 +565,9 @@ class Beast(torch.nn.Module):
         self.transformer_2 = torch.nn.ModuleList(
             [
                 nice_window_transformer.NiceTransformer(
+                    in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
-                    output_dim=self.embed_dim,
+                    out_dim=self.embed_dim,
                     heads=self.heads[2],
                     noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
