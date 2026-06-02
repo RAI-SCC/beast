@@ -3,8 +3,8 @@ import math
 import pytest
 import torch.distributed as dist
 from conftest import dist_st
-from hypothesis import assume, given
-from hypothesis import strategies as st, settings
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
 
 from beast.comm import create_process_mesh_dict, get_process_group
 

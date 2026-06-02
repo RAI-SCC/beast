@@ -24,7 +24,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "noise_dim": 32,
             "bayesian": True,
             "nice_norm": True,
-            "qk_norm": False
+            "qk_norm": False,
         },
     },
     "BEAST-JUPITER-0.7B-1.8K": {

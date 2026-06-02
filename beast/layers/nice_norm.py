@@ -1,5 +1,7 @@
 import torch
+
 from beast.layers import mlp
+
 
 class NiceNorm(torch.nn.Module):
     """NICE normalization layer.
@@ -26,6 +28,22 @@ class NiceNorm(torch.nn.Module):
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
+        """
+        Initialize Nice Norm module.
+
+        Parameters
+        ----------
+        normalized_dim: int
+            Size of dimension that should be normalized over.
+        noise_dim: int
+            Dimension of noise.
+        eps: float
+            Epsilon for stability.
+        device: torch.device
+            Device to compute on.
+        dtype: torch.dtype
+            Optional data type.
+        """
         super().__init__()
 
         self.norm = torch.nn.LayerNorm(
@@ -63,6 +81,7 @@ class NiceNorm(torch.nn.Module):
         x = scale * x + shift
 
         return x
+
 
 class DistributedNICENorm(torch.nn.Module):
     """NICE Norm inspired by FGN."""

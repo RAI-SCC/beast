@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import convolutions, linear, roll, hooks  # type: ignore
+from jigsaw import convolutions, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
 
@@ -135,18 +135,18 @@ class Beast(torch.nn.Module):
 
     def _build_model(self) -> None:
 
-        assert (
-            self.window_size_outer[0] % 2 == 0
-        ), "window_outer[0] size must be divisible by 2"
-        assert (
-            self.window_size_outer[1] % 2 == 0
-        ), "window_outer[1] size must be divisible by 2"
-        assert (
-            self.window_size_inner[0] % 2 == 0
-        ), "window_inner[0] size must be divisible by 2"
-        assert (
-            self.window_size_inner[1] % 2 == 0
-        ), "window_inner[1] size must be divisible by 2"
+        assert self.window_size_outer[0] % 2 == 0, (
+            "window_outer[0] size must be divisible by 2"
+        )
+        assert self.window_size_outer[1] % 2 == 0, (
+            "window_outer[1] size must be divisible by 2"
+        )
+        assert self.window_size_inner[0] % 2 == 0, (
+            "window_inner[0] size must be divisible by 2"
+        )
+        assert self.window_size_inner[1] % 2 == 0, (
+            "window_inner[1] size must be divisible by 2"
+        )
 
         # Activation
         self.activation = torch.nn.GELU()
@@ -215,16 +215,16 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
-        assert (
-            self.channel_group is not None
-        ), "channel_group must not be None for distributed model"
-        assert (
-            self.spatial_group is not None
-        ), "spatial_group must not be None for distributed model"
+        assert self.channel_group is not None, (
+            "channel_group must not be None for distributed model"
+        )
+        assert self.spatial_group is not None, (
+            "spatial_group must not be None for distributed model"
+        )
 
-        assert (
-            self.dtp_group is not None
-        ), "dtp_group must not be None for distributed model"
+        assert self.dtp_group is not None, (
+            "dtp_group must not be None for distributed model"
+        )
 
         self.patch_embedding = convolutions.DistributedConv2D(
             self.in_channels,
@@ -476,7 +476,7 @@ class Beast(torch.nn.Module):
             device=self.device,
             dtype=self.dtype,
         )
-        
+
         for p in self.upsample_mix.parameters():
             p.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.spatial_group)
