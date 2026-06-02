@@ -1,13 +1,13 @@
 import os
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.distributed as dist
 import xarray as xr
-from beast.comm import execute_in_waves
 from torch.utils.data import Dataset
-from datetime import datetime
+
+from beast.comm import execute_in_waves
 
 
 class ERA5DatasetDistributed(Dataset):
@@ -31,7 +31,7 @@ class ERA5DatasetDistributed(Dataset):
         The path to the zarr directory.
     norm_values: dict
         A dictionary holding the "mean" and "std" numpy arrays with normalization values
-    zarr_data : 
+    zarr_data :
         The handle to the zarr data directory from which data will be loaded
     years : Tuple(str,st)
         The temporal range to be included into the dataset, in the format`%Y-%m-%d`
@@ -40,7 +40,7 @@ class ERA5DatasetDistributed(Dataset):
     out_timesteps : int
         Number of timesteps to be concatenated for the target
     dt : int
-        The temporal subsampling timestep in hours    
+        The temporal subsampling timestep in hours
     n_data_items:
         Number of data samples (time steps) in self.zarr_data
     xlat : int
@@ -59,8 +59,8 @@ class ERA5DatasetDistributed(Dataset):
         The start and stop value of the range of masks for this particluar rank
     in_out_xlon : Tuple(int, int)
         The start and stop value of the spatial range (in the longitude) for this particluar rank
-    input_pad_oddrank: int  
-        The number of channels that need to be padded on odd ranks for 
+    input_pad_oddrank: int
+        The number of channels that need to be padded on odd ranks for
 
     Parameters
     ----------
@@ -87,23 +87,24 @@ class ERA5DatasetDistributed(Dataset):
     dsync_access: bool
         Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale
     dtype : torch.dtype
-        The dtype for input and target tensors 
+        The dtype for input and target tensors
 
     """
+
     def __init__(
         self,
-        pg_rank,
-        pg_size,
-        data_path,
-        constant_masks_path,
-        constant_masks,
-        normalization_dir,
-        time_range=None,
-        dt=6,
-        n_in_timesteps=1,
-        n_out_timesteps=1,
-        dtype=torch.float32,
-        dsync_access=False,
+        pg_rank: int,
+        pg_size: int,
+        data_path: str,
+        constant_masks_path: str,
+        constant_masks: torch.Tensor,
+        normalization_dir: str,
+        dt: int = 6,
+        n_in_timesteps: int = 1,
+        n_out_timesteps: int = 1,
+        dtype: torch.dtype = torch.float32,
+        dsync_access: bool = False,
+        time_range: tuple[str, str] | None = None,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -121,31 +122,37 @@ class ERA5DatasetDistributed(Dataset):
 
         self.norm_values = {}
 
-        def load_data():
+        def load_data() -> None:
             """
             Inline utility function that does the initial data acceess upon class instantiation
             """
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
             except:
-                raise OSError("Given path does not point to a zarr directory. Data must be in zarr format.")
+                raise OSError(
+                    "Given path does not point to a zarr directory. Data must be in zarr format."
+                )
 
             try:
                 self.xlat = self.zarr_data.dims["latitude"]
                 self.xlon = self.zarr_data.dims["longitude"]
             except:
-                raise Exception("Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension")
+                raise Exception(
+                    "Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension"
+                )
 
-            if self.xlat%2 == 1:
+            if self.xlat % 2 == 1:
                 self.xlat -= 1
-            if self.xlon%2 == 1:
+            if self.xlon % 2 == 1:
                 self.xlon -= 1
 
             try:
                 times = pd.to_datetime(self.zarr_data.time)
             except:
-                raise Exception("Time values of data cannot be accessed. Zarr data must be chunked in the time domain. ")
-           
+                raise Exception(
+                    "Time values of data cannot be accessed. Zarr data must be chunked in the time domain. "
+                )
+
             if self.years is not None:
                 train_years = times[(times >= self.years[0]) & (times < self.years[1])]
                 self.zarr_data = self.zarr_data.sel(time=train_years)
@@ -153,22 +160,22 @@ class ERA5DatasetDistributed(Dataset):
             try:
                 self.n_data_items = self.zarr_data.dims["time"]
             except:
-                raise Exception("Zarr directory has no dimension `time`. Cannot access temporal dimension")
+                raise Exception(
+                    "Zarr directory has no dimension `time`. Cannot access temporal dimension"
+                )
 
             try:
-                self.n_variables = self.zarr_data.dims["feature"]  
+                self.n_variables = self.zarr_data.dims["feature"]
             except:
-                raise Exception("Zarr directory has no dimension `feature`. Cannot access feature dimension")
+                raise Exception(
+                    "Zarr directory has no dimension `feature`. Cannot access feature dimension"
+                )
 
             self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
             self.n_masks = self.constant_masks.shape[0]
 
-            self.norm_values["mean"] = np.load(
-                f"{normalization_dir}/norm_mean.npy"
-            )
-            self.norm_values["std"] = np.load(
-                f"{normalization_dir}/norm_std.npy"
-            )
+            self.norm_values["mean"] = np.load(f"{normalization_dir}/norm_mean.npy")
+            self.norm_values["std"] = np.load(f"{normalization_dir}/norm_std.npy")
 
         if dsync_access:
             execute_in_waves(load_data)
@@ -178,23 +185,29 @@ class ERA5DatasetDistributed(Dataset):
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            self.in_var = (row * self.n_variables // 2, (row + 1) * self.n_variables // 2)
-          
+            self.in_var = (
+                row * self.n_variables // 2,
+                (row + 1) * self.n_variables // 2,
+            )
+
             # We split the channels into two ranks; however, if we have an odd number of channels this will
             # result in rank 0 having one more variable.
             # since we do this for each timestep we accumulate an inbalance in the rank=1 channel group
             input_inbalance = (self.n_variables % 2) * self.in_timesteps
             output_inbalance = (self.n_variables % 2) * self.out_timesteps
-            # We can use the constant masks to counteract this 
+            # We can use the constant masks to counteract this
             # First, we compute how many masks we can add to rank=1 channel group to counteract the imbalance
             self.input_pad_oddrank = 0
             self.output_pad_oddrank = output_inbalance
 
-
             # Two cases:
             # If we have more masks then the inbalance, we need to distribute the remaining masks evenly accross channel ranks
-            if (self.n_masks - input_inbalance) >= 0: 
-                self.in_masks = (0, (self.n_masks - input_inbalance) - (self.n_masks - input_inbalance)// 2 )
+            if (self.n_masks - input_inbalance) >= 0:
+                self.in_masks = (
+                    0,
+                    (self.n_masks - input_inbalance)
+                    - (self.n_masks - input_inbalance) // 2,
+                )
 
             # If we have fewer masks then the imbalance, we need to pad on rank 1
             else:
@@ -204,24 +217,29 @@ class ERA5DatasetDistributed(Dataset):
             # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
             self.in_out_xlon = (
                 col * self.xlon // (self.world_size // 2),
-                (col + 1) * self.xlon // (self.world_size  // 2),
+                (col + 1) * self.xlon // (self.world_size // 2),
             )
 
-            print(f"input_pad_oddrank {self.input_pad_oddrank}, self.in_masks {self.in_masks}")
+            print(
+                f"input_pad_oddrank {self.input_pad_oddrank}, self.in_masks {self.in_masks}"
+            )
         else:
             self.in_var = (0, self.num_vars)
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
-        
+
         try:
             dummy_item = self.__getitem__(0)
         except:
-            Exception("Dataset was instantiated, but data items cannot be loaded. Data seems to be empty, or does not contain `fields`")
-
+            Exception(
+                "Dataset was instantiated, but data items cannot be loaded. Data seems to be empty, or does not contain `fields`"
+            )
 
     def __len__(self):
         """Return total number of samples."""
-        return self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+        return (
+            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+        )
 
     def __getitem__(self, idx):
         """
@@ -231,7 +249,7 @@ class ERA5DatasetDistributed(Dataset):
         ----------
         idx: int
             Global index of item
-        
+
         Returns
         -------
         input : torch.Tensor
@@ -243,9 +261,9 @@ class ERA5DatasetDistributed(Dataset):
         target_idx = idx + self.in_timesteps * self.dt
 
         input_list = []
-        for i in range(self.in_timesteps): 
+        for i in range(self.in_timesteps):
             x = self.zarr_data.isel(
-                time=(idx + i*self.dt),
+                time=(idx + i * self.dt),
                 feature=range(self.in_var[0], self.in_var[1]),
                 latitude=range(0, self.xlat),
                 longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
@@ -256,22 +274,23 @@ class ERA5DatasetDistributed(Dataset):
             ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
             input_list.append(torch.tensor(x, dtype=self.dtype))
-        
+
         input_list.append(self.get_constant_masks().to(self.dtype))
         input = torch.cat(input_list, dim=0)
 
         # For distributed dataset, we may create inbalances in the variables
-        if self.world_size  > 1:
+        if self.world_size > 1:
             # Odd ranks load second half of variables, so they might have less masks
             if (self.input_pad_oddrank != 0) and (self.local_rank % 2 == 1):
-                input = torch.nn.functional.pad(input, (0, 0, 0, 0, 0, self.input_pad_oddrank))
+                input = torch.nn.functional.pad(
+                    input, (0, 0, 0, 0, 0, self.input_pad_oddrank)
+                )
 
-        
         # Output data
         target_list = []
-        for j in range(self.out_timesteps): 
+        for j in range(self.out_timesteps):
             y = self.zarr_data.isel(
-                time=(target_idx + j*self.dt),
+                time=(target_idx + j * self.dt),
                 feature=range(self.in_var[0], self.in_var[1]),
                 latitude=range(0, self.xlat),
                 longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
@@ -282,26 +301,27 @@ class ERA5DatasetDistributed(Dataset):
             ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
 
             target_list.append(torch.tensor(y, dtype=self.dtype))
-        
+
         target = torch.cat(target_list, dim=0)
 
-        if self.world_size  > 1:
+        if self.world_size > 1:
             # Odd ranks load second half of variables, so they might have less masks
             if (self.output_pad_oddrank != 0) and (self.local_rank % 2 == 1):
-                target = torch.nn.functional.pad(target, (0, 0, 0, 0, 0, self.output_pad_oddrank))
+                target = torch.nn.functional.pad(
+                    target, (0, 0, 0, 0, 0, self.output_pad_oddrank)
+                )
 
         return input, target
 
     def get_constant_masks(self):
         """
-        Return the rank local shard of the constant masks. 
+        Return the rank local shard of the constant masks.
 
         Returns
         -------
         torch.Tensor
             The rank local shard of the constant masks; has shape [number of masks //2, xlat, longitudinal shard].
         """
-
         return torch.tensor(
             self.constant_masks[
                 self.in_masks[0] : self.in_masks[1],
@@ -348,7 +368,7 @@ class DummyDataset(Dataset):
     local_rank : int
         The rank withing the domain-parallel process group.
     fill_value : int
-        The value with which data samples (input and target) will be filled. If None, tensors will be filled with numbers 
+        The value with which data samples (input and target) will be filled. If None, tensors will be filled with numbers
     years : Tuple(str,st)
         The temporal range to be included into the dataset, in the format`%Y-%m-%d`
     in_timesteps : int
@@ -356,7 +376,7 @@ class DummyDataset(Dataset):
     out_timesteps : int
         Number of timesteps to be concatenated for the target
     dt : int
-        The temporal subsampling timestep in hours    
+        The temporal subsampling timestep in hours
     n_data_items:
         Number of data samples (time steps) in self.zarr_data
     xlat : int
@@ -397,9 +417,10 @@ class DummyDataset(Dataset):
     n_out_timesteps : int
         The number of output time setps
     dtype : torch.dtype
-        The dtype for input and target tensors 
+        The dtype for input and target tensors
 
     """
+
     def __init__(
         self,
         pg_rank,
@@ -426,9 +447,9 @@ class DummyDataset(Dataset):
         if self.years is not None:
             max_date = datetime.strptime(self.years[1], "%Y-%m-%d")
             min_date = datetime.strptime(self.years[0], "%Y-%m-%d")
-        else: 
+        else:
             max_date = datetime.strptime("2000-12-31", "%Y-%m-%d")
-            min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")       
+            min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
 
         self.num_vars, self.xlat, self.xlon = global_shape
         self.n_data_items = (max_date - min_date).days * 24 / self.dt
@@ -437,19 +458,21 @@ class DummyDataset(Dataset):
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]      
+            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
             self.in_out_xlon = [
                 col * self.xlon // (self.world_size // 2),
-                (col + 1) * self.xlon // (self.world_size  // 2),
+                (col + 1) * self.xlon // (self.world_size // 2),
             ]
 
         else:
             self.in_var = [0, self.num_vars]
             self.in_out_xlon = [0, self.xlon]
- 
+
     def __len__(self):
         """Return total number of samples."""
-        return self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+        return (
+            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+        )
 
     def __getitem__(self, idx):
         """
@@ -459,7 +482,7 @@ class DummyDataset(Dataset):
         ----------
         idx: int
             Global index of item
-        
+
         Returns
         -------
         input : torch.Tensor
@@ -468,12 +491,18 @@ class DummyDataset(Dataset):
         target : torch.Tensor
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
- 
-        shape_in = ((self.in_var[1] - self.in_var[0]) * self.in_timesteps, self.in_out_xlat[1] - self.in_out_xlat[0] , self.in_out_xlon[1] - self.in_out_xlon[0])
-        shape_out = ((self.in_var[1] - self.in_var[0])*self.out_timesteps, self.in_out_xlat[1] - self.in_out_xlat[0] , self.in_out_xlon[1] - self.in_out_xlon[0])
+        shape_in = (
+            (self.in_var[1] - self.in_var[0]) * self.in_timesteps,
+            self.in_out_xlat[1] - self.in_out_xlat[0],
+            self.in_out_xlon[1] - self.in_out_xlon[0],
+        )
+        shape_out = (
+            (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
+            self.in_out_xlat[1] - self.in_out_xlat[0],
+            self.in_out_xlon[1] - self.in_out_xlon[0],
+        )
 
-
-        if self.fill_value: 
+        if self.fill_value:
             input = torch.full(shape_in, self.fill_value, dtype=self.dtype)
             target = torch.full(shape_out, self.fill_value, dtype=self.dtype)
         else:

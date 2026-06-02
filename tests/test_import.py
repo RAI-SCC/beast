@@ -18,3 +18,13 @@ class TestBeastImport:
 
         assert hasattr(beast, "__file__")
         assert hasattr(beast, "__path__")
+
+    def test_jigsaw_import(self):
+        """Test that the jigsaw module can be imported."""
+        import jigsaw
+
+        assert jigsaw is not None
+
+        from jigsaw import normalization
+
+        assert normalization is not None
