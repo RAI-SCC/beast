@@ -1,9 +1,10 @@
+import os
+import re
+from typing import Tuple
+
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-
-import re
-import os
 
 from beast.comm import get_process_group
 
@@ -15,7 +16,7 @@ def save_checkpoint(
     epoch: int,
     step: int | None,
     loss: float,
-):
+) -> str:
     """
     Save checkpoint to file.
 
@@ -37,7 +38,6 @@ def save_checkpoint(
     loss: torch.Tensor
         Average loss value
     """
-
     try:
         channel_group = model.channel_group
     except Exception:
@@ -129,12 +129,7 @@ def parse_latest_model_state(directory: str) -> dict:
     checkpoints = [
         fname for fname in os.listdir(end_of_epoch_directory) if fname.endswith(".pt")
     ]
-    print(f"list of checpoints {checkpoints}")
     local_checkpoint = ""
-    try:
-        jc_group_rank = get_process_group("JChannel").rank()
-    except Exception:
-        jc_group_rank = -1
 
     parsed = []
     for fname in checkpoints:
@@ -146,22 +141,35 @@ def parse_latest_model_state(directory: str) -> dict:
     if parsed:
         latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
         local_checkpoint = latest["fname"]
-    print(f'local checkpoint {local_checkpoint}')
-    print(f'parsed {parsed}')
+
     full_path = os.path.join(path_base, local_checkpoint)
-    print(f'full path here {full_path}')
     checkpoint = load_checkpoint(full_path)
 
     return checkpoint
 
 
 def load_state_dict(
-    model,
-    optimizer,
-    model_state_dict,
-    optimizer_state_dict,
-    last_epoch,
-):
+    model: torch.nn.Module,
+    optimizer: torch.optim,
+    model_state_dict: dict,
+    optimizer_state_dict: dict,
+    last_epoch: int,
+) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim, int]:
+    """
+    Load state dict for a given model.
+    
+    model: torch.nn.Module
+        Model to load state dict into.
+    optimizer: torch.optim
+        Optimizer to load optimizer state dict into.
+    model_state_dict: dict
+        State dict of the model.
+    optimizer_state_dict: dict
+        State dict of the optimizer.
+    last_epoch: int
+        Epoch to load
+    """
+    
     # DDP checks
     is_state_dict_ddp = any(k.startswith("module.") for k in model_state_dict.keys())
     if isinstance(model, DDP) and not is_state_dict_ddp:
