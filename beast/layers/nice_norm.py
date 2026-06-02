@@ -1,4 +1,7 @@
+"""Definition of NICE Norms."""
+
 import torch
+import torch.distributed as dist
 
 from beast.layers import mlp
 
@@ -88,12 +91,12 @@ class DistributedNICENorm(torch.nn.Module):
 
     def __init__(
         self,
-        dim,
-        noise_dim,
-        rank,
-        device,
-        spatial_group,
-        channel_group,
+        dim: int,
+        noise_dim: int,
+        rank: int,
+        device: torch.device,
+        spatial_group: dist.ProcessGroup,
+        channel_group: dist.ProcessGroup,
     ):
         """
         Initialize Distributed NICE Norm.
@@ -137,14 +140,16 @@ class DistributedNICENorm(torch.nn.Module):
         )
 
     @torch.compile
-    def _calc_shift_scale(self, x, scale_shift):
+    def _calc_shift_scale(
+        self, x: torch.Tensor, scale_shift: torch.Tensor
+    ) -> torch.Tensor:
         x = self.ln(x)
         scale_shift = scale_shift.unsqueeze(1)
         scale, shift = torch.chunk(scale_shift, 2, dim=-1)
         x = scale * x + shift
         return x
 
-    def forward(self, x, noise):
+    def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Forward pass of distributed NICE norm."""
         scale_shift = self.scale_shift(noise)
         x = self._calc_shift_scale(x, scale_shift)

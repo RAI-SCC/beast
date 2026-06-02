@@ -10,11 +10,13 @@ from beast.layers import mlp
 
 class TestDistributedMLPNice:
     @pytest.fixture(scope="session")
-    def process_mesh_dict(self):
+    def process_mesh_dict(self) -> dict:
         return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
     @pytest.mark.dist(4)
-    def test_distributed_mlp_nice_init(self, device, process_mesh_dict):
+    def test_distributed_mlp_nice_init(
+        self, device: torch.device, process_mesh_dict: dict
+    ) -> None:
         spatial_group, channel_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
@@ -60,7 +62,7 @@ class TestDistributedMLPNice:
         assert not torch.allclose(weights_gathered[2], weights_gathered[3])
 
     @pytest.mark.dist(4)
-    def test_distributed_mlp_nice_sync(self, device):
+    def test_distributed_mlp_nice_sync(self, device: torch.device) -> None:
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         spatial_group, channel_group = (
             process_mesh_dict["JSpatial"],
@@ -124,11 +126,13 @@ class TestDistributedMLPNice:
 
 class TestDistributedMLPSync:
     @pytest.fixture(scope="session")
-    def process_mesh_dict(self):
+    def process_mesh_dict(self) -> dict:
         return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
     @pytest.mark.dist(4)
-    def test_distributed_mlp_sync_init(self, device, process_mesh_dict):
+    def test_distributed_mlp_sync_init(
+        self, device: torch.device, process_mesh_dict: dict
+    ) -> None:
         spatial_group, channel_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
@@ -175,7 +179,7 @@ class TestDistributedMLPSync:
         assert not torch.allclose(weights_gathered[2], weights_gathered[3])
 
     @pytest.mark.dist(4)
-    def test_distributed_mlp_sync(self, device):
+    def test_distributed_mlp_sync(self, device: torch.device) -> None:
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         spatial_group, channel_group = (
             process_mesh_dict["JSpatial"],

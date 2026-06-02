@@ -6,7 +6,13 @@ from beast.layers import nice_norm
 
 
 class TestNiceNorm:
-    def test_nice_init(self):
+    """Test the Nice Norm."""
+
+    def test_nice_init(self) -> None:
+        """Test Nice Norm initialization.
+
+        Assert that the output of the nice norm retains the shape of the input data.
+        """
         batch_dim = 10
         seq_dim, channel_dim = 15, 20
         noise_dim = 32
