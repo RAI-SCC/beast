@@ -3,15 +3,11 @@ import time
 
 import torch
 import torch.distributed as dist
-from beast.data.dataset_0_25_degree import (
+from beast.data.dataset import (
     ERA5DatasetDistributed,
-    ERA5TwoTimestepsDatasetDistributed,
-)
-from beast.data.dataset_1_5_degree import (
     DummyDataset,
-    ERA5PreprocessedDataset15degree,
-    ERA5TwoTimestepsPreprocessedDataset15degree,
 )
+
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
@@ -21,7 +17,24 @@ from torch.utils.data.distributed import DistributedSampler
 
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
+    """
+    Custom Data Loader Iter, that tracks the start and stop time of the ``__next__`` functionality
+
+    Inherits from PyTorchs ``_MultiProcessingDataLoaderIter``
+    """
     def __next__(self):
+        """
+        Get the next item of the Iterator
+
+        Returns
+        -------
+        *data : torch.Tensor
+            The next data item
+        start : time.time
+            The time stamp before fetching the next data item in ns 
+        stop : time.time
+            The time stamp after fetching the next data item in ns 
+        """
         start = time.time_ns()
 
         data = super().__next__()
@@ -31,57 +44,91 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
 
 
 class GBDataLoader(DataLoader):
+    """
+    Custom Data Loader, that tracks the start and stop time of the ``__next__`` functionality
+
+    Calls the GBDataLoaderIter
+    """
     def _get_iterator(self) -> _BaseDataLoaderIter:
         return GBDataLoaderIter(self)
 
 
 def get_dataloader(
     config_dict,
-    dtp_process_group,
-    dp_process_group,
-    device,
+    dtp_rank,
+    dtp_size,
+    dp_rank,
+    dp_size,
     mode="train",
     dtype=torch.float32,
 ):
-    dt = config_dict["data"]["dt"]
+    """
+    Utility function to create a GBDataLoader instance from config specifications.
+
+    If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
+    If no valid path is given (i.e. if the path doesn't exist), it will create a dummy dataset for the time range specified in the config file, filled with random numbers.
+
+    Parameters
+    ----------
+    config_dict : Dict
+        The configuration dictionary, that contains information on the dataset, i.e. the path to all relevant files, specifications of the time frame to be used, etc.
+    dtp_rank : int
+        The rank in the domain-tensor-parallel process group, that shares a model and a data item
+    dtp_size : int
+        The size of the domain-tensor-parallel process group, that shares a model and a data item
+    dp_rank : int
+        The rank in the data-parallel process group, that shares a model and a data item
+    dp_size : int
+        The size of the data-parallel process group (torch.DistributedDataParallel)
+    mode : str
+        The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
+    dtype : torch.dtype
+        The datatype that the data items will have
+
+    Returns
+    -------
+    dataloader : GBDataLoader
+        The dataloader instance
+
+    """
+    if mode = "train":
+        years = config_dict["data"]["train_time_range"] 
+    elif mode == "validation"
+        years = config_dict["data"]["valid_time_range"] 
+    else:
+        years = None
+
     batch_size = config_dict["training"]["batch_size"]
-    if config_dict["data"]["xlat"] == 120 and config_dict["data"]["xlon"] == 240:
         if os.path.exists(config_dict["data"]["train_data_path"]):
-            if config_dict["data"]["n_in_timesteps"] == 2:
-                dataset = ERA5TwoTimestepsPreprocessedDataset15degree(
-                    config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
-                )
-            else:
-                dataset = ERA5PreprocessedDataset15degree(
-                    config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
-                )
+            dataset = ERA5DatasetDistributed(
+                pg_rank=dtp_rank,
+                pg_size=dtp_size,
+                data_path = config_dict["data"]["train_data_path"],
+                constant_masks_path = config_dict["data"]["constant_masks_path"],
+                constant_masks = config_dict["data"]["constant_masks"],
+                normalization_dir = config_dict["data"]["normalization_dir"],
+                time_range=years,
+                dt=config_dict["data"]["dt"],
+                n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+                n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+                dtype=config_dict["training"]["dtype"],
+            )
         else:
             if dist.get_rank(group=None) == 0:
                 print("train_data_path not found. Running Dummy Dataset")
+            
+            shape = (config_dict["data"]["n_variables"], config_dict["data"]["xlat"], config_dict["data"]["xlon"])
             dataset = DummyDataset(
-                config_dict, mode=mode, normalize=True, dt=dt, dtype=dtype
+                pg_rank=dtp_rank,
+                pg_size=dtp_size,
+                global_shape=shape,
+                time_range=years,
+                dt=config_dict["data"]["dt"],
+                n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+                n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+                dtype=config_dict["training"]["dtype"],
             )
-    else:
-        if config_dict["data"]["n_in_timesteps"] == 2:
-            dataset = ERA5TwoTimestepsDatasetDistributed(
-                config_dict,
-                mode=mode,
-                process_group=dtp_process_group,
-                device=device,
-                normalize=True,
-                dt=dt,
-                dtype=dtype,
-            )
-        else:
-            dataset = ERA5DatasetDistributed(
-                config_dict,
-                mode=mode,
-                process_group=dtp_process_group,
-                device=device,
-                normalize=True,
-                dt=dt,
-                dtype=dtype,
-            )
+
 
     if mode == "train" and config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
@@ -93,8 +140,8 @@ def get_dataloader(
     sampler = DistributedSampler(
         dataset,
         shuffle=(True if mode == "train" else False),
-        rank=dp_process_group.rank(),
-        num_replicas=dp_process_group.size(),
+        rank=dp_rank,
+        num_replicas=dp_size,
         seed=42,
     )
 
