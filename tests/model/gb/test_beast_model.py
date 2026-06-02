@@ -57,8 +57,7 @@ class TestDistBeastlingModel:
     def test_4way_beastling(
         self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
     ) -> None:
-
-        mesh_dict = create_process_mesh_dict([1, 1, 1, 2, 2], device_type=str(device))
+        mesh_dict = create_process_mesh_dict([1, 1, 1, 2, 2], device_type=str(device.type))
         jchannel_pg = mesh_dict["JChannel"]
         jspatial_pg = mesh_dict["JSpatial"]
         dtp_pg = mesh_dict["DTP"]
@@ -79,9 +78,9 @@ class TestDistBeastlingModel:
         with torch.no_grad():
             x = torch.rand(
                 batch_size,
-                small_config["in_channels"],
+                small_config["in_channels"]//2,
                 small_config["height"],
-                small_config["width"],
+                small_config["width"]//2,
                 device=device,
             )
             if bayesian:

@@ -76,7 +76,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
         "config": {
             "height": 120,
             "width": 240,
-            "in_channels": 87,
+            "in_channels": 88,
             "out_channels": 84,
             "embed_dim": 256,
             "heads": [16, 32, 16],

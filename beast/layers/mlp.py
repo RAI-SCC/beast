@@ -130,18 +130,12 @@ class DistributedMLPNICE(torch.nn.Module):
             
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
-        for p in self.linear1.parameters():
-            self.linear2.weight.register_post_accumulate_grad_hook(
+        for p in self.parameters():
+            p.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.spatial_group)
             )
             dist.broadcast(p.data, group_src=0, group=self.spatial_group)
-            
-        for p in self.linear2.parameters():
-            self.linear2.weight.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
-
+        
         self.activation = torch.nn.GELU()
 
     def forward(self, x):

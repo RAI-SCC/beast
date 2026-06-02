@@ -4,9 +4,9 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, convolutions, linear, roll, hooks  # type: ignore
+from jigsaw import convolutions, linear, roll, hooks  # type: ignore
 
-from beast.layers import nice_window_transformer
+from beast.layers import transformer
 
 
 class Beast(torch.nn.Module):
@@ -271,7 +271,8 @@ class Beast(torch.nn.Module):
             local_rank=self.local_rank,
             device=self.device,
             model_group=self.channel_group,
-            sync_group=self.spatial_group,
+            spatial_group=self.spatial_group,
+            channel_group=self.channel_group,
             bayesian=self.bayesian,
         )
         for p in self.upsample_mix.parameters():
@@ -302,7 +303,7 @@ class Beast(torch.nn.Module):
         if self.nice_norm:
             self.transformer_1 = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICETransformer(
+                    transformer.DistributedNICETransformer(
                         in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
                         out_dim=self.embed_dim,
@@ -323,7 +324,7 @@ class Beast(torch.nn.Module):
 
             self.transformer_down = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICETransformer(
+                    transformer.DistributedNICETransformer(
                         in_dim=self.embed_dim * 2,
                         embed_dim=self.embed_dim * 2,
                         out_dim=self.embed_dim * 2,
@@ -344,7 +345,7 @@ class Beast(torch.nn.Module):
 
             self.transformer_2 = torch.nn.ModuleList(
                 [
-                    attention.DistributedNICETransformer(
+                    transformer.DistributedNICETransformer(
                         in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
                         out_dim=self.embed_dim,
@@ -365,7 +366,7 @@ class Beast(torch.nn.Module):
         else:
             self.transformer_1 = torch.nn.ModuleList(
                 [
-                    attention.DistributedTransformer(
+                    transformer.DistributedTransformer(
                         in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
                         out_dim=self.embed_dim,
@@ -385,7 +386,7 @@ class Beast(torch.nn.Module):
 
             self.transformer_down = torch.nn.ModuleList(
                 [
-                    attention.DistributedTransformer(
+                    transformer.DistributedTransformer(
                         in_dim=self.embed_dim * 2,
                         embed_dim=self.embed_dim * 2,
                         out_dim=self.embed_dim * 2,
@@ -405,7 +406,7 @@ class Beast(torch.nn.Module):
 
             self.transformer_2 = torch.nn.ModuleList(
                 [
-                    attention.DistributedTransformer(
+                    transformer.DistributedTransformer(
                         in_dim=self.embed_dim,
                         embed_dim=self.embed_dim,
                         out_dim=self.embed_dim,
@@ -423,48 +424,44 @@ class Beast(torch.nn.Module):
                 ]
             )
 
-        self.roll_out = linear.DistributedRoll(
+        self.roll_out = roll.DistributedRoll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
-            local_rank=self.local_rank,
+            distributed_dims=[-2],
+            spatial_groups=[self.spatial_group],
             device=self.device,
-            parallelism=self._parallelism,
-            spatial_group=self.spatial_group,
             dtype=self.dtype,
         )
 
-        self.unroll_out = linear.DistributedRoll(
+        self.unroll_out = roll.DistributedRoll(
             shifts=(
                 -(self.window_size_outer[0] // 2),
                 -(self.window_size_outer[1] // 2),
             ),
             dims=(-3, -2),
-            local_rank=self.local_rank,
+            distributed_dims=[-2],
+            spatial_groups=[self.spatial_group],
             device=self.device,
-            parallelism=self._parallelism,
-            spatial_group=self.spatial_group,
             dtype=self.dtype,
         )
-        self.roll_in = linear.DistributedRoll(
+        self.roll_in = roll.DistributedRoll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
-            local_rank=self.local_rank,
+            distributed_dims=[-2],
+            spatial_groups=[self.spatial_group],
             device=self.device,
-            parallelism=self._parallelism,
-            spatial_group=self.spatial_group,
             dtype=self.dtype,
         )
 
-        self.unroll_in = linear.DistributedRoll(
+        self.unroll_in = roll.DistributedRoll(
             shifts=(
                 -(self.window_size_inner[0] // 2),
                 -(self.window_size_inner[1] // 2),
             ),
             dims=(-3, -2),
-            local_rank=self.local_rank,
+            distributed_dims=[-2],
+            spatial_groups=[self.spatial_group],
             device=self.device,
-            parallelism=self._parallelism,
-            spatial_group=self.spatial_group,
             dtype=self.dtype,
         )
 
@@ -532,7 +529,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_1 = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformer(
+                transformer.NiceTransformer(
                     in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
@@ -548,7 +545,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_down = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformer(
+                transformer.NiceTransformer(
                     in_dim=self.embed_dim * 2,
                     embed_dim=self.embed_dim * 2,
                     out_dim=self.embed_dim * 2,
@@ -564,7 +561,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_2 = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformer(
+                transformer.NiceTransformer(
                     in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
