@@ -4,7 +4,6 @@ import pytest
 import torch
 
 from beast.comm import create_process_mesh_dict
-from beast.layers import nice_window_transformer as nice
 from beast.layers import transformer
 from jigsaw import utils_aggregate
 
@@ -16,7 +15,7 @@ class TestTransformer:
         heads = 4
         noise_dim = 16
 
-        model = nice.Transformer(
+        model = transformer.Transformer(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
@@ -27,7 +26,7 @@ class TestTransformer:
             dtype=torch.float32,
         )
 
-        assert isinstance(model, nice.Transformer)
+        assert isinstance(model, transformer.Transformer)
 
     def test_nice_transformer_forward(self, device):
         in_dim, embed_dim, out_dim = 256, 256, 256
@@ -35,7 +34,7 @@ class TestTransformer:
         noise_dim = 16
         seq_length = 32
 
-        model = nice.Transformer(
+        model = transformer.Transformer(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
@@ -58,7 +57,7 @@ class TestNiceTransformer:
         heads = 4
         noise_dim = 16
 
-        model = nice.NiceTransformer(
+        model = transformer.NiceTransformer(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
@@ -69,7 +68,7 @@ class TestNiceTransformer:
             dtype=torch.float32,
         )
 
-        assert isinstance(model, nice.NiceTransformer)
+        assert isinstance(model, transformer.NiceTransformer)
 
     def test_nice_transformer_forward(self, device):
         in_dim, embed_dim, out_dim = 256, 256, 256
@@ -77,7 +76,7 @@ class TestNiceTransformer:
         noise_dim = 16
         seq_length = 32
 
-        model = nice.NiceTransformer(
+        model = transformer.NiceTransformer(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
