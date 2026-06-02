@@ -41,8 +41,8 @@ class TestModelFactory:
         """Test that get_model handles multiple kwargs overrides."""
         model = get_model(
             "BEASTLING",
-            height=512,
-            width=1024,
+            height=60,
+            width=480,
             embed_dim=512,
             device=torch.device("cpu"),
         )
@@ -56,8 +56,8 @@ class TestModelFactory:
         # Create a model with overridden kwargs
         get_model(
             "BEASTLING",
-            height=512,
-            width=1024,
+            height=240,
+            width=120,
             device=torch.device("cpu"),
         )
 
