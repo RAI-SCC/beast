@@ -11,7 +11,10 @@ class TestDeviceFixture:
     def test_device_fixture(self, device: torch.device, request: Any) -> None:
         """Test that the device fixture returns a valid torch.device."""
         assert isinstance(device, torch.device)
-        if torch.cuda.is_available() and request.config.getoption("--device") == "cuda":
+        if torch.cuda.is_available() and request.config.getoption("--device") in [
+            "cuda",
+            "gpu",
+        ]:
             assert device.type == "cuda"
         else:
             assert device.type == "cpu"
