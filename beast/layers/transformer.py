@@ -1,7 +1,8 @@
+import itertools
 import torch
 import torch.distributed as dist
 
-from jigsaw import attention
+from jigsaw import attention, hooks
 from beast.layers import mlp, nice_norm
 
 
@@ -48,18 +49,18 @@ class Transformer(torch.nn.Module):
         # import attention from jigsaw module
         # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.
         self.attention_block = attention.Attention(
-            self.in_dim, self.embed_dim, self.out_dim, self.heads, self.device, dropout_p=dropout
+            self.in_dim,
+            self.embed_dim,
+            self.out_dim,
+            self.heads,
+            self.device,
+            dropout_p=dropout,
         )
 
         self.layer_norm1 = torch.nn.LayerNorm(self.out_dim, device=device)
         self.layer_norm2 = torch.nn.LayerNorm(self.out_dim, device=device)
 
-        self.MLP = mlp.MLP(
-            self.out_dim,
-            self.out_dim,
-            self.out_dim,
-            device=self.device
-        )
+        self.MLP = mlp.MLP(self.out_dim, self.out_dim, self.out_dim, device=self.device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through transformer block.
@@ -80,7 +81,8 @@ class Transformer(torch.nn.Module):
         x = self.MLP(self.layer_norm2(x)) + x
 
         return x
-    
+
+
 class NiceTransformer(torch.nn.Module):
     """Transformer block with windowed attention and NICE normalization.
 
@@ -126,22 +128,22 @@ class NiceTransformer(torch.nn.Module):
         # import attention from jigsaw module
         # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.
         self.attention_block = attention.Attention(
-            self.in_dim, self.embed_dim, self.out_dim, self.heads, self.device, dropout_p=dropout
+            self.in_dim,
+            self.embed_dim,
+            self.out_dim,
+            self.heads,
+            self.device,
+            dropout_p=dropout,
         )
 
-        self.layer_norm1 = nice_norm.NiceNorm(self.out_dim, self.noise_dim, device=device).to(
-            self.device
-        )
-        self.layer_norm2 = nice_norm.NiceNorm(self.out_dim, self.noise_dim, device=device).to(
-            self.device
-        )
+        self.layer_norm1 = nice_norm.NiceNorm(
+            self.out_dim, self.noise_dim, device=device
+        ).to(self.device)
+        self.layer_norm2 = nice_norm.NiceNorm(
+            self.out_dim, self.noise_dim, device=device
+        ).to(self.device)
 
-        self.MLP = mlp.MLP(
-            self.out_dim,
-            self.out_dim,
-            self.out_dim,
-            device=self.device
-        )
+        self.MLP = mlp.MLP(self.out_dim, self.out_dim, self.out_dim, device=self.device)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Forward pass through transformer block.
@@ -162,7 +164,8 @@ class NiceTransformer(torch.nn.Module):
         x = self.MLP(self.layer_norm2(x, noise)) + x
 
         return x
-    
+
+
 class DistributedTransformer(torch.nn.Module):
     """
     Windowed Transformer across multiple processes.
@@ -204,8 +207,12 @@ class DistributedTransformer(torch.nn.Module):
             dtype=dtype,
         ).to(device)
 
-        self.layer_norm1 = torch.nn.LayerNorm(out_dim // channel_group.size(), device=device)
-        self.layer_norm2 = torch.nn.LayerNorm(out_dim // channel_group.size(), device=device)
+        self.layer_norm1 = torch.nn.LayerNorm(
+            out_dim // channel_group.size(), device=device
+        )
+        self.layer_norm2 = torch.nn.LayerNorm(
+            out_dim // channel_group.size(), device=device
+        )
 
         self.mlp = mlp.DistributedSynchronizedMLP(
             out_dim,
@@ -219,6 +226,13 @@ class DistributedTransformer(torch.nn.Module):
             sync_group=spatial_group,
             bayesian=bayesian,
         ).to(device)
+
+        for p in itertools.chain(
+            self.layer_norm1.parameters(), self.layer_norm2.parameters()
+        ):
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.spatial_group)
+            )
 
     def forward(self, x: torch.tensor):
         """Forward pass of distributed windowed transformer."""
@@ -252,7 +266,7 @@ class DistributedNICETransformer(torch.nn.Module):
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
-        """Initialize DistributedNICEWindowedTransformer."""
+        """Initialize DistributedNICETransformer."""
         super().__init__()
         self.attention_block = attention.DistributedAttention(
             in_dim,
@@ -266,7 +280,7 @@ class DistributedNICETransformer(torch.nn.Module):
             channel_group,
             bayesian,
             qk_norm=qk_norm,
-            dtype=dtype
+            dtype=dtype,
         ).to(device)
         self.layer_norm1 = nice_norm.DistributedNICENorm(
             out_dim,
@@ -297,6 +311,13 @@ class DistributedNICETransformer(torch.nn.Module):
             sync_group=spatial_group,
             bayesian=bayesian,
         ).to(device)
+
+        for p in itertools.chain(
+            self.layer_norm1.parameters(), self.layer_norm2.parameters()
+        ):
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(spatial_group)
+            )
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor):
         """

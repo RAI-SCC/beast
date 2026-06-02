@@ -88,9 +88,10 @@ class Beast(torch.nn.Module):
         noise_dim: int,
         # Dropout
         dropout: float = 1e-1,
+        # Norm
+        qk_norm: bool = False,
         # Boolean flags
         bayesian: bool,
-        flash_attn: bool,
         nice_norm: bool,
         # Device,
         device: torch.device | None,
@@ -127,7 +128,7 @@ class Beast(torch.nn.Module):
         self.up_group = up_group
         self.dtype = dtype
         self.bayesian = bayesian
-        self.flash_attn = flash_attn
+        self.qk_norm = qk_norm
         self.nice_norm = nice_norm
 
         self._build_model()
@@ -173,6 +174,22 @@ class Beast(torch.nn.Module):
         self._parallelism = self.dtp_group_size
 
         self.local_rank = self.dtp_group.rank() if self.dtp_group is not None else 0
+
+        assert (
+            self.width
+            % (self.spatial_group_size * self.kernel_size * self.window_size_outer[1])
+            == 0
+        ), "Width of outer layer is not divisible by outer window size."
+        assert (
+            self.width
+            % (
+                self.spatial_group_size
+                * 2
+                * self.kernel_size
+                * self.window_size_inner[1]
+            )
+            == 0
+        ), "Width of inner layer is not divisible by outer window size."
 
         # Patch embedding
         if self._parallelism > 1:
@@ -275,11 +292,6 @@ class Beast(torch.nn.Module):
             channel_group=self.channel_group,
             bayesian=self.bayesian,
         )
-        for p in self.upsample_mix.parameters():
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
         self.patch_recovery = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
@@ -464,6 +476,12 @@ class Beast(torch.nn.Module):
             device=self.device,
             dtype=self.dtype,
         )
+        
+        for p in self.upsample_mix.parameters():
+            p.register_post_accumulate_grad_hook(
+                hooks.make_grad_sync_hook(self.spatial_group)
+            )
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
     def _build_sequential_model(self) -> None:
 
