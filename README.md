@@ -26,6 +26,14 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
+3. Download and install jigsaw
+
+```console
+git submodule init
+git submodule update --remote --recursive
+pip install -e libs/jigsaw/
+```
+
 4. Install with pip or your prefered package manager
 
 ```console
