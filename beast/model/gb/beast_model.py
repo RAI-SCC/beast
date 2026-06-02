@@ -54,8 +54,6 @@ class Beast(torch.nn.Module):
         Data type for the model parameters.
     bayesian : bool
         Whether to use the Bayesian version of the model.
-    flash_attn : bool
-        Whether to use Flash Attention for the attention blocks.
     nice_norm : bool
         Whether to use the NICE normalization for the attention blocks.
 
