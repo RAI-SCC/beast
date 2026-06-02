@@ -1,13 +1,10 @@
+"""Dataset and Dataloader factory."""
+
 import os
 import time
 
 import torch
 import torch.distributed as dist
-from beast.data.dataset import (
-    ERA5DatasetDistributed,
-    DummyDataset,
-)
-
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
@@ -15,25 +12,31 @@ from torch.utils.data.dataloader import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
+from beast.data.dataset import (
+    DummyDataset,
+    ERA5DatasetDistributed,
+)
+
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
     """
-    Custom Data Loader Iter, that tracks the start and stop time of the ``__next__`` functionality
+    Custom Data Loader Iter, that tracks the start and stop time of the ``__next__`` functionality.
 
     Inherits from PyTorchs ``_MultiProcessingDataLoaderIter``
     """
+
     def __next__(self):
         """
-        Get the next item of the Iterator
+        Get the next item of the Iterator.
 
         Returns
         -------
         *data : torch.Tensor
             The next data item
         start : time.time
-            The time stamp before fetching the next data item in ns 
+            The time stamp before fetching the next data item in ns
         stop : time.time
-            The time stamp after fetching the next data item in ns 
+            The time stamp after fetching the next data item in ns
         """
         start = time.time_ns()
 
@@ -45,10 +48,11 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
 
 class GBDataLoader(DataLoader):
     """
-    Custom Data Loader, that tracks the start and stop time of the ``__next__`` functionality
+    Custom Data Loader, that tracks the start and stop time of the ``__next__`` functionality.
 
-    Calls the GBDataLoaderIter
+    Calls GBDataLoaderIter.
     """
+
     def _get_iterator(self) -> _BaseDataLoaderIter:
         return GBDataLoaderIter(self)
 
@@ -89,46 +93,48 @@ def get_dataloader(
     -------
     dataloader : GBDataLoader
         The dataloader instance
-
     """
-    if mode = "train":
-        years = config_dict["data"]["train_time_range"] 
-    elif mode == "validation"
-        years = config_dict["data"]["valid_time_range"] 
+    if mode == "train":
+        years = config_dict["data"]["train_time_range"]
+    elif mode == "validation":
+        years = config_dict["data"]["valid_time_range"]
     else:
         years = None
 
     batch_size = config_dict["training"]["batch_size"]
-        if os.path.exists(config_dict["data"]["train_data_path"]):
-            dataset = ERA5DatasetDistributed(
-                pg_rank=dtp_rank,
-                pg_size=dtp_size,
-                data_path = config_dict["data"]["train_data_path"],
-                constant_masks_path = config_dict["data"]["constant_masks_path"],
-                constant_masks = config_dict["data"]["constant_masks"],
-                normalization_dir = config_dict["data"]["normalization_dir"],
-                time_range=years,
-                dt=config_dict["data"]["dt"],
-                n_in_timesteps=config_dict["data"]["n_in_timesteps"],
-                n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-                dtype=config_dict["training"]["dtype"],
-            )
-        else:
-            if dist.get_rank(group=None) == 0:
-                print("train_data_path not found. Running Dummy Dataset")
-            
-            shape = (config_dict["data"]["n_variables"], config_dict["data"]["xlat"], config_dict["data"]["xlon"])
-            dataset = DummyDataset(
-                pg_rank=dtp_rank,
-                pg_size=dtp_size,
-                global_shape=shape,
-                time_range=years,
-                dt=config_dict["data"]["dt"],
-                n_in_timesteps=config_dict["data"]["n_in_timesteps"],
-                n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-                dtype=config_dict["training"]["dtype"],
-            )
+    if os.path.exists(config_dict["data"]["train_data_path"]):
+        dataset = ERA5DatasetDistributed(
+            pg_rank=dtp_rank,
+            pg_size=dtp_size,
+            data_path=config_dict["data"]["train_data_path"],
+            constant_masks_path=config_dict["data"]["constant_masks_path"],
+            constant_masks=config_dict["data"]["constant_masks"],
+            normalization_dir=config_dict["data"]["normalization_dir"],
+            time_range=years,
+            dt=config_dict["data"]["dt"],
+            n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+            n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+            dtype=config_dict["training"]["dtype"],
+        )
+    else:
+        if dist.get_rank(group=None) == 0:
+            print("train_data_path not found. Running Dummy Dataset")
 
+        shape = (
+            config_dict["data"]["n_variables"],
+            config_dict["data"]["xlat"],
+            config_dict["data"]["xlon"],
+        )
+        dataset = DummyDataset(
+            pg_rank=dtp_rank,
+            pg_size=dtp_size,
+            global_shape=shape,
+            time_range=years,
+            dt=config_dict["data"]["dt"],
+            n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+            n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+            dtype=config_dict["training"]["dtype"],
+        )
 
     if mode == "train" and config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])

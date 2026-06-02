@@ -6,11 +6,12 @@ CustomDeviceMesh implementation when the native torch.device_mesh
 functionality is not available or suitable.
 """
 
-from typing import Sequence
+import time
+from collections.abc import Callable
+from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
-import time
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -61,7 +62,7 @@ def create_process_mesh_dict(
 
     mesh_dim_names = ["Expert", "DP", "SP", "JSpatial", "JChannel"]
 
-    global _mesh
+    global _mesh, _process_group_dict
     _mesh = dist.device_mesh.init_device_mesh(
         device_type=device_type,
         mesh_shape=tuple(mesh_dims),
@@ -120,7 +121,24 @@ def get_process_group(name: str) -> dist.ProcessGroup:
         raise ValueError(f"Process group '{name}' not found.")
     return _process_group_dict[name]
 
-def execute_in_waves(func, wave_size: int = 128):
+
+def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
+    """Execute a function across distributed ranks in waves to reduce contention.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to execute on each rank. Should contain the logic that
+        needs to be executed in a distributed manner.
+    wave_size : int, optional
+        The number of ranks to execute the function in each wave (default is 128).
+
+    Returns
+    -------
+    Any
+        The result of the function execution on the current rank, or None if
+        the rank is not part of the current wave.
+    """
     world_size = dist.get_world_size(group=None)
     num_groups = (world_size + wave_size - 1) // wave_size
     global_rank = dist.get_rank(group=None)
@@ -142,3 +160,12 @@ def execute_in_waves(func, wave_size: int = 128):
             )
 
     return result
+
+
+def shutdown_comm() -> None:
+    """Shutdown existing process groups and mesh."""
+    global _mesh, _process_group_dict
+    for key, pg in _process_group_dict.items():
+        pg.shutdown()
+
+    _process_group_dict = {}
