@@ -95,8 +95,6 @@ class TestDistributedTransformer:
     def process_mesh_dict(self) -> dict:
         return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
-
-class TestDistributedTransformer:
     @pytest.mark.dist(4)
     def test_distributed_transformer_init(
         self, device: torch.device, process_mesh_dict: dict
