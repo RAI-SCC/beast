@@ -3,13 +3,13 @@
 import types
 
 import jigsaw.normalization as normalization  # type: ignore[import-not-found]
-import jigsaw.utils_init  # type: ignore[import-not-found]
+import jigsaw.utils_aggregate  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi.distributions as vidist
 import torch_blue.vi.utils.convert
 
-from beast.layers.nice_window_transformer import NiceNorm
+from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 
 
 def convert_jigsaw_vi(
@@ -50,7 +50,7 @@ def convert_jigsaw_vi(
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(NiceNorm)
     torch_blue.vi.utils.convert.ban_convert(
-        normalization.DistributedNICENorm, ban_mode="submodule"
+        DistributedNICENorm, ban_mode="submodule"
     )
     torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
@@ -91,7 +91,7 @@ def convert_jigsaw_vi(
             m.reset_variational_parameters()
 
         if class_name in weight_sync_list:
-            jigsaw.utils_init.average_weights_module(m, spatial_pg)
+            utils_aggregate.average_weights_module(m, spatial_pg)
 
 
 # TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.
