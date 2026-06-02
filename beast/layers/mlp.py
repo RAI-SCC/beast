@@ -1,3 +1,7 @@
+"""Definition of MLPs."""
+
+from typing import Callable
+
 import torch
 import torch.distributed as dist
 from jigsaw import hooks, linear
@@ -67,10 +71,10 @@ class MLP(torch.nn.Module):
         return x
 
 
-def make_grad_input_hook(group):
+def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
     """All-reduce grad_input (activation grad) across the channel group."""
 
-    def hook(grad):
+    def hook(grad: torch.Tensor) -> torch.Tensor:
         grad = grad.contiguous()
         dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
         return grad  # replaces grad
@@ -89,9 +93,8 @@ class DistributedMLPNICE(torch.nn.Module):
         bias: bool,
         local_rank: int,
         device: torch.device,
-        model_group: dist.ProcessGroup = None,
-        spatial_group: dist.ProcessGroup = None,
-        channel_group: dist.ProcessGroup = None,
+        spatial_group: dist.ProcessGroup,
+        channel_group: dist.ProcessGroup,
     ):
         """
         Initialize the MLP module for NICE Norm.
@@ -120,7 +123,6 @@ class DistributedMLPNICE(torch.nn.Module):
         super().__init__()
         self.local_rank = local_rank
         self.device = device
-        self.dtp_group = model_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
@@ -153,7 +155,7 @@ class DistributedMLPNICE(torch.nn.Module):
 
         self.activation = torch.nn.GELU()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of MLP distributed across two or four processes.
 
@@ -172,7 +174,11 @@ class DistributedMLPNICE(torch.nn.Module):
 
 
 class DistributedSynchronizedMLP(torch.nn.Module):
-    """Distributed MLP across n processes."""
+    """Distributed MLP across channels and synchronized across space.
+
+    Parameters are synchronized upon initialization. Hooks are used to keep
+    weights synchronized as training proceeds.
+    """
 
     def __init__(
         self,
@@ -183,10 +189,36 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         dropout: float,
         local_rank: int,
         device: torch.device,
-        model_group: dist.ProcessGroup = None,
-        sync_group: dist.ProcessGroup = None,
+        model_group: dist.ProcessGroup,
+        sync_group: dist.ProcessGroup,
         bayesian: bool = False,
     ):
+        """
+        Initialize DistributedSynchronizedMLP Module.
+
+        Parameters
+        ----------
+        in_dim: int
+            input dimension of the data.
+        hidden_dim: int
+            hidden dimesion of the mlp.
+        out_dim: int
+            output dimension of the mlp.
+        bias: bool
+            Flag for whether to use bias.
+        dropout: float
+            Dropout fraction.
+        local_rank: int
+            Rank within channel group.
+        device: torch.device
+            Device to perform computations on.
+        model_group: dist.ProcessGroup
+            Channel group, where model is sharded.
+        sync_group: dist.ProcessGroup,
+            Spatial group, where model is domain-but-not-tensor parallel.
+        bayesian: bool
+            Flag for whether the model is Bayesian.
+        """
         super().__init__()
         self.local_rank = local_rank
         self.device = device
@@ -229,7 +261,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.drop2 = torch.nn.Dropout(p=dropout)
         self.local_rank = local_rank
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of MLP distributed across two or four processes.
 
