@@ -1,16 +1,21 @@
+"""Configuration management for BEAST model.
+
+This module provides utilities to load, validate, and modify model
+configuration from YAML files and command-line arguments.
+"""
+
 import argparse
 import os
+from typing import Any
 
 import torch
 import yaml
 
 
 def setup_config_dict(
-    config_dict: dict[str, dict[str, any]], args: argparse.Namespace, resume=False
-) -> dict[str, dict[str, any]]:
-    """
-    Clean the configuration file, adjust based on environmental variables and overwritten options.
-    """
+    config_dict: dict[str, Any], args: argparse.Namespace, resume: bool = False
+) -> dict[str, Any]:
+    """Clean configuration file and adjust based on environment variables and overwritten options."""
     config_dict["timings"] = args.timings
     config_dict["skip_validation"] = args.skip_validation
     config_dict["profile"] = args.profile
@@ -21,22 +26,23 @@ def setup_config_dict(
         config_dict = overwrite_config(config_dict, args.configargs)
 
         ### Data Stuff ###
-        WORKDIR = os.getenv("WORKDIR")
+        workdir = os.getenv("WORKDIR")
 
         if os.getenv("DATA_DIR") is not None:
+            data_dir = os.getenv("DATA_DIR")
             config_dict["data"]["train_data_path"] = (
-                os.getenv("DATA_DIR") + config_dict["data"]["train_data_path"]
+                data_dir + config_dict["data"]["train_data_path"]
             )
             config_dict["data"]["valid_data_path"] = (
-                os.getenv("DATA_DIR") + config_dict["data"]["valid_data_path"]
+                data_dir + config_dict["data"]["valid_data_path"]
             )
             config_dict["data"]["constant_masks_path"] = (
-                os.getenv("DATA_DIR") + config_dict["data"]["constant_masks_path"]
+                data_dir + config_dict["data"]["constant_masks_path"]
             )
 
-        if "normalization_dir" in config_dict["data"]:
+        if "normalization_dir" in config_dict["data"] and workdir is not None:
             config_dict["data"]["normalization_dir"] = (
-                WORKDIR + "/" + config_dict["data"]["normalization_dir"]
+                workdir + "/" + config_dict["data"]["normalization_dir"]
             )
 
     world_size = int(os.getenv("SLURM_NTASKS", 1))
@@ -69,11 +75,9 @@ def setup_config_dict(
 
 
 def overwrite_config(
-    config_dict: dict[str, dict[str, any]], configargs: list[str]
-) -> dict[str, dict[str, any]]:
-    """
-    Change configuration file values based on cmd line arguments passed as '<section>_<key>=<value>' after all the optional flags. Arrays are passed with the elements connected by comas.
-    """
+    config_dict: dict[str, Any], configargs: list[str]
+) -> dict[str, Any]:
+    """Change configuration values based on cmd line arguments ('<section>_<key>=<value>')."""
     for i in range(len(configargs)):
         section_key, new_value = configargs[i].split("=")
 
@@ -102,18 +106,33 @@ def overwrite_config(
         elif isinstance(original_value, int):
             config_dict[section][key] = int(new_value)
         elif isinstance(original_value, list):
+            formated_new_value: list[str] | list[int]
             if isinstance(original_value[0], str):
                 formated_new_value = [x for x in new_value.split(",")]
             elif isinstance(original_value[0], int):
                 formated_new_value = [int(x) for x in new_value.split(",")]
+            else:
+                formated_new_value = []  # type: ignore
             config_dict[section][key] = formated_new_value
 
     return config_dict
 
 
-def load_configuration_yaml(directory):
+def load_configuration_yaml(directory: str) -> dict[str, Any]:
+    """Load configuration from YAML file in directory.
+
+    Parameters
+    ----------
+    directory : str
+        Directory containing config.yaml file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Parsed configuration dictionary.
+    """
     yaml_path = os.path.join(directory, "config.yaml")
     with open(f"{yaml_path}", "r") as f:
-        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+        config_dict = yaml.load(f, Loader=yaml.SafeLoader)  # type: ignore
 
-    return config_dict
+    return config_dict  # type: ignore
