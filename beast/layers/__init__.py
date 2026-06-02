@@ -5,6 +5,6 @@ including expert layers and transformer components.
 """
 
 from beast.layers.expert import Expert, ExpertWeightingLayer
-from beast.layers.nice_window_transformer import NiceWindowedTransformerBlock
+from beast.layers.nice_window_transformer import NiceTransformer
 
-__all__ = ["ExpertWeightingLayer", "Expert", "NiceWindowedTransformerBlock"]
+__all__ = ["ExpertWeightingLayer", "Expert", "NiceTransformer"]

@@ -541,7 +541,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_1 = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformerBlock(
+                nice_window_transformer.NiceTransformer(
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
                     heads=self.heads[0],
@@ -556,7 +556,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_down = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformerBlock(
+                nice_window_transformer.NiceTransformer(
                     self.embed_dim * 2,
                     self.embed_dim * 2,
                     heads=self.heads[1],
@@ -571,7 +571,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_2 = torch.nn.ModuleList(
             [
-                nice_window_transformer.NiceTransformerBlock(
+                nice_window_transformer.NiceTransformer(
                     embed_dim=self.embed_dim,
                     output_dim=self.embed_dim,
                     heads=self.heads[2],
