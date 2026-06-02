@@ -123,7 +123,6 @@ def get_process_group(name: str) -> dist.ProcessGroup:
 def shutdown_comm() -> None:
     """Shutdown existing process groups and mesh."""
     global _mesh, _process_group_dict
-    _mesh = None
     for key, pg in _process_group_dict.items():
         pg.shutdown()
 

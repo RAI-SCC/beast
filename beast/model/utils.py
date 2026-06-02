@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
 
-from beast.layers.nice_norm import NiceNorm
+from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 
 
 @torch.no_grad()
@@ -50,9 +50,7 @@ def convert_jigsaw_vi(
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
-    vi.utils.convert.ban_convert(
-        normalization.DistributedNICENorm, ban_mode="submodule"
-    )
+    vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
     vi.convert_to_vimodule(
