@@ -4,13 +4,12 @@ from typing import Any, Optional, cast
 
 import torch
 import torch.distributed as dist
-import torch.nn as nn
 import torch_blue.vi as vi
 from torch import Tensor
 from torch_blue.vi.distributions import MeanFieldNormal
 
 
-class UPAllGaussLoss(nn.Module):
+class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     """
     Loss function for Unsupervised Prior matching with Gaussian distributions.
 
@@ -28,8 +27,10 @@ class UPAllGaussLoss(nn.Module):
         Heat / cold posterior parameter for the KL loss.
     track : bool, default: False
         Whether to track loss components.
-    fmodded : bool, default: False
-        Whether to use the fmodded data fitting method.
+    use_fmod : bool, default: False
+        If True apply fmod to predictive log probabilities before summing. This may
+        avoid accuracy loss due to float precision when summing and does not impact
+        gradients.
     """
 
     def __init__(
@@ -40,13 +41,9 @@ class UPAllGaussLoss(nn.Module):
         loss_weights: Optional[Tensor] = None,
         heat: float = 1.0,
         track: bool = False,
-        fmodded: bool = False,
+        use_fmod: bool = False,
     ) -> None:
-        super().__init__()
-
-        self.up_group = up_group if up_group is not None else dist.group.WORLD
-
-        self.kl_loss = vi.AnalyticalKullbackLeiblerLoss(
+        super().__init__(
             model,
             MeanFieldNormal(),
             divergence_type=vi.NormalNormalDivergence(),
@@ -55,6 +52,8 @@ class UPAllGaussLoss(nn.Module):
             track=track,
         )
 
+        self.up_group = up_group if up_group is not None else dist.group.WORLD
+
         if loss_weights is None:
             self.loss_weights = None
         else:
@@ -62,18 +61,16 @@ class UPAllGaussLoss(nn.Module):
                 (1, 1, -1, 1, 1)
             )  # (sample, batch, variables, lat, lon)
 
-        self.dataset_size = dataset_size
-
         self.aggregate_statistics = MeanStdPriorMatchingAggregation.apply
 
-        self.fmodded = fmodded
-        self.data_fitting = (
-            self._data_fitting_fmodded if fmodded else self._data_fitting_base
-        )
+        self.use_fmod = use_fmod
 
-    def _data_fitting_base(self, mean: Tensor, std: Tensor, target: Tensor) -> Tensor:
+    def data_fitting(self, mean: Tensor, std: Tensor, target: Tensor) -> Tensor:
         """
         Calculate the data fitting loss part.
+
+        If ``self.use_fmod`` is True, the fmod is applied to the predictive
+        log probabilities to avoid accuracy loss due to float precision when summing.
 
         Parameters
         ----------
@@ -89,43 +86,16 @@ class UPAllGaussLoss(nn.Module):
         Tensor
             The calculated data fitting loss.
         """
-        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(
+        log_prob = self.predictive_distribution.log_prob_from_parameters(
             target, (mean, std)
         ).mean(dim=0)
+
+        if self.use_fmod:
+            log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
 
         return cast(Tensor, data_fit)
-
-    def _data_fitting_fmodded(
-        self, mean: Tensor, std: Tensor, target: Tensor
-    ) -> Tensor:
-        """
-        Calculate the fmodded data fitting loss. Reduces the chance of overflow, but makes interpreting the loss value more difficult.
-
-        Parameters
-        ----------
-        mean : Tensor
-            The mean of the predictive distribution.
-        std : Tensor
-            The standard deviation of the predictive distribution.
-        target : Tensor
-            The target values.
-
-        Returns
-        -------
-        Tensor
-            The calculated data fitting loss.
-        """
-        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(
-            target, (mean, std)
-        ).mean(dim=0)
-
-        log_prob = torch.fmod(log_prob, 1.0)
-
-        data_fit = -self.dataset_size * log_prob.sum()
-
-        return data_fit
 
     def split_forward(
         self, model_output: Tensor, target: Tensor
@@ -157,15 +127,15 @@ class UPAllGaussLoss(nn.Module):
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
             expert_output,
             self.up_group,
-            *self.kl_loss._get_flat_params(),
+            *self._get_flat_params(),
             self.loss_weights,
         )
 
         data_fit = self.data_fitting(mean, std, expert_target)
 
-        if self.kl_loss._track and self.kl_loss.log is not None:
-            self.kl_loss.log["data_fitting"].append(data_fit.item())
-            self.kl_loss.log["prior_matching"].append(prior_matching.item())
+        if self._track and self.log is not None:
+            self.log["data_fitting"].append(data_fit.item())
+            self.log["prior_matching"].append(prior_matching.item())
 
         return data_fit, prior_matching
 
@@ -187,12 +157,7 @@ class UPAllGaussLoss(nn.Module):
         """
         data_fit, prior_matching = self.split_forward(model_output, target)
 
-        return data_fit + cast(float, self.kl_loss.heat) * prior_matching
-
-    @property
-    def log(self) -> Any:
-        """Get the log from the KL loss."""
-        return self.kl_loss.log
+        return data_fit + cast(float, self.heat) * prior_matching
 
 
 class MeanStdPriorMatchingAggregation(torch.autograd.Function):
