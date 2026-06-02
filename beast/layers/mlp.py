@@ -113,6 +113,8 @@ class DistributedMLPNICE(torch.nn.Module):
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
+        assert hidden_dim % channel_group.size() == 0, "hidden_dim is not divisble by the channel group size."
+        
         self.linear1 = torch.nn.Linear(
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
