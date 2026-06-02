@@ -178,7 +178,10 @@ class ERA5DatasetDistributed(Dataset):
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            self.in_var = (row * self.n_variables // 2, (row + 1) * self.n_variables // 2)
+            if row == 0:
+                self.in_var = (0, self.n_variables // 2 if self.n_variables % 2 == 0 else self.n_variables // 2 + 1) 
+            else:  
+                self.in_var = (self.n_variables // 2 if self.n_variables % 2 == 0 else self.n_variables // 2 + 1, self.n_variables)
           
             # We split the channels into two ranks; however, if we have an odd number of channels this will
             # result in rank 0 having one more variable.
@@ -190,16 +193,27 @@ class ERA5DatasetDistributed(Dataset):
             self.input_pad_oddrank = 0
             self.output_pad_oddrank = output_inbalance
 
-
             # Two cases:
             # If we have more masks then the inbalance, we need to distribute the remaining masks evenly accross channel ranks
             if (self.n_masks - input_inbalance) >= 0: 
-                self.in_masks = (0, (self.n_masks - input_inbalance) - (self.n_masks - input_inbalance)// 2 )
+                remaining_masks = (self.n_masks - input_inbalance) 
+                if row == 0:
+                    self.in_masks = (0,  remaining_masks - remaining_masks// 2)
+                else:
+                    self.in_masks = (remaining_masks - remaining_masks// 2, self.n_masks)
+                
+                if remaining_masks % 2 ==1:
+                    self.input_pad_oddrank = 1
 
             # If we have fewer masks then the imbalance, we need to pad on rank 1
             else:
-                self.in_masks = (0, 0)
+                if row == 0:
+                    self.in_masks = (0, 0)
+                else:
+                    self.in_masks = (0, self.n_masks)
+
                 self.input_pad_oddrank = input_inbalance - self.n_masks
+
 
             # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
             self.in_out_xlon = (
@@ -207,9 +221,8 @@ class ERA5DatasetDistributed(Dataset):
                 (col + 1) * self.xlon // (self.world_size  // 2),
             )
 
-            print(f"input_pad_oddrank {self.input_pad_oddrank}, self.in_masks {self.in_masks}")
         else:
-            self.in_var = (0, self.num_vars)
+            self.in_var = (0, self.in_var)
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
         
@@ -431,7 +444,12 @@ class DummyDataset(Dataset):
             min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")       
 
         self.num_vars, self.xlat, self.xlon = global_shape
-        self.n_data_items = (max_date - min_date).days * 24 / self.dt
+        self.n_data_items = int((max_date - min_date).days * 24)
+        print(f"max_date {max_date}, min_date {min_date}, self.n_data_items {self.n_data_items}")
+        if self.xlat%2 == 1:
+            self.xlat -= 1
+        if self.xlon%2 == 1:
+            self.xlon -= 1
 
         self.in_out_xlat = [0, self.xlat]
         if self.world_size > 1:

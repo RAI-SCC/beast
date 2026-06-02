@@ -87,21 +87,10 @@ def generate_mock_normalization(path, n_features):
     np.save(path/f"norm_mean.npy", mean)
     np.save(path/f"norm_std.npy", std)
 
-
-test_array = [
-    (3, 8, 121, 240, 1, 1), 
-    # (3, 8, 60,  120, 1, 1), 
-    # (3, 8, 121, 240, 2, 2), 
-    # (3, 8, 60,  120, 2, 2),
-    # (3, 8, 121, 240, 2, 1), 
-    # (3, 8, 60,  120, 2, 1),
-    # (4, 8, 121, 240, 2, 1), 
-    # (4, 8, 60,  120, 2, 1),
-    # (3, 7, 121, 240, 2, 1), 
-    # (3, 7, 60,  120, 2, 1),
-    # (4, 7, 121, 240, 2, 1), 
-    # (4, 7, 60,  120, 2, 1)
-    ]
+test_array_dummy = [(8, 120, 240),
+    (8, 121, 240),
+    (7, 120, 241),
+    (7, 121, 241)]
 
 
 test_array_xlat_xlon = [(120, 240),
@@ -114,6 +103,25 @@ test_array_mask_features = [(3, 8),
     (3, 7), 
     (4, 7)]
 
+test_array_timesteps = [(1, 1),
+    (2, 1),
+    (1, 2), 
+    (2, 2)]
+
+test_array = [
+    (3, 8, 121, 240, 1, 1), 
+    (3, 8, 60,  120, 1, 1), 
+    (3, 8, 121, 240, 2, 2), 
+    (3, 8, 60,  120, 2, 2),
+    (3, 8, 121, 240, 2, 1), 
+    (3, 8, 60,  120, 2, 1),
+    (4, 8, 121, 240, 2, 1), 
+    (4, 8, 60,  120, 2, 1),
+    (3, 7, 121, 240, 2, 1), 
+    (3, 7, 60,  120, 2, 1),
+    (4, 7, 121, 240, 2, 1), 
+    (4, 7, 60,  120, 2, 1)
+    ]
 
 class TestDataset:
     @pytest.mark.parametrize("n_time, n_features, n_lat, n_lon", [(24,84,721,1440), (24,84,120,240)])
@@ -136,8 +144,6 @@ class TestDataset:
         for f in files:
             mask = np.load(f)
             assert mask.shape == (n_lat, n_lon)
-
-
 
     @pytest.mark.parametrize("n_masks, n_features", test_array_mask_features)
     def test_ERA5DatasetDistributed_mask_features(self,tmp_path_factory, n_masks, n_features): 
@@ -228,7 +234,7 @@ class TestDataset:
         if n_features % 2 == 1:
             n_features+=1
         assert list(target_0.shape) == [n_features//2, 120, 120]
-        assert list(x_0.shape) == list(x_1.shape) #== list(x_2.shape) == list(x_3.shape) 
+        assert list(x_0.shape) == list(x_1.shape) == list(x_2.shape) == list(x_3.shape) 
 
 
     @pytest.mark.parametrize("lat, lon", test_array_xlat_xlon)
@@ -261,7 +267,6 @@ class TestDataset:
             dsync_access=False,
             )
 
-        assert len(dataset_r0) == n_time - (in_timesteps + out_timesteps) * 6
 
         dataset_r1 = ERA5DatasetDistributed(
             1,
@@ -309,6 +314,8 @@ class TestDataset:
             )
 
 
+        assert len(dataset_r0) == n_time - 6
+
         xlat = lat
         xlon = lon
         if xlat%2 ==1:
@@ -325,17 +332,110 @@ class TestDataset:
         x_2, _ = dataset_r2[0]
         x_3, _ = dataset_r3[0]
 
-        assert list(x_0.shape) == list(x_1.shape) #== list(x_2.shape) == list(x_3.shape) 
+        assert list(x_0.shape) == list(x_1.shape) == list(x_2.shape) == list(x_3.shape) 
 
 
-    @pytest.mark.parametrize("n_masks, n_features, n_lat, n_lon, in_timesteps, out_timesteps", test_array)
-    def test_DummyDataset(self,n_masks, n_features, n_lat, n_lon, in_timesteps, out_timesteps): 
+    @pytest.mark.parametrize("in_timesteps, out_timesteps", test_array_timesteps)
+    def test_ERA5DatasetDistributed_timesteps(self,tmp_path_factory, in_timesteps, out_timesteps): 
+        data_path = tmp_path_factory.mktemp("data") 
         n_time = 48
-        time_coords = pd.date_range("2024-01-01", periods=n_time, freq="h").strftime("%Y-%m-%d")
+        world_size=4
+        xlat = 120
+        xlon = 240
+        n_masks = 3
+        n_features = 8
+        n_in_vars = 2 + 4 * in_timesteps
+        n_out_vars = 4 * out_timesteps
+
+        zarr_path = generate_mock_zarr_data((data_path/ "test_data.zarr"), n_time, n_features, xlat, xlon)
+        mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
+        generate_mock_normalization(data_path, n_features)
+
+        dataset_r0 = ERA5DatasetDistributed(
+            0,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            )
+
+
+        dataset_r1 = ERA5DatasetDistributed(
+            1,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+        )
+
+        dataset_r2 = ERA5DatasetDistributed(
+            2,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            )
+
+        dataset_r3 = ERA5DatasetDistributed(
+            3,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            )
+
+        assert len(dataset_r0) == n_time - (in_timesteps + out_timesteps - 1) * 6
+       
+        x_0, target_0 = dataset_r0[0]
+        assert list(x_0.shape) == [n_in_vars , xlat, xlon//2]
+        assert list(target_0.shape) == [n_out_vars, xlat, xlon//2]
+       
+        x_1, _ = dataset_r1[0]
+        x_2, _ = dataset_r2[0]
+        x_3, _ = dataset_r3[0]
+
+        assert list(x_0.shape) == list(x_1.shape) == list(x_2.shape) == list(x_3.shape) 
+
+
+    @pytest.mark.parametrize("n_features, xlat, xlon", test_array_dummy)
+    def test_DummyDataset(self, n_features, xlat, xlon): 
+        n_time = 48
+        time_coords = pd.date_range("2024-01-01", periods=n_time+1, freq="h").strftime("%Y-%m-%d")
         rank = 1
         world_size = 4
 
-        shape = (n_features, n_lat, n_lon)
+        in_timesteps = 1
+        out_timesteps = 1
+
+        shape = (n_features, xlat, xlon)
 
         dataset = DummyDataset(
             rank,
@@ -348,16 +448,18 @@ class TestDataset:
             dtype=torch.float32,)
         
 
-        #assert len(dataset) == n_time - (in_timesteps+out_timesteps) * 6
+        assert len(dataset) == n_time - (in_timesteps+out_timesteps - 1) * 6
         
-        if n_lat%2 ==1:
-            xlat = n_lat-1
-        
-        if n_lon%2 ==1:
-            xlon = n_lon-1
+        x, target = dataset[0]       
 
-        x, target = dataset[0]
-
-        #assert list(x.shape) == [in_timesteps* n_features//2 + n_masks//2, xlat, xlon//2]
-        #assert list(target.shape) == [out_timesteps* n_features//2 + n_masks//2, xlat, xlon//2]
-
+        n_vars = n_features
+        if n_vars %2 ==1:
+            n_vars +=1
+        lat = xlat
+        if lat %2 ==1:
+            lat -=1          
+        lon = xlon
+        if lon %2 ==1:
+            lon -=1    
+        assert list(x.shape) == [n_vars//2, lat, lon//2]
+        assert list(target.shape) == [n_vars//2, lat, lon//2]
