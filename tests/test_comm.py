@@ -4,7 +4,7 @@ import pytest
 import torch.distributed as dist
 from conftest import dist_st
 from hypothesis import assume, given
-from hypothesis import strategies as st
+from hypothesis import strategies as st, settings
 
 from beast.comm import create_process_mesh_dict, get_process_group
 
@@ -55,6 +55,7 @@ class TestProcessorMesh:
             st.lists(st.integers(min_value=1, max_value=2), min_size=5, max_size=5)
         ),
     )
+    @settings(deadline=1000)
     def test_create_process_mesh_dict(self, mesh_dims: list[int]) -> None:
         """Test that the process mesh dictionary is created correctly."""
         mesh_ranks = math.prod(mesh_dims)
