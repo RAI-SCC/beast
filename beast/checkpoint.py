@@ -141,16 +141,15 @@ def parse_latest_model_state(directory: str) -> dict:
         info = parse_checkpoint(fname)
         if info is None:
             continue
-        if info["jchannel_rank"] != jc_group_rank:
-            continue
         parsed.append(info)
 
     if parsed:
         latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
         local_checkpoint = latest["fname"]
-
+    print(f'local checkpoint {local_checkpoint}')
+    print(f'parsed {parsed}')
     full_path = os.path.join(path_base, local_checkpoint)
-
+    print(f'full path here {full_path}')
     checkpoint = load_checkpoint(full_path)
 
     return checkpoint

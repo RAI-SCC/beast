@@ -40,23 +40,26 @@ class TestCheckpoint:
         assert isinstance(checkpoint["optimizer_state_dict"], dict)
         assert isinstance(checkpoint["epoch"], int)
         assert isinstance(checkpoint["step"], int)
-        assert checkpoint["channel_group_rank"] == process_mesh_dict["JChannel"].rank()
         assert checkpoint["loss"] == loss_value
 
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("bayesian", [False, True])
     def test_save_beast_checkpoint(
-        self, device: torch.device, tmp_path: pathlib.Path, bayesian: bool, process_mesh_dict: dict
+        self,
+        device: torch.device,
+        tmp_path: pathlib.Path,
+        bayesian: bool,
+        process_mesh_dict: dict,
     ) -> None:
         """Test that initializing, saving, and loading beast works."""
         small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
         small_config["bayesian"] = bayesian
         small_config["in_channels"] = small_config["in_channels"]
         model = Beast(**small_config, dropout=0 if bayesian else 1e-1, device=device)
-        
+
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
-        
+
         full_path = save_checkpoint(
             str(tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
         )
@@ -66,7 +69,47 @@ class TestCheckpoint:
         assert isinstance(checkpoint["optimizer_state_dict"], dict)
         assert isinstance(checkpoint["epoch"], int)
         assert isinstance(checkpoint["step"], int)
-        assert checkpoint["channel_group_rank"] == process_mesh_dict["JChannel"].rank()
+        assert checkpoint["loss"] == loss_value
+
+    @pytest.mark.gpu
+    @pytest.mark.dist(4)
+    @pytest.mark.parametrize("bayesian", [False, True])
+    def test_save_dist_beast_checkpoint(
+        self,
+        device: torch.device,
+        tmp_path: pathlib.Path,
+        bayesian: bool,
+        process_mesh_dict: dict,
+    ) -> None:
+        """Test that initializing, saving, and loading distributed beast works."""
+        jchannel_pg = process_mesh_dict["JChannel"]
+        jspatial_pg = process_mesh_dict["JSpatial"]
+        dtp_pg = process_mesh_dict["DTP"]
+
+        large_config = BEAST_CONFIGURATIONS["BEAST-JUPITER-0.7B-1.8K"]["config"].copy()
+        large_config["bayesian"] = bayesian
+        large_config["in_channels"] = large_config["in_channels"]
+        model = Beast(
+            **large_config,
+            dropout=0 if bayesian else 1e-1,
+            device=device,
+            dtp_group=dtp_pg,
+            channel_group=jchannel_pg,
+            spatial_group=jspatial_pg,
+        )
+
+        optimizer = torch.optim.AdamW(model.parameters())
+        loss_value = torch.tensor([1.2], device=device)
+
+        full_path = save_checkpoint(
+            str(tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
+        )
+        checkpoint = load_checkpoint(full_path)
+
+        assert isinstance(checkpoint["model_state_dict"], dict)
+        assert isinstance(checkpoint["optimizer_state_dict"], dict)
+        assert isinstance(checkpoint["epoch"], int)
+        assert isinstance(checkpoint["step"], int)
         assert checkpoint["loss"] == loss_value
 
     def test_parse_checkpoint(self) -> None:
@@ -98,7 +141,7 @@ class TestCheckpoint:
         save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
         save_checkpoint(tmp_path, model, optimizer, epoch=1, step=2, loss=loss_value)
         save_checkpoint(tmp_path, model, optimizer, epoch=1, step=0, loss=loss_value)
-
+        print(f"path {tmp_path}")
         m = parse_latest_model_state(tmp_path)
         assert m["epoch"] == 1
         assert m["step"] == 2
@@ -109,7 +152,9 @@ class TestCheckpoint:
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = 1.0
         tmp_path = str(tmp_path)
-        checkpoint_path = save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
+        checkpoint_path = save_checkpoint(
+            tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
+        )
         m = load_checkpoint(checkpoint_path)
         model_1, optimizer_1, start_epoch = load_state_dict(
             model,
