@@ -232,7 +232,7 @@ class DistributedTransformer(torch.nn.Module):
             self.layer_norm1.parameters(), self.layer_norm2.parameters()
         ):
             p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
+                hooks.make_grad_sync_hook(spatial_group)
             )
 
     def forward(self, x: torch.tensor):
