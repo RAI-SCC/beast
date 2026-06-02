@@ -1,4 +1,6 @@
 import pytest
+pytestmark = pytest.mark.gpu
+
 import torch
 from torch_blue.vi import convert_to_vimodule
 
@@ -50,7 +52,6 @@ class TestBeastlingModel:
 
 
 class TestDistBeastlingModel:
-    @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("n_timesteps", [1, 2])
     @pytest.mark.parametrize("bayesian", [False, True])

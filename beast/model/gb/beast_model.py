@@ -86,15 +86,15 @@ class Beast(torch.nn.Module):
         n_full_blocks: Sequence[int],
         # Noise
         noise_dim: int,
+        # Device,
+        device: torch.device,
         # Dropout
         dropout: float = 1e-1,
         # Norm
         qk_norm: bool = False,
         # Boolean flags
-        bayesian: bool,
-        nice_norm: bool,
-        # Device,
-        device: torch.device | None,
+        bayesian: bool = False,
+        nice_norm: bool = False,
         # Dtype
         dtype: torch.dtype = torch.float32,
         # Process Groups
@@ -226,7 +226,7 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding = convolutions.DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = convolutions.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -244,7 +244,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample = convolutions.DistributedConv2D(
+        self.downsample: torch.nn.Module = convolutions.DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -262,7 +262,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample = convolutions.DistributedConvTranspose2D(
+        self.upsample: torch.nn.Module = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -281,7 +281,7 @@ class Beast(torch.nn.Module):
         )
 
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix = linear.DistributedXWT(
+        self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
             self.embed_dim,
             self.embed_dim,
             bias=True,
@@ -293,7 +293,7 @@ class Beast(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery = convolutions.DistributedConvTranspose2D(
+        self.patch_recovery: torch.nn.Module = convolutions.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -436,7 +436,7 @@ class Beast(torch.nn.Module):
                 ]
             )
 
-        self.roll_out = roll.DistributedRoll(
+        self.roll_out: torch.nn.Module = roll.DistributedRoll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -445,7 +445,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_out = roll.DistributedRoll(
+        self.unroll_out: torch.nn.Module = roll.DistributedRoll(
             shifts=(
                 -(self.window_size_outer[0] // 2),
                 -(self.window_size_outer[1] // 2),
@@ -456,7 +456,7 @@ class Beast(torch.nn.Module):
             device=self.device,
             dtype=self.dtype,
         )
-        self.roll_in = roll.DistributedRoll(
+        self.roll_in: torch.nn.Module = roll.DistributedRoll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -465,7 +465,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_in = roll.DistributedRoll(
+        self.unroll_in: torch.nn.Module = roll.DistributedRoll(
             shifts=(
                 -(self.window_size_inner[0] // 2),
                 -(self.window_size_inner[1] // 2),
@@ -485,7 +485,7 @@ class Beast(torch.nn.Module):
 
     def _build_sequential_model(self) -> None:
 
-        self.patch_embedding = torch.nn.Conv2d(
+        self.patch_embedding= torch.nn.Conv2d(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -498,7 +498,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample = torch.nn.Conv2d(
+        self.downsample= torch.nn.Conv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -511,7 +511,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample = torch.nn.ConvTranspose2d(
+        self.upsample= torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -524,7 +524,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample_mix = torch.nn.Linear(
+        self.upsample_mix= torch.nn.Linear(
             self.embed_dim,
             self.embed_dim,
             bias=True,
@@ -532,7 +532,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.patch_recovery = torch.nn.ConvTranspose2d(
+        self.patch_recovery= torch.nn.ConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
