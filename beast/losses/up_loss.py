@@ -187,7 +187,7 @@ class UPAllGaussLoss(nn.Module):
         """
         data_fit, prior_matching = self.split_forward(model_output, target)
 
-        return data_fit + prior_matching
+        return data_fit + cast(float, self.kl_loss.heat) * prior_matching
 
     @property
     def log(self) -> Any:

@@ -77,6 +77,24 @@ def test_split_forward(device: torch.device) -> None:
     )
 
 
+@pytest.mark.parametrize("heat", [0.0, 0.5, 1.0])
+def test_heat(device: torch.device, heat: float) -> None:
+    """Test that the heat property of the UP loss correctly returns the value from the KL loss."""
+    model = _make_dummy_vimodule(device)
+    up_loss = UPAllGaussLoss(model=model, dataset_size=10, up_group=None, heat=heat)
+
+    target = torch.tensor([1.0], device=device)
+    samples = torch.tensor([[0.5], [1.5], [0.75], [1.25]], device=device)
+
+    data_fit, prior_matching = up_loss.split_forward(samples, target)
+    expected_loss = data_fit + heat * prior_matching
+    calculated_loss = up_loss(samples, target)
+
+    assert torch.allclose(calculated_loss, expected_loss), (
+        f"Loss mismatch with heat={heat}: {calculated_loss} vs {expected_loss}"
+    )
+
+
 @pytest.mark.dist(2)
 def test_aggregation(device: torch.device) -> None:
     """Test that the MeanStdPriorMatchingAggregation correctly aggregates statistics (and the corresponding gradients) and computes the prior matching term."""
