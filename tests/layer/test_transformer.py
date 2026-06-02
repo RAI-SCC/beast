@@ -90,11 +90,12 @@ class TestNiceTransformer:
         assert isinstance(y, torch.Tensor)
 
 
-class TestDistributedTransformer:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self):
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+@pytest.fixture(scope="module")
+def process_mesh_dict(self):
+    return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
+
+class TestDistributedTransformer:
     @pytest.mark.dist(4)
     def test_distributed_transformer_init(self, device, process_mesh_dict):
         in_dim, embed_dim, out_dim = 256, 256, 256
@@ -131,10 +132,6 @@ class TestDistributedTransformer:
 
 
 class TestDistributedNiceTransformer:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self):
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-
     @pytest.mark.dist(4)
     def test_distributed_nice_transformer_init(self, device, process_mesh_dict):
         in_dim, embed_dim, out_dim = 256, 256, 256
