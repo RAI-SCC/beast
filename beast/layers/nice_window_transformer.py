@@ -9,7 +9,7 @@ from beast.layers import nice_norm, mlp
 
 from jigsaw import attention
 
-class TransformerBlock(torch.nn.Module):
+class Transformer(torch.nn.Module):
     """Transformer block with windowed attention.
 
     Parameters
@@ -85,7 +85,7 @@ class TransformerBlock(torch.nn.Module):
 
         return x
     
-class NiceTransformerBlock(torch.nn.Module):
+class NiceTransformer(torch.nn.Module):
     """Transformer block with windowed attention and NICE normalization.
 
     Parameters
