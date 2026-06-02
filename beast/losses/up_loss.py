@@ -1,32 +1,50 @@
-from typing import Any
+"""Implements loss function for Variational Inference BNNs with Uncertainty Parallelism."""
+
+from typing import Any, Optional, cast
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch_blue.vi as vi
 from torch import Tensor
-from torch.cuda import nvtx
 from torch_blue.vi.distributions import MeanFieldNormal
 
 
-# @torch.compile(fullgraph=True, dynamic=True)
-class UP_AllGaussLoss(nn.Module):
+class UPAllGaussLoss(nn.Module):
+    """
+    Loss function for Unsupervised Prior matching with Gaussian distributions.
+
+    Parameters
+    ----------
+    model : vi.VIModule
+        The variational inference model.
+    dataset_size : int
+        Size of the dataset.
+    up_group : dist.ProcessGroup, default: None
+        Process group for Uncertainty Parallelism aggregation. If None, defaults to dist.group.WORLD.
+    loss_weights : Tensor, default: None
+        Weights for the loss calculation if there are multiple experts.
+    heat : float, default: 1.0
+        Heat / cold posterior parameter for the KL loss.
+    track : bool, default: False
+        Whether to track loss components.
+    fmodded : bool, default: False
+        Whether to use the fmodded data fitting method.
+    """
+
     def __init__(
         self,
-        model,
-        loss_weights,
-        dataset_size,
-        up_group,
-        dp_group,
-        ep_group,
-        heat=1.0,
-        track=False,
-    ):
+        model: vi.VIModule,
+        dataset_size: int,
+        up_group: Optional[dist.ProcessGroup] = None,
+        loss_weights: Optional[Tensor] = None,
+        heat: float = 1.0,
+        track: bool = False,
+        fmodded: bool = False,
+    ) -> None:
         super().__init__()
 
-        self.up_group = up_group
-        self.dp_group = dp_group
-        self.ep_group = ep_group
+        self.up_group = up_group if up_group is not None else dist.group.WORLD
 
         self.kl_loss = vi.AnalyticalKullbackLeiblerLoss(
             model,
@@ -36,214 +54,193 @@ class UP_AllGaussLoss(nn.Module):
             heat=heat,
             track=track,
         )
-        self.loss_weights = loss_weights.reshape(
-            (1, 1, -1, 1, 1)
-        )  # (batch, variables, lat, lon)
+
+        if loss_weights is None:
+            self.loss_weights = None
+        else:
+            self.loss_weights = loss_weights.reshape(
+                (1, 1, -1, 1, 1)
+            )  # (sample, batch, variables, lat, lon)
+
         self.dataset_size = dataset_size
 
-        self.aggregate_statistics = GaussianAggregation.apply
+        self.aggregate_statistics = MeanStdPriorMatchingAggregation.apply
 
-    def data_fitting(self, mean, std, target):
-        data_fit = (
-            -self.dataset_size
-            * self.kl_loss.predictive_distribution.log_prob_from_parameters(
-                target, (mean, std)
-            )
-            .mean(dim=0)
-            .sum()
+        self.fmodded = fmodded
+        self.data_fitting = (
+            self._data_fitting_fmodded if fmodded else self._data_fitting_base
         )
 
-        return data_fit
+    def _data_fitting_base(self, mean: Tensor, std: Tensor, target: Tensor) -> Tensor:
+        """
+        Calculate the data fitting loss part.
 
-    def forward(self, model_output, target):
-        nvtx.range_push("Prior Matching")
-        prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
-        nvtx.range_pop()
-        expert_output = model_output * self.loss_weights
-        expert_target = target * self.loss_weights
+        Parameters
+        ----------
+        mean : Tensor
+            The mean of the predictive distribution.
+        std : Tensor
+            The standard deviation of the predictive distribution.
+        target : Tensor
+            The target values.
 
-        nvtx.range_push("Aggregate Statistics")
-        mean, std = self.aggregate_statistics(
-            expert_output, self.up_group, self.loss_weights
-        )
-        nvtx.range_pop()
-
-        nvtx.range_push("Data Fitting")
-        data_fit = self.data_fitting(mean, std, expert_target)
-        nvtx.range_pop()
-
-        if self.kl_loss._track and self.kl_loss.log is not None:
-            self.kl_loss.log["data_fitting"].append(data_fit.item())
-            self.kl_loss.log["prior_matching"].append(prior_matching.item())
-
-        return data_fit + prior_matching
-
-    @property
-    def log(self):
-        return self.kl_loss.log
-
-
-class NewUP_AllGaussLoss(nn.Module):
-    def __init__(
-        self,
-        model,
-        loss_weights,
-        dataset_size,
-        up_group,
-        dp_group,
-        ep_group,
-        heat=1.0,
-        track=False,
-    ):
-        super().__init__()
-
-        self.up_group = up_group
-        self.dp_group = dp_group
-        self.ep_group = ep_group
-
-        self.kl_loss = vi.AnalyticalKullbackLeiblerLoss(
-            model,
-            MeanFieldNormal(),
-            divergence_type=vi.NormalNormalDivergence(),
-            dataset_size=dataset_size,
-            heat=heat,
-            track=track,
-        )
-        self.loss_weights = loss_weights.reshape(
-            (1, 1, -1, 1, 1)
-        )  # (batch, variables, lat, lon)
-        self.dataset_size = dataset_size
-
-        self.aggregate_statistics = FullAggregation.apply
-
-    def data_fitting(self, mean, std, target):
-        # data_fit = (
-        #     -self.dataset_size
-        #     * self.kl_loss.predictive_distribution.log_prob_from_parameters(
-        #         target, (mean, std)
-        #     )
-        #     .mean(dim=0)
-        #     .sum()
-        # )
+        Returns
+        -------
+        Tensor
+            The calculated data fitting loss.
+        """
         log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(
             target, (mean, std)
         ).mean(dim=0)
+
+        data_fit = -self.dataset_size * log_prob.sum()
+
+        return cast(Tensor, data_fit)
+
+    def _data_fitting_fmodded(
+        self, mean: Tensor, std: Tensor, target: Tensor
+    ) -> Tensor:
+        """
+        Calculate the fmodded data fitting loss. Reduces the chance of overflow, but makes interpreting the loss value more difficult.
+
+        Parameters
+        ----------
+        mean : Tensor
+            The mean of the predictive distribution.
+        std : Tensor
+            The standard deviation of the predictive distribution.
+        target : Tensor
+            The target values.
+
+        Returns
+        -------
+        Tensor
+            The calculated data fitting loss.
+        """
+        log_prob = self.kl_loss.predictive_distribution.log_prob_from_parameters(
+            target, (mean, std)
+        ).mean(dim=0)
+
         log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
 
         return data_fit
 
-    def forward(self, model_output, target):
-        # nvtx.range_push("Prior Matching")
-        # prior_matching = self.kl_loss.heat * self.kl_loss.prior_matching()
-        # nvtx.range_pop()
-        expert_output = model_output * self.loss_weights
-        expert_target = target * self.loss_weights
+    def split_forward(
+        self, model_output: Tensor, target: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Calculate the data fitting and prior matching losses in a communication-overlapped fashion.
 
-        nvtx.range_push("Aggregate Statistics and Prior Matching (overlapped)")
+        Parameters
+        ----------
+        model_output : Tensor
+            The output from the Bayesian model.
+        target : Tensor
+            The ground truth targets.
+
+        Returns
+        -------
+        Tensor
+            The data fitting loss term. Captures how well the model fits the data.
+        Tensor
+            The prior matching loss term. Captures how well the variational distribution matches the prior distribution.
+        """
+        if self.loss_weights is not None:
+            expert_output = model_output * self.loss_weights
+            expert_target = target * self.loss_weights
+        else:
+            expert_output = model_output
+            expert_target = target
+
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
             expert_output,
             self.up_group,
-            self.loss_weights,
             *self.kl_loss._get_flat_params(),
+            self.loss_weights,
         )
-        nvtx.range_pop()
 
-        nvtx.range_push("Data Fitting")
         data_fit = self.data_fitting(mean, std, expert_target)
-        nvtx.range_pop()
 
         if self.kl_loss._track and self.kl_loss.log is not None:
             self.kl_loss.log["data_fitting"].append(data_fit.item())
             self.kl_loss.log["prior_matching"].append(prior_matching.item())
 
-        return data_fit + prior_matching
+        return data_fit, prior_matching
+
+    def forward(self, model_output: Tensor, target: Tensor) -> Tensor:
+        """
+        Compute the total loss.
+
+        Parameters
+        ----------
+        model_output : Tensor
+            The output from the model.
+        target : Tensor
+            The ground truth targets.
+
+        Returns
+        -------
+        Tensor
+            The combined KL loss consisting of the data fitting and prior matching terms.
+        """
+        data_fit, prior_matching = self.split_forward(model_output, target)
+
+        return data_fit + cast(float, self.kl_loss.heat) * prior_matching
 
     @property
-    def log(self):
+    def log(self) -> Any:
+        """Get the log from the KL loss."""
         return self.kl_loss.log
 
 
-class GaussianAggregation(torch.autograd.Function):
-    @staticmethod
-    def forward(samples, up_process_group, loss_weights):
-        up_num = up_process_group.size()
-        total_samples = samples.shape[0] * up_num
+class MeanStdPriorMatchingAggregation(torch.autograd.Function):
+    """Autograd function to aggregate statistics and compute prior matching in parallel to the communication."""
 
-        local_sum_result = torch.cat(
-            [
-                (samples.sum(dim=0) / total_samples),
-                ((samples**2).sum(dim=0) / (total_samples - 1)),
-            ],
-            dim=0,
-        )
-        ls_shape = local_sum_result.shape
-
-        handle = dist.all_reduce(
-            local_sum_result,
-            op=dist.ReduceOp.SUM,
-            group=up_process_group,
-            async_op=True,
-        )
-
-        replace_val = loss_weights == 0.0
-        replace_val = replace_val.reshape(1, -1, 1, 1)
-        # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-        replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
-
-        handle.wait()
-        mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
-        var = local_sum_result[1, :, :, :].unsqueeze(dim=0)
-
-        var = var - (mean**2) * (total_samples / (total_samples - 1))
-        var = torch.abs(var) + 1e-10
-
-        std = torch.sqrt(var)
-
-        std = torch.where(replace_val, 1.0, std)
-
-        return mean, std
-
-    @staticmethod
-    def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> Any:
-        samples, up_process_group, loss_weights = inputs
-        mean, std = output
-
-        ctx.up_process_group = up_process_group
-        ctx.save_for_backward(samples, mean, std)
-
-    @staticmethod
-    def backward(ctx: Any, grad_mean, grad_std) -> Any:
-        up_process_group = ctx.up_process_group
-        samples, mean, std = ctx.saved_tensors
-
-        N_loc = samples.shape[0]
-        N_glob = N_loc * up_process_group.size()
-
-        mean = mean.unsqueeze(dim=0)
-        std = std.unsqueeze(dim=0)
-        grad_mean = grad_mean.unsqueeze(dim=0)
-        grad_std = grad_std.unsqueeze(dim=0)
-
-        grad_samples = (grad_mean / N_glob) + (grad_std / (N_glob - 1)) * (
-            samples - mean
-        ) / std
-
-        return grad_samples, None, None
-
-
-class FullAggregation(torch.autograd.Function):
     @staticmethod
     def forward(
-        samples,
-        up_process_group,
-        loss_weights,
+        samples: Tensor,
+        up_process_group: dist.ProcessGroup,
         prior_means: Tensor,
         prior_log_stds: Tensor,
         variational_means: Tensor,
         variational_log_stds: Tensor,
-    ):
+        loss_weights: Optional[Tensor] = None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """
+        Forward pass for mean-std / prior matching aggregation.
+
+        Parameters
+        ----------
+        samples : Tensor
+            The samples to aggregate.
+        up_process_group : dist.ProcessGroup
+            The process group corresponding to Uncertainty Parallelism.
+        prior_means : Tensor
+            Means of the prior distributions.
+        prior_log_stds : Tensor
+            Log standard deviations of the prior distributions.
+        variational_means : Tensor
+            Means of the variational distributions.
+        variational_log_stds : Tensor
+            Log standard deviations of the variational distributions.
+        loss_weights : Tensor, default: None
+            Expert weights to apply to the aggregation.
+
+        Returns
+        -------
+        Tensor
+            The aggregated mean across the UP group.
+        Tensor
+            The aggregated standard deviation across the UP group.
+        Tensor
+            The computed prior matching loss.
+        Tensor
+            The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+        Tensor
+            The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+        """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
 
@@ -263,40 +260,56 @@ class FullAggregation(torch.autograd.Function):
             async_op=True,
         )
 
-        replace_val = loss_weights == 0.0
-        replace_val = replace_val.reshape(1, -1, 1, 1)
-        # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-        replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
+        if loss_weights is not None:
+            replace_val = loss_weights == 0.0
+            replace_val = replace_val.reshape(1, -1, 1, 1)
+            # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
+            replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
 
         prior_matching, variance_ratio, mse_part_half = gaussian_prior_matching(
             prior_means, prior_log_stds, variational_means, variational_log_stds
         )
 
         handle.wait()
-        mean = local_sum_result[0, :, :, :].unsqueeze(dim=0)
-        var = local_sum_result[1, :, :, :].unsqueeze(dim=0)
+        mean = local_sum_result[0, ...].unsqueeze(dim=0)
+        var = local_sum_result[1, ...].unsqueeze(dim=0)
 
         var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
 
         std = torch.sqrt(var)
 
-        std = torch.where(replace_val, 1.0, std)
+        if loss_weights is not None:
+            std = torch.where(replace_val, 1.0, std)
 
         return mean, std, prior_matching, variance_ratio, mse_part_half
 
     @staticmethod
-    def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> Any:
+    def setup_context(
+        ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Any, ...]
+    ) -> None:
+        """
+        Set up the context for the backward pass.
+
+        Parameters
+        ----------
+        ctx : Any
+            The autograd context.
+        inputs : tuple[Any, ...]
+            The inputs to the forward pass.
+        outputs : tuple[Any, ...]
+            The outputs from the forward pass.
+        """
         (
             samples,
             up_process_group,
-            loss_weights,
             prior_means,
             prior_log_stds,
             variational_means,
             variational_log_stds,
+            loss_weights,
         ) = inputs
-        mean, std, prior_matching, variance_ratio, mse_part_half = output
+        mean, std, prior_matching, variance_ratio, mse_part_half = outputs
 
         ctx.mark_non_differentiable(variance_ratio, mse_part_half)
         ctx.up_process_group = up_process_group
@@ -304,20 +317,60 @@ class FullAggregation(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx: Any, grad_mean, grad_std, grad_pm, grad_vr: None, grad_mse_half: None
-    ) -> Any:
+        ctx: Any,
+        grad_mean: Tensor,
+        grad_std: Tensor,
+        grad_pm: Tensor,
+        grad_vr: None,
+        grad_mse_half: None,
+    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None]:
+        """
+        Backward pass for mean-std / prior matching aggregation.
+
+        Parameters
+        ----------
+        ctx : Any
+            The autograd context.
+        grad_mean : Tensor
+            Gradient with respect to the mean.
+        grad_std : Tensor
+            Gradient with respect to the standard deviation.
+        grad_pm : Tensor
+            Gradient with respect to the prior matching loss.
+        grad_vr : None
+            Gradient with respect to variance ratio (unused but necessary for autograd).
+        grad_mse_half : None
+            Gradient with respect to mse part half (unused but necessary for autograd).
+
+        Returns
+        -------
+        Tensor
+            Gradient with respect to the input samples.
+        None
+            No gradient for the up_process_group.
+        None
+            No gradient for the prior_means.
+        None
+            No gradient for the prior_log_stds.
+        Tensor
+            Gradient with respect to the variational_means.
+        Tensor
+            Gradient with respect to the variational_log_stds.
+        None
+            No gradient for the loss_weights.
+        """
         up_process_group = ctx.up_process_group
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
 
-        N_loc = samples.shape[0]
-        N_glob = N_loc * up_process_group.size()
+        n_loc = samples.shape[0]
+        n_glob = n_loc * up_process_group.size()
 
         mean = mean.unsqueeze(dim=0)
         std = std.unsqueeze(dim=0)
         grad_mean = grad_mean.unsqueeze(dim=0)
         grad_std = grad_std.unsqueeze(dim=0)
 
-        grad_samples = (grad_mean / N_glob) + (grad_std / (N_glob - 1)) * (
+        grad_samples = (grad_mean / n_glob) + (grad_std / (n_glob - 1)) * (
             samples - mean
         ) / std
 
@@ -325,7 +378,7 @@ class FullAggregation(torch.autograd.Function):
         grad_var_means = grad_pm * mse_part_half
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
-        return grad_samples, None, None, None, None, grad_var_means, grad_var_log_stds
+        return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
 
 
 @torch.compile
@@ -334,7 +387,30 @@ def gaussian_prior_matching(
     prior_log_stds: Tensor,
     variational_means: Tensor,
     variational_log_stds: Tensor,
-):
+) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    Compute of the KL divergence between two Gaussian distributions for prior matching.
+
+    Parameters
+    ----------
+    prior_means : Tensor
+        Means of the prior distribution.
+    prior_log_stds : Tensor
+        Log standard deviations of the prior distribution.
+    variational_means : Tensor
+        Means of the variational distribution.
+    variational_log_stds : Tensor
+        Log standard deviations of the variational distribution.
+
+    Returns
+    -------
+    Tensor
+        The computed prior matching loss.
+    Tensor
+        The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+    Tensor
+        The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+    """
     variational_variance = torch.exp(2 * variational_log_stds)
     prior_variance = torch.exp(
         torch.tensor(2, device=variational_means.device) * prior_log_stds
