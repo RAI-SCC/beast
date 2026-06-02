@@ -4,7 +4,7 @@ import itertools
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, hooks
+from jigsaw import attention, hooks  # type: ignore
 
 from beast.layers import mlp, nice_norm
 

@@ -1,13 +1,13 @@
 import pytest
-pytestmark = pytest.mark.gpu
-
 import torch
 from torch_blue.vi import convert_to_vimodule
 
-from beast.comm import create_process_mesh_dict
+from beast.comm import create_process_mesh_dict, shutdown_comm
 from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.model.gb.beast_model import Beast
 from beast.model.utils import convert_jigsaw_vi
+
+pytestmark = pytest.mark.gpu
 
 
 class TestBeastlingModel:
@@ -51,23 +51,29 @@ class TestBeastlingModel:
                 )
 
 
+@pytest.fixture(scope="module")
+def process_mesh_dict():
+    process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+    yield process_mesh_dict
+    shutdown_comm()
+
+
 class TestDistBeastlingModel:
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("n_timesteps", [1, 2])
     @pytest.mark.parametrize("bayesian", [False, True])
     @pytest.mark.parametrize("batch_size", [1, 2])
     def test_4way_beastling(
-        self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
+        self,
+        n_timesteps: int,
+        bayesian: bool,
+        batch_size: int,
+        device: torch.device,
+        process_mesh_dict,
     ) -> None:
-        mesh_dict = create_process_mesh_dict(
-            [1, 1, 1, 2, 2], device_type=str(device.type)
-        )
-        mesh_dict = create_process_mesh_dict(
-            [1, 1, 1, 2, 2], device_type=str(device.type)
-        )
-        jchannel_pg = mesh_dict["JChannel"]
-        jspatial_pg = mesh_dict["JSpatial"]
-        dtp_pg = mesh_dict["DTP"]
+        jchannel_pg = process_mesh_dict["JChannel"]
+        jspatial_pg = process_mesh_dict["JSpatial"]
+        dtp_pg = process_mesh_dict["DTP"]
 
         small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
         small_config["bayesian"] = bayesian
@@ -117,14 +123,16 @@ class TestDistBeastModel:
     @pytest.mark.parametrize("bayesian", [False])
     @pytest.mark.parametrize("batch_size", [1, 2])
     def test_4way_beast(
-        self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
+        self,
+        n_timesteps: int,
+        bayesian: bool,
+        batch_size: int,
+        device: torch.device,
+        process_mesh_dict,
     ) -> None:
-        mesh_dict = create_process_mesh_dict(
-            [1, 1, 1, 2, 2], device_type=str(device.type)
-        )
-        jchannel_pg = mesh_dict["JChannel"]
-        jspatial_pg = mesh_dict["JSpatial"]
-        dtp_pg = mesh_dict["DTP"]
+        jchannel_pg = process_mesh_dict["JChannel"]
+        jspatial_pg = process_mesh_dict["JSpatial"]
+        dtp_pg = process_mesh_dict["DTP"]
 
         large_config = BEAST_CONFIGURATIONS["BEAST-JUPITER-0.7B-1.8K"]["config"].copy()
         large_config["bayesian"] = bayesian

@@ -4,7 +4,7 @@ from typing import Callable
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear
+from jigsaw import hooks, linear  # type: ignore
 
 
 class MLP(torch.nn.Module):
