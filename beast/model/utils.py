@@ -48,21 +48,12 @@ def convert_jigsaw_vi(
         Whether the converted module should return log probabilities, by default True
     """
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
-<<<<<<< HEAD
-    torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
-    torch_blue.vi.utils.convert.ban_convert(NiceNorm)
-    torch_blue.vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
-    torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
-
-    torch_blue.vi.convert_to_vimodule(
-=======
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
     vi.convert_to_vimodule(
->>>>>>> refactor/model
         module,
         variational_distribution=variational_distribution,
         prior=prior,
@@ -81,18 +72,7 @@ def convert_jigsaw_vi(
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
-<<<<<<< HEAD
-    fan_in_rescale_list = ["AVIDistributedXWTSync", "AVIConvTranspose2d"]
-
-    weight_sync_list = [
-        "VIConv2d",
-        "AVIConvTranspose2d",
-        "AVIDistributedXWTSync",
-        "AVIDistributedXWT_Nice",
-    ]
-=======
     fan_in_rescale_list = ["AVIDistributedSynchronizedMLP", "AVIConvTranspose2d"]
->>>>>>> refactor/model
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
@@ -102,17 +82,12 @@ def convert_jigsaw_vi(
             m._calculate_fan_in = types.MethodType(new_cf_channel, m)
             m.reset_variational_parameters()
 
-<<<<<<< HEAD
-        if class_name in weight_sync_list:
-            utils_aggregate.average_weights_module(m, spatial_pg)
-=======
         if isinstance(m, vi.VIModule):
             for p in m.parameters(recurse=False):
                 p.register_post_accumulate_grad_hook(
                     hooks.make_grad_sync_hook(spatial_pg)
                 )
                 dist.broadcast(p.data, group_src=0, group=spatial_pg)
->>>>>>> refactor/model
 
 
 # TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.

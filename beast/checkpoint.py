@@ -16,71 +16,130 @@ def save_checkpoint(
     step: int | None,
     loss: float,
 ):
+    """
+    Save checkpoint to file.
 
-    channel_group = get_process_group("JChannel")
-    ep_group = get_process_group("Expert")
+    If there is no channel_group defined, this assumes that the model is
+    not distributed. Model will save on global rank = 0.
 
-    # rank = dist.get_rank()
-    ddp_rank = get_process_group("DDP").rank()
+    Parameters
+    ----------
+    checkpoint_path: str
+        Name of checkpoint
+    model: torch.nn.Module
+        Model to save
+    optimizer: torch.optim
+        Optimizer to save
+    epoch: int
+        Current epoch
+    step: int
+        Current step within batches
+    loss: torch.Tensor
+        Average loss value
+    """
+
+    try:
+        channel_group = model.channel_group
+    except Exception:
+        channel_group = None
+
+    if channel_group is None:
+        channel_group_rank = -1
+        ddp_rank = dist.get_rank(group=None)
+    else:
+        channel_group_rank = channel_group.rank()
+        ddp_rank = get_process_group("DDP").rank()
+
     cp = {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "epoch": epoch,
         "step": step,
-        "ep_group_rank": ep_group.rank(),
-        "channel_group_rank": channel_group.rank(),
-        "loss": loss.item(),
+        "channel_group_rank": channel_group_rank,
+        "loss": loss.item() if isinstance(loss, torch.Tensor) else loss,
         "format": 1,
     }
+
     model_name = (
-        f"cp-epoch{epoch}-step{step}-e{ep_group.rank()}-jc{channel_group.rank()}"
+        f"cp-epoch{epoch}-step{step}"
+        if channel_group is None
+        else f"cp-epoch{epoch}-step{step}-jc{channel_group.rank()}"
     )
 
     if ddp_rank == 0:
         torch.save(cp, f"{checkpoint_path}/{model_name}.pt")
-        
+
     return f"{checkpoint_path}/{model_name}.pt"
 
 
 def load_checkpoint(
     checkpoint_path: str, map_location="cpu"
 ) -> tuple[dict, dict, int, int | None, int, int, float]:
-    """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, expert group rank, and channel group rank."""
+    """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank."""
     checkpoint = torch.load(
         checkpoint_path, map_location=map_location, weights_only=False
     )
     return checkpoint
 
-def parse_checkpoint(fname):
-    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-e(\d+)-jc(\d+)\.pt$", fname)
-    if not m:
-        return None
+
+def parse_checkpoint(fname: str) -> dict:
+    """Parse epochs, step, and channel rank from the checkpoint name.
+
+    Parameters
+    ----------
+    fname: str
+        Name of checkpoint file. Should be formatted as f"cp-epoch{num}-step{num}-jc{num}.pt"
+        If the model is not distributed, the file name is just f"cp-epoch{num}-step{num}.pt"
+
+    Returns
+    -------
+    dictionary of epoch, step, channel rank, checkpoint file name.
+    """
+    if "jc" in fname:
+        m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-jc(\d+)\.pt$", fname)
+        if not m:
+            return m
+        epoch, step, jchannel_rank = (
+            int(m.group(1)),
+            int(m.group(2)) if m.group(2) else -1,
+            int(m.group(3)),
+        )
+    else:
+        m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?.pt$", fname)
+        if not m:
+            return m
+        epoch, step, jchannel_rank = (
+            int(m.group(1)),
+            int(m.group(2)) if m.group(2) else -1,
+            -1,
+        )
+
     return {
-        "epoch": int(m.group(1)),
-        "step": int(m.group(2)) if m.group(2) else -1,
-        "expert_rank": int(m.group(3)),
-        "jchannel_rank": int(m.group(4)),
+        "epoch": epoch,
+        "step": step,
+        "jchannel_rank": jchannel_rank,
         "fname": fname,
     }
 
 
-def parse_latest_model_state(directory):
-    end_of_epoch_directory = os.path.join(directory, "checkpoints")
+def parse_latest_model_state(directory: str) -> dict:
+    """Parse the latest model state and return checkpoint."""
+    end_of_epoch_directory = os.path.join(directory)
     path_base = end_of_epoch_directory
     checkpoints = [
         fname for fname in os.listdir(end_of_epoch_directory) if fname.endswith(".pt")
     ]
+    print(f"list of checpoints {checkpoints}")
     local_checkpoint = ""
-    latest_step = -1
-    ep_group_rank = get_process_group("Expert").rank()
-    jc_group_rank = get_process_group("JChannel").rank()
+    try:
+        jc_group_rank = get_process_group("JChannel").rank()
+    except Exception:
+        jc_group_rank = -1
 
     parsed = []
     for fname in checkpoints:
         info = parse_checkpoint(fname)
         if info is None:
-            continue
-        if info["expert_rank"] != ep_group_rank:
             continue
         if info["jchannel_rank"] != jc_group_rank:
             continue
@@ -89,33 +148,12 @@ def parse_latest_model_state(directory):
     if parsed:
         latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
         local_checkpoint = latest["fname"]
-        latest_step = latest["step"] if latest["step"] != -1 else None
 
     full_path = os.path.join(path_base, local_checkpoint)
-    print(f"Rank {dist.get_rank()}: Loading checkpoint from {full_path}")
 
-    (
-        model_state_dict,
-        optimizer_state_dict,
-        epoch,
-        step,
-        ep_group_rank,
-        channel_group_rank,
-        loss,
-    ) = load_checkpoint(full_path)
+    checkpoint = load_checkpoint(full_path)
 
-    if not latest_step == -1:
-        epoch -= 1
-
-    return (
-        model_state_dict,
-        optimizer_state_dict,
-        epoch,
-        step,
-        ep_group_rank,
-        channel_group_rank,
-        loss,
-    )
+    return checkpoint
 
 
 def load_state_dict(

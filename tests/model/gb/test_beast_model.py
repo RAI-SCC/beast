@@ -69,7 +69,7 @@ class TestDistBeastlingModel:
         bayesian: bool,
         batch_size: int,
         device: torch.device,
-        process_mesh_dict,
+        process_mesh_dict: dict,
     ) -> None:
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
@@ -128,7 +128,7 @@ class TestDistBeastModel:
         bayesian: bool,
         batch_size: int,
         device: torch.device,
-        process_mesh_dict,
+        process_mesh_dict: dict,
     ) -> None:
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
