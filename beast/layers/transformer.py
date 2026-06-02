@@ -1,8 +1,9 @@
 import itertools
+
 import torch
 import torch.distributed as dist
-
 from jigsaw import attention, hooks
+
 from beast.layers import mlp, nice_norm
 
 

@@ -27,7 +27,7 @@ def test_gpu_marker(self, device: torch.device) -> None:
 To activate GPU tests, pass the `--device cuda` option on the command line:
 
 ```console
-λ pytest --device cuda  
+λ pytest --device cuda
 ```
 
 If no GPUs are available, the test will be skipped. The device fixture can still be used, in case the tests also need to run on CPU.
@@ -60,4 +60,3 @@ To parallelize the tests, start pytest with mpi.
 ```console
 mpirun -n 4 pytest
 ```
-

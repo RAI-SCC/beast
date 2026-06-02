@@ -1,7 +1,6 @@
 import torch
 import torch.distributed as dist
-
-from jigsaw import linear, hooks
+from jigsaw import hooks, linear
 
 
 class MLP(torch.nn.Module):
@@ -35,7 +34,11 @@ class MLP(torch.nn.Module):
         super().__init__()
 
         self.linear1 = torch.nn.Linear(
-            input_dim, hidden_dim, bias=bias, device=device, dtype=dtype,
+            input_dim,
+            hidden_dim,
+            bias=bias,
+            device=device,
+            dtype=dtype,
         )
         self.linear2 = torch.nn.Linear(
             hidden_dim, output_dim, bias=bias, device=device, dtype=dtype
@@ -63,13 +66,17 @@ class MLP(torch.nn.Module):
         x = self.dropout(x)
         return x
 
+
 def make_grad_input_hook(group):
     """All-reduce grad_input (activation grad) across the channel group."""
+
     def hook(grad):
         grad = grad.contiguous()
         dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
-        return grad                                               # replaces grad
+        return grad  # replaces grad
+
     return hook
+
 
 class DistributedMLPNICE(torch.nn.Module):
     """Distributed MLP across n processes."""
@@ -99,12 +106,16 @@ class DistributedMLPNICE(torch.nn.Module):
             Global output dimension of MLP.
         bias : bool, optional
             If True, adds a learnable bias to the output (default is True).
-        device : torch.device
-            Device to perform computation on.
-        parallelism: int
-            Number of processes that model is distributed over.
         local_rank : int
             Model local_rank.
+        device : torch.device
+            Device to perform computation on.
+        model_group: torch.ProcessGroup
+            Process group of the model. Union of the spatial and channel groups.
+        spatial_group: torch.ProcessGroup
+            Process group of the spatial ranks.
+        channel_group: torch.ProcessGroup
+            Process group of the channel ranks.
         """
         super().__init__()
         self.local_rank = local_rank
@@ -113,8 +124,10 @@ class DistributedMLPNICE(torch.nn.Module):
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
-        assert hidden_dim % channel_group.size() == 0, "hidden_dim is not divisble by the channel group size."
-        
+        assert hidden_dim % channel_group.size() == 0, (
+            "hidden_dim is not divisble by the channel group size."
+        )
+
         self.linear1 = torch.nn.Linear(
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
@@ -127,9 +140,9 @@ class DistributedMLPNICE(torch.nn.Module):
             model_group=channel_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
-            bayesian=False
+            bayesian=False,
         )
-            
+
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
         for p in self.parameters():
@@ -137,7 +150,7 @@ class DistributedMLPNICE(torch.nn.Module):
                 hooks.make_grad_sync_hook(self.spatial_group)
             )
             dist.broadcast(p.data, group_src=0, group=self.spatial_group)
-        
+
         self.activation = torch.nn.GELU()
 
     def forward(self, x):
@@ -210,7 +223,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             p.register_post_accumulate_grad_hook(
                 hooks.make_grad_sync_hook(self.sync_group)
             )
-            
+
         self.activation = torch.nn.GELU()
         self.drop = torch.nn.Dropout(p=dropout)
         self.drop2 = torch.nn.Dropout(p=dropout)

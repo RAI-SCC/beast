@@ -90,9 +90,7 @@ class TestDistBeastlingModel:
                 device=device,
             )
             if bayesian:
-                convert_jigsaw_vi(
-                    model, jchannel_pg, jspatial_pg
-                )
+                convert_jigsaw_vi(model, jchannel_pg, jspatial_pg)
                 y = model(x, samples=2)
                 assert y.shape == (
                     2,

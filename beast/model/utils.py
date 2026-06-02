@@ -3,7 +3,6 @@
 import types
 
 import jigsaw.normalization as normalization  # type: ignore[import-not-found]
-import jigsaw.utils_aggregate  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi.distributions as vidist
@@ -49,9 +48,7 @@ def convert_jigsaw_vi(
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     torch_blue.vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     torch_blue.vi.utils.convert.ban_convert(NiceNorm)
-    torch_blue.vi.utils.convert.ban_convert(
-        DistributedNICENorm, ban_mode="submodule"
-    )
+    torch_blue.vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     torch_blue.vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
 
     torch_blue.vi.convert_to_vimodule(

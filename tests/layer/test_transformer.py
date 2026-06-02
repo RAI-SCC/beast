@@ -5,11 +5,9 @@ import torch
 
 from beast.comm import create_process_mesh_dict
 from beast.layers import transformer
-from jigsaw import utils_aggregate
 
 
 class TestTransformer:
-
     def test_transformer_init(self, device):
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
@@ -45,13 +43,12 @@ class TestTransformer:
             dtype=torch.float32,
         )
         # x dummy data
-        X = torch.randn(1, seq_length, in_dim, device=device)
-        y = model(X)
-        assert isinstance(y, torch.Tensor)
+        x = torch.randn(1, seq_length, in_dim, device=device)
+        pred = model(x)
+        assert isinstance(pred, torch.Tensor)
 
 
 class TestNiceTransformer:
-
     def test_nice_transformer_init(self, device):
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
@@ -87,9 +84,9 @@ class TestNiceTransformer:
             dtype=torch.float32,
         )
         # x dummy data
-        X = torch.randn(1, seq_length, in_dim, device=device)
+        x = torch.randn(1, seq_length, in_dim, device=device)
         noise = torch.randn(1, noise_dim, device=device)
-        y = model(X, noise)
+        y = model(x, noise)
         assert isinstance(y, torch.Tensor)
 
 
@@ -123,13 +120,14 @@ class TestDistributedTransformer:
         batch_size, n_windows = 10, 10
         seq_local = 64
 
-        X = torch.randn(
+        x = torch.randn(
             batch_size * n_windows,
             seq_local,
             in_dim // process_mesh_dict["JChannel"].size(),
             device=device,
         )
-        pred = model(X)
+        pred = model(x)
+        assert isinstance(pred, torch.Tensor)
 
 
 class TestDistributedNiceTransformer:
@@ -188,12 +186,12 @@ class TestDistributedNiceTransformer:
         batch_size = 2
         n_windows = 10
 
-        X = torch.randn(
+        x = torch.randn(
             batch_size * n_windows,
             seq_local,
             in_dim // process_mesh_dict["JChannel"].size(),
             device=device,
         )
         noise = torch.randn(batch_size * n_windows, noise_dim, device=device)
-        pred = model(X, noise)
-        
+        pred = model(x, noise)
+        assert isinstance(pred, torch.Tensor)
