@@ -455,10 +455,12 @@ class DummyDataset(Dataset):
         else:
             max_date = datetime.strptime("2000-12-31", "%Y-%m-%d")
             min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
+        print(f"Dummy Dataset max_date {max_date}, min_date {min_date} ")
 
         self.num_vars, self.xlat, self.xlon = global_shape
         self.n_data_items = int((max_date - min_date).days * 24)
-        print(f"max_date {max_date}, min_date {min_date}, self.n_data_items {self.n_data_items}")
+        print(f"Dummy Dataset n_data_items {self.n_data_items} ")
+
         if self.xlat%2 == 1:
             self.xlat -= 1
         if self.xlon%2 == 1:

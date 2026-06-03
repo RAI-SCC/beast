@@ -34,11 +34,12 @@ def generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
 
     lat_coords = np.linspace(90, -90, n_lat, dtype=np.float32)
     lon_coords = np.linspace(0, 360, n_lon, endpoint=False, dtype=np.float32)
-
+    encoding = {
+        "time": {"units": f"hours since {time_coords[0]}", "dtype": "float64"}
+    }
     for t in range(n_time):
         np.random.seed(t)
         data_step = np.random.rand(1, n_features, n_lat, n_lon).astype(np.float32)
-
         ds_step = xr.Dataset(
             data_vars={
                 "fields": xr.DataArray(
@@ -55,10 +56,10 @@ def generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
         )
  
         if t == 0:
-            ds_step.to_zarr(zarr_path, mode="w")
+            ds_step.to_zarr(zarr_path, mode="w", encoding=encoding)
         else:
             ds_step.to_zarr(zarr_path, append_dim="time")
-
+    
     return zarr_path
 
 def generate_mock_masks(path, xlat, xlon, n_masks):
@@ -436,6 +437,7 @@ class TestDataset:
         out_timesteps = 1
 
         shape = (n_features, xlat, xlon)
+        print(f"DummyDataset time_coords {time_coords}")
 
         dataset = DummyDataset(
             rank,
