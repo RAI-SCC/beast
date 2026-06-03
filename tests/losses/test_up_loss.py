@@ -162,9 +162,12 @@ def test_feature_weights(
 
     ref_data_fit = ref_data_fit.sum()
 
-    assert torch.allclose(prior_matching, ref_prior_matching)
-    print(data_fit, ref_data_fit)
-    assert torch.allclose(data_fit, ref_data_fit)
+    assert torch.allclose(prior_matching, ref_prior_matching), (
+        f"Rank {rank} / {world_size}: Prior matching term mismatch: {prior_matching} vs {ref_prior_matching}"
+    )
+    assert torch.allclose(data_fit, ref_data_fit), (
+        f"Rank {rank} / {world_size}: Data fitting term mismatch: {data_fit} vs {ref_data_fit}"
+    )
 
 
 @pytest.mark.parametrize("heat", [0.0, 0.5, 1.0])
