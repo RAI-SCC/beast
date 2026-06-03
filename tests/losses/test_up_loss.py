@@ -1,7 +1,7 @@
 """Tests for the UP loss and related functionality."""
 
 import math
-from typing import cast
+from typing import Optional, cast
 
 import pytest
 import torch
@@ -81,7 +81,7 @@ def test_split_forward(dummy_module: vi.VIModule, device: torch.device) -> None:
         model=dummy_module, dataset_size=dataset_size, up_group=up_group
     )
 
-    assert up_loss.loss_weights is None, (
+    assert up_loss.feature_weights is None, (
         "Loss weights should be None unless specified otherwise."
     )
 
@@ -114,6 +114,59 @@ def test_split_forward(dummy_module: vi.VIModule, device: torch.device) -> None:
     )
 
 
+@pytest.mark.dist(2)
+@pytest.mark.parametrize(
+    "feature_weights", [None, torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0])]
+)
+def test_feature_weights(
+    feature_weights: Optional[Tensor], dummy_module: vi.VIModule, device: torch.device
+) -> None:
+    """Test feature weighting."""
+
+    dataset_size = 10
+    up_group = dist.group.WORLD
+    loss = UPAllGaussLoss(
+        model=dummy_module,
+        dataset_size=dataset_size,
+        up_group=up_group,
+        feature_weights=feature_weights,
+    )
+    ref_loss = UPAllGaussLoss(
+        model=dummy_module,
+        dataset_size=dataset_size,
+        up_group=up_group,
+        feature_weights=None,
+    )
+
+    target = torch.randn(4, 5, 2, 2, device=device, generator=torch.manual_seed(13))
+    samples = torch.randn(6, 4, 5, 2, 2, device=device, generator=torch.manual_seed(1))
+
+    world_size = up_group.size() if up_group is not None else 1
+    rank = up_group.rank() if up_group is not None else 0
+    local_samples = samples[rank::world_size, ...]
+
+    data_fit, prior_matching = loss.split_forward(local_samples, target)
+
+    ref_data_fit_list, ref_prior_matching_list = [], []
+    if feature_weights is None:
+        feature_weights = torch.ones(5)
+    for i in range(5):
+        rdf, rpm = ref_loss.split_forward(
+            local_samples[..., i, :, :], target[..., i, :, :]
+        )
+        ref_data_fit_list.append(rdf * feature_weights[i])
+        ref_prior_matching_list.append(rpm)
+
+    ref_data_fit = torch.stack(ref_data_fit_list, dim=-1)
+    ref_prior_matching = torch.stack(ref_prior_matching_list, dim=-1)
+
+    ref_data_fit = ref_data_fit.sum()
+
+    assert torch.allclose(prior_matching, ref_prior_matching)
+    print(data_fit, ref_data_fit)
+    assert torch.allclose(data_fit, ref_data_fit)
+
+
 @pytest.mark.parametrize("heat", [0.0, 0.5, 1.0])
 def test_heat(dummy_module: vi.VIModule, device: torch.device, heat: float) -> None:
     """Test that the heat property of the UP loss correctly returns the value from the KL loss."""
@@ -141,7 +194,7 @@ def test_aggregation(dummy_module: vi.VIModule, device: torch.device) -> None:
     world_size = up_group.size() if up_group is not None else 1
     rank = up_group.rank() if up_group is not None else 0
 
-    samples = torch.tensor([[0.5], [1.5], [0.75], [1.25]], device=device)
+    samples = torch.randn(8, 3, 4, 2, 2, device=device, generator=torch.manual_seed(7))
     local_samples = samples[rank::world_size, ...].requires_grad_(True)
 
     parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)
@@ -171,6 +224,31 @@ def test_aggregation(dummy_module: vi.VIModule, device: torch.device) -> None:
     assert torch.allclose(std, global_std), f"Std mismatch: {std} vs {global_std}"
     assert torch.allclose(prior_matching, expected_prior_matching), (
         f"Prior matching term mismatch: {prior_matching} vs {expected_prior_matching}"
+    )
+
+
+@pytest.mark.dist(2)
+def test_backward(dummy_module: vi.VIModule, device: torch.device) -> None:
+    up_group = dist.group.WORLD
+    world_size = up_group.size() if up_group is not None else 1
+    rank = up_group.rank() if up_group is not None else 0
+
+    samples = torch.tensor([[0.5], [1.5], [0.75], [1.25]], device=device)
+    global_mean = samples.mean(dim=0)
+    global_std = samples.std(dim=0)
+    local_samples = samples[rank::world_size, ...].requires_grad_(True)
+
+    parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)
+    parameter_log_std = cast(nn.Parameter, dummy_module._parameter_log_std)
+
+    mean, std, prior_matching, _, _ = MeanStdPriorMatchingAggregation.apply(
+        local_samples,
+        up_group,
+        torch.zeros_like(parameter_mean),
+        torch.zeros_like(parameter_log_std),
+        parameter_mean,
+        parameter_log_std,
+        None,
     )
 
     mean.backward()

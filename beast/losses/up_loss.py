@@ -21,7 +21,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         Size of the dataset.
     up_group : dist.ProcessGroup, default: None
         Process group for Uncertainty Parallelism aggregation. If None, defaults to dist.group.WORLD.
-    loss_weights : Tensor, default: None
+    feature_weights : Tensor, default: None
         Weights for the loss calculation if there are multiple experts.
     heat : float, default: 1.0
         Heat / cold posterior parameter for the KL loss.
@@ -38,7 +38,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         model: vi.VIModule,
         dataset_size: int,
         up_group: Optional[dist.ProcessGroup] = None,
-        loss_weights: Optional[Tensor] = None,
+        feature_weights: Optional[Tensor] = None,
         heat: float = 1.0,
         track: bool = False,
         use_fmod: bool = False,
@@ -54,10 +54,10 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         self.up_group = up_group if up_group is not None else dist.group.WORLD
 
-        if loss_weights is None:
-            self.loss_weights = None
+        if feature_weights is None:
+            self.feature_weights = None
         else:
-            self.loss_weights = loss_weights.reshape(
+            self.feature_weights = feature_weights.reshape(
                 (1, 1, -1, 1, 1)
             )  # (sample, batch, variables, lat, lon)
 
@@ -117,9 +117,9 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         Tensor
             The prior matching loss term. Captures how well the variational distribution matches the prior distribution.
         """
-        if self.loss_weights is not None:
-            expert_output = model_output * self.loss_weights
-            expert_target = target * self.loss_weights
+        if self.feature_weights is not None:
+            expert_output = model_output * self.feature_weights
+            expert_target = target * self.feature_weights[0]
         else:
             expert_output = model_output
             expert_target = target
@@ -128,7 +128,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             expert_output,
             self.up_group,
             *self._get_flat_params(),
-            self.loss_weights,
+            self.feature_weights,
         )
 
         data_fit = self.data_fitting(mean, std, expert_target)
@@ -171,7 +171,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         prior_log_stds: Tensor,
         variational_means: Tensor,
         variational_log_stds: Tensor,
-        loss_weights: Optional[Tensor] = None,
+        feature_weights: Optional[Tensor] = None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """
         Forward pass for mean-std / prior matching aggregation.
@@ -190,7 +190,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Means of the variational distributions.
         variational_log_stds : Tensor
             Log standard deviations of the variational distributions.
-        loss_weights : Tensor, default: None
+        feature_weights : Tensor, default: None
             Expert weights to apply to the aggregation.
 
         Returns
@@ -209,14 +209,13 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
 
-        local_sum_result = torch.cat(
+        local_sum_result = torch.stack(
             [
                 (samples.sum(dim=0) / total_samples),
                 ((samples**2).sum(dim=0) / (total_samples - 1)),
             ],
             dim=0,
         )
-        ls_shape = local_sum_result.shape
 
         handle = dist.all_reduce(
             local_sum_result,
@@ -225,26 +224,25 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             async_op=True,
         )
 
-        if loss_weights is not None:
-            replace_val = loss_weights == 0.0
-            replace_val = replace_val.reshape(1, -1, 1, 1)
-            # replace_val = replace_val.expand(std.shape[0], -1, std.shape[2], std.shape[3])
-            replace_val = replace_val.expand(1, ls_shape[1], ls_shape[2], ls_shape[3])
-
         prior_matching, variance_ratio, mse_part_half = gaussian_prior_matching(
             prior_means, prior_log_stds, variational_means, variational_log_stds
         )
 
         handle.wait()
-        mean = local_sum_result[0, ...].unsqueeze(dim=0)
-        var = local_sum_result[1, ...].unsqueeze(dim=0)
+        mean = local_sum_result[0, ...]
+        var = local_sum_result[1, ...]
 
         var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
 
         std = torch.sqrt(var)
 
-        if loss_weights is not None:
+        if feature_weights is not None:
+            replace_val = feature_weights == 0.0
+            replace_val = replace_val.reshape(1, -1, 1, 1)
+            replace_val = replace_val.expand(
+                std.shape[0], -1, std.shape[2], std.shape[3]
+            )
             std = torch.where(replace_val, 1.0, std)
 
         return mean, std, prior_matching, variance_ratio, mse_part_half
@@ -272,7 +270,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             prior_log_stds,
             variational_means,
             variational_log_stds,
-            loss_weights,
+            feature_weights,
         ) = inputs
         mean, std, prior_matching, variance_ratio, mse_part_half = outputs
 
@@ -322,7 +320,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         Tensor
             Gradient with respect to the variational_log_stds.
         None
-            No gradient for the loss_weights.
+            No gradient for the feature_weights.
         """
         up_process_group = ctx.up_process_group
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
