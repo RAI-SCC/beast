@@ -26,17 +26,17 @@ def save_checkpoint(
     Parameters
     ----------
     checkpoint_path: str
-        Name of checkpoint
+        Directory to save checkpoint to.
     model: torch.nn.Module
-        Model to save
+        Model to save.
     optimizer: torch.optim
-        Optimizer to save
+        Optimizer to save.
     epoch: int
-        Current epoch
+        Current epoch.
     step: int
-        Current step within batches
-    loss: torch.Tensor
-        Average loss value
+        Current step (batch).
+    loss: torch.Tensor | int
+        Average loss value.
     """
     try:
         channel_group = model.channel_group
@@ -82,7 +82,7 @@ def load_checkpoint(
     return checkpoint
 
 
-def parse_checkpoint(fname: str) -> dict:
+def parse_checkpoint_path(fname: str) -> dict:
     """Parse epochs, step, and channel rank from the checkpoint name.
 
     Parameters
@@ -123,17 +123,34 @@ def parse_checkpoint(fname: str) -> dict:
 
 
 def parse_latest_model_state(directory: str) -> dict:
-    """Parse the latest model state and return checkpoint."""
-    end_of_epoch_directory = os.path.join(directory)
-    path_base = end_of_epoch_directory
-    checkpoints = [
-        fname for fname in os.listdir(end_of_epoch_directory) if fname.endswith(".pt")
-    ]
+    """
+    Parse the latest model state and return checkpoint.
+
+
+    Given a directory where several checkpoints have been stored,
+    this function looks through the directory, finds the latest
+    point in training, and returns the dictionary for the relevant checkpoint.
+
+    Parameters
+    ----------
+    directory: str
+        Directory of all the checkpoints.
+
+    Returns
+    -------
+    checkpoint: dict
+        Dictionary containing model and optimizer states, epochs, and other information
+        stored in the checkpoint.
+
+    """
+    path_base = os.path.join(directory)
+
+    checkpoints = [fname for fname in os.listdir(path_base) if fname.endswith(".pt")]
     local_checkpoint = ""
 
     parsed = []
     for fname in checkpoints:
-        info = parse_checkpoint(fname)
+        info = parse_checkpoint_path(fname)
         if info is None:
             continue
         parsed.append(info)
@@ -157,7 +174,7 @@ def load_state_dict(
 ) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim, int]:
     """
     Load state dict for a given model.
-    
+
     model: torch.nn.Module
         Model to load state dict into.
     optimizer: torch.optim
@@ -169,7 +186,7 @@ def load_state_dict(
     last_epoch: int
         Epoch to load
     """
-    
+
     # DDP checks
     is_state_dict_ddp = any(k.startswith("module.") for k in model_state_dict.keys())
     if isinstance(model, DDP) and not is_state_dict_ddp:

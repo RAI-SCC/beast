@@ -5,7 +5,7 @@ import pathlib
 from beast.checkpoint import (
     save_checkpoint,
     load_checkpoint,
-    parse_checkpoint,
+    parse_checkpoint_path,
     parse_latest_model_state,
     load_state_dict,
 )
@@ -115,7 +115,7 @@ class TestCheckpoint:
     def test_parse_checkpoint(self) -> None:
         """Test that parsing a checkpoint file name works."""
         fname = "cp-epoch7-step0-jc1.pt"
-        m = parse_checkpoint(fname)
+        m = parse_checkpoint_path(fname)
         assert set(m.keys()) == {
             "epoch",
             "step",
@@ -128,7 +128,7 @@ class TestCheckpoint:
         assert m["fname"] == fname
 
         fname = "gibberish"
-        m = parse_checkpoint(fname)
+        m = parse_checkpoint_path(fname)
         assert m is None
 
     def test_parse_latest_model_state(self, tmp_path: pathlib.Path) -> None:
