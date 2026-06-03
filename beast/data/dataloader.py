@@ -118,7 +118,9 @@ def get_dataloader(
         )
     else:
         if dist.get_rank(group=None) == 0:
-            print(f"`train_data_path` not found. Running dummy dataset for time range {years}")
+            print(
+                f"`train_data_path` not found. Running dummy dataset for time range {years}"
+            )
 
         shape = (
             config_dict["data"]["n_variables"],

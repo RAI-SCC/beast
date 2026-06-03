@@ -124,7 +124,7 @@ class ERA5DatasetDistributed(Dataset):
 
         def load_data() -> None:
             """
-            Inline utility function that does the initial data acceess upon class instantiation
+            Inline utility function for initial data acceess.
             """
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
@@ -186,10 +186,20 @@ class ERA5DatasetDistributed(Dataset):
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
             if row == 0:
-                self.in_var = (0, self.n_variables // 2 if self.n_variables % 2 == 0 else self.n_variables // 2 + 1) 
-            else:  
-                self.in_var = (self.n_variables // 2 if self.n_variables % 2 == 0 else self.n_variables // 2 + 1, self.n_variables)
-          
+                self.in_var = (
+                    0,
+                    self.n_variables // 2
+                    if self.n_variables % 2 == 0
+                    else self.n_variables // 2 + 1,
+                )
+            else:
+                self.in_var = (
+                    self.n_variables // 2
+                    if self.n_variables % 2 == 0
+                    else self.n_variables // 2 + 1,
+                    self.n_variables,
+                )
+
             # We split the channels into two ranks; however, if we have an odd number of channels this will
             # result in rank 0 having one more variable.
             # since we do this for each timestep we accumulate an inbalance in the rank=1 channel group
@@ -202,14 +212,17 @@ class ERA5DatasetDistributed(Dataset):
 
             # Two cases:
             # If we have more masks then the inbalance, we need to distribute the remaining masks evenly accross channel ranks
-            if (self.n_masks - input_inbalance) >= 0: 
-                remaining_masks = (self.n_masks - input_inbalance) 
+            if (self.n_masks - input_inbalance) >= 0:
+                remaining_masks = self.n_masks - input_inbalance
                 if row == 0:
-                    self.in_masks = (0,  remaining_masks - remaining_masks// 2)
+                    self.in_masks = (0, remaining_masks - remaining_masks // 2)
                 else:
-                    self.in_masks = (remaining_masks - remaining_masks// 2, self.n_masks)
-                
-                if remaining_masks % 2 ==1:
+                    self.in_masks = (
+                        remaining_masks - remaining_masks // 2,
+                        self.n_masks,
+                    )
+
+                if remaining_masks % 2 == 1:
                     self.input_pad_oddrank = 1
 
             # If we have fewer masks then the imbalance, we need to pad on rank 1
@@ -220,7 +233,6 @@ class ERA5DatasetDistributed(Dataset):
                     self.in_masks = (0, self.n_masks)
 
                 self.input_pad_oddrank = input_inbalance - self.n_masks
-
 
             # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
             self.in_out_xlon = (
@@ -360,7 +372,8 @@ class ERA5DatasetDistributed(Dataset):
 
 class DummyDataset(Dataset):
     """
-    Generates a dummy dataset, returning tensors (input, target) for a specified shape
+    Generates a dummy dataset, returning tensors (input, target) for a specified shape.
+
     In a distributed (domain-parallel) setting, each process generates only it's shard of the channels and spatial latitude.
     Both input and target can consist of one or more timesteps, which are concatenated in the channel dimension.
 
@@ -461,9 +474,9 @@ class DummyDataset(Dataset):
         self.n_data_items = int((max_date - min_date).days * 24)
         print(f"Dummy Dataset n_data_items {self.n_data_items} ")
 
-        if self.xlat%2 == 1:
+        if self.xlat % 2 == 1:
             self.xlat -= 1
-        if self.xlon%2 == 1:
+        if self.xlon % 2 == 1:
             self.xlon -= 1
 
         self.in_out_xlat = [0, self.xlat]
