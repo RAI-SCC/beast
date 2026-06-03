@@ -48,7 +48,8 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     # Check if the test has the 'dist' marker or the 'gpu' marker, and skip if the conditions are not met
     gpu_marker = item.get_closest_marker("gpu")
     if gpu_marker and (
-        not torch.cuda.is_available() or item.config.getoption("--device") != "cuda"
+        not torch.cuda.is_available()
+        or item.config.getoption("--device") not in ["cuda", "gpu"]
     ):
         pytest.skip("Skipping GPU test since CUDA is not available or not selected.")
 

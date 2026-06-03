@@ -177,3 +177,4 @@ pyrightconfig.json
 uv.lock
 .vscode/
 __pycache__/
+.idea

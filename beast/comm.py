@@ -60,7 +60,7 @@ def create_process_mesh_dict(
 
     mesh_dim_names = ["Expert", "DP", "SP", "JSpatial", "JChannel"]
 
-    global _mesh
+    global _mesh, _process_group_dict
     _mesh = dist.device_mesh.init_device_mesh(
         device_type=device_type,
         mesh_shape=tuple(mesh_dims),
@@ -118,3 +118,12 @@ def get_process_group(name: str) -> dist.ProcessGroup:
     if name not in _process_group_dict:
         raise ValueError(f"Process group '{name}' not found.")
     return _process_group_dict[name]
+
+
+def shutdown_comm() -> None:
+    """Shutdown existing process groups and mesh."""
+    global _mesh, _process_group_dict
+    for key, pg in _process_group_dict.items():
+        pg.shutdown()
+
+    _process_group_dict = {}
