@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -97,7 +98,7 @@ class ERA5DatasetDistributed(Dataset):
         pg_size: int,
         data_path: str,
         constant_masks_path: str,
-        constant_masks: torch.Tensor,
+        constant_masks: List[str],
         normalization_dir: str,
         dt: int = 6,
         n_in_timesteps: int = 1,
@@ -252,13 +253,13 @@ class ERA5DatasetDistributed(Dataset):
                 "Dataset was instantiated, but data items cannot be loaded. Data seems to be empty, or does not contain `fields`"
             )
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return total number of samples."""
         return (
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Return single input, target.
 
@@ -330,7 +331,7 @@ class ERA5DatasetDistributed(Dataset):
 
         return input, target
 
-    def get_constant_masks(self):
+    def get_constant_masks(self) -> torch.Tensor:
         """
         Return the rank local shard of the constant masks.
 
@@ -347,18 +348,20 @@ class ERA5DatasetDistributed(Dataset):
             ]
         )
 
-    def _load_constant_mask_2d(self, folder_path, mask_list):
+    def _load_constant_mask_2d(
+        self, folder_path: str, mask_list: List[str]
+    ) -> torch.Tensor:
         """
         Load the constant masks applied in the patch embedding layer.
 
         folder_path: String
             Path to directory containing constant masks
-        mask_list: List[String]
+        mask_list: List[str]
             List of constant masks
 
         Returns
         -------
-        mask: Tensor
+        mask: torch.Tensor
             of shape (n_masks, n_lat, n_lon)
         """
         # Load data from numpy files
@@ -441,15 +444,15 @@ class DummyDataset(Dataset):
 
     def __init__(
         self,
-        pg_rank,
-        pg_size,
-        global_shape,
-        fill_value=None,
-        time_range=None,
-        dt=6,
-        n_in_timesteps=1,
-        n_out_timesteps=1,
-        dtype=torch.float32,
+        pg_rank: int,
+        pg_size: int,
+        global_shape: Tuple(int, int, int),
+        fill_value: float = None,
+        time_range: Tuple[str, str] = None,
+        dt: int = 6,
+        n_in_timesteps: int = 1,
+        n_out_timesteps: int = 1,
+        dtype: torch.dtype = torch.float32,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -499,7 +502,7 @@ class DummyDataset(Dataset):
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple(torch.Tensor, torch.Tensor):
         """
         Return single input, target.
 

@@ -2,6 +2,7 @@
 
 import os
 import time
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -25,7 +26,7 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
     Inherits from PyTorchs ``_MultiProcessingDataLoaderIter``
     """
 
-    def __next__(self):
+    def __next__(self) -> tuple[Any, float, float]:
         """
         Get the next item of the Iterator.
 
@@ -33,9 +34,9 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
         -------
         *data : torch.Tensor
             The next data item
-        start : time.time
+        start : float
             The time stamp before fetching the next data item in ns
-        stop : time.time
+        stop : float
             The time stamp after fetching the next data item in ns
         """
         start = time.time_ns()
@@ -58,14 +59,14 @@ class GBDataLoader(DataLoader):
 
 
 def get_dataloader(
-    config_dict,
-    dtp_rank,
-    dtp_size,
-    dp_rank,
-    dp_size,
-    mode="train",
-    dtype=torch.float32,
-):
+    config_dict: dict[str, Any],
+    dtp_rank: int,
+    dtp_size: int,
+    dp_rank: int,
+    dp_size: int,
+    mode: str = "train",
+    dtype: torch.dtype = torch.float32,
+) -> GBDataLoader:
     """
     Utility function to create a GBDataLoader instance from config specifications.
 
