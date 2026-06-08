@@ -1,3 +1,5 @@
+"""Dataset definitions."""
+
 import os
 from datetime import datetime
 from typing import List, Tuple
@@ -13,7 +15,7 @@ from beast.comm import execute_in_waves
 
 class ERA5DatasetDistributed(Dataset):
     """
-    Genaralized ERA5 dataset for native and domain-parallel data
+    Genaralized ERA5 dataset for native and domain-parallel data.
 
     Loads data from a zarr directory, to return an (input, target) pair for model training.
     Assumes that zarr data is chunked along the time domain, as each time-step marks a fundamental data sampel unit.
@@ -105,7 +107,7 @@ class ERA5DatasetDistributed(Dataset):
         n_out_timesteps: int = 1,
         dtype: torch.dtype = torch.float32,
         dsync_access: bool = False,
-        time_range: tuple[str, str] | None = None,
+        time_range: Tuple[str, str] | None = None,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -121,15 +123,13 @@ class ERA5DatasetDistributed(Dataset):
         mask_path = constant_masks_path
         mask_list = constant_masks
 
-        self.norm_values = {}
+        self.norm_values: dict[str, np.array] = {}
 
         def load_data() -> None:
-            """
-            Inline utility function for initial data acceess.
-            """
+            """Inline utility function for initial data acceess."""
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
-            except:
+            except Exception:
                 raise OSError(
                     "Given path does not point to a zarr directory. Data must be in zarr format."
                 )
@@ -137,7 +137,7 @@ class ERA5DatasetDistributed(Dataset):
             try:
                 self.xlat = self.zarr_data.dims["latitude"]
                 self.xlon = self.zarr_data.dims["longitude"]
-            except:
+            except Exception:
                 raise Exception(
                     "Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension"
                 )
@@ -149,7 +149,7 @@ class ERA5DatasetDistributed(Dataset):
 
             try:
                 times = pd.to_datetime(self.zarr_data.time)
-            except:
+            except Exception:
                 raise Exception(
                     "Time values of data cannot be accessed. Zarr data must be chunked in the time domain. "
                 )
@@ -160,14 +160,14 @@ class ERA5DatasetDistributed(Dataset):
 
             try:
                 self.n_data_items = self.zarr_data.dims["time"]
-            except:
+            except Exception:
                 raise Exception(
                     "Zarr directory has no dimension `time`. Cannot access temporal dimension"
                 )
 
             try:
                 self.n_variables = self.zarr_data.dims["feature"]
-            except:
+            except Exception:
                 raise Exception(
                     "Zarr directory has no dimension `feature`. Cannot access feature dimension"
                 )
@@ -247,15 +247,15 @@ class ERA5DatasetDistributed(Dataset):
             self.in_out_xlon = (0, self.xlon)
 
         try:
-            dummy_item = self.__getitem__(0)
-        except:
+            _ = self.__getitem__(0)
+        except Exception:
             Exception(
                 "Dataset was instantiated, but data items cannot be loaded. Data seems to be empty, or does not contain `fields`"
             )
 
     def __len__(self) -> int:
         """Return total number of samples."""
-        return (
+        return int(
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
@@ -350,7 +350,7 @@ class ERA5DatasetDistributed(Dataset):
 
     def _load_constant_mask_2d(
         self, folder_path: str, mask_list: List[str]
-    ) -> torch.Tensor:
+    ) -> np.array:
         """
         Load the constant masks applied in the patch embedding layer.
 
@@ -361,7 +361,7 @@ class ERA5DatasetDistributed(Dataset):
 
         Returns
         -------
-        mask: torch.Tensor
+        mask: numpy.array
             of shape (n_masks, n_lat, n_lon)
         """
         # Load data from numpy files
@@ -446,9 +446,9 @@ class DummyDataset(Dataset):
         self,
         pg_rank: int,
         pg_size: int,
-        global_shape: Tuple(int, int, int),
-        fill_value: float = None,
-        time_range: Tuple[str, str] = None,
+        global_shape: Tuple[int, int, int],
+        fill_value: float | None = None,
+        time_range: Tuple[str, str] | None = None,
         dt: int = 6,
         n_in_timesteps: int = 1,
         n_out_timesteps: int = 1,
@@ -496,13 +496,13 @@ class DummyDataset(Dataset):
             self.in_var = [0, self.num_vars]
             self.in_out_xlon = [0, self.xlon]
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return total number of samples."""
-        return (
+        return int(
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
-    def __getitem__(self, idx: int) -> Tuple(torch.Tensor, torch.Tensor):
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Return single input, target.
 

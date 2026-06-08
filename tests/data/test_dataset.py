@@ -1,13 +1,19 @@
+import os
+from typing import List
+
 import numpy as np
 import pandas as pd
 import pytest
 import torch
 import xarray as xr
+from pytest import TempPathFactory
 
 from beast.data.dataset import DummyDataset, ERA5DatasetDistributed
 
 
-def generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
+def generate_mock_zarr_data(
+    zarr_path: str, n_time: int, n_features: int, n_lat: int, n_lon: int
+) -> str:
     # Time: 24 datetime64[ns] steps (hourly starting from 2024-01-01)
     time_coords = pd.date_range("2024-01-01", periods=n_time, freq="h")
 
@@ -62,7 +68,7 @@ def generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon):
     return zarr_path
 
 
-def generate_mock_masks(path, xlat, xlon, n_masks):
+def generate_mock_masks(path: str, xlat: int, xlon: int, n_masks: int) -> List[str]:
     """Generate n_masks numpy files, each containing an [xlat, xlon] array of ones.
 
     Args:
@@ -75,30 +81,25 @@ def generate_mock_masks(path, xlat, xlon, n_masks):
     for i in range(n_masks):
         mask_name = f"mask_{i:04d}.npy"
         mask = np.ones((xlat, xlon), dtype=np.float32) * i
-        filepath = path / mask_name
+        filepath = os.path.join(path, mask_name)
         mask_list.append(mask_name)
         np.save(filepath, mask)
 
     return mask_list
 
 
-def generate_mock_normalization(path, n_features):
+def generate_mock_normalization(path: str, n_features: int) -> None:
     mean = np.zeros((n_features, 1, 1), dtype=np.float32)
     std = np.ones((n_features, 1, 1), dtype=np.float32)
 
-    np.save(path / "norm_mean.npy", mean)
-    np.save(path / "norm_std.npy", std)
+    np.save(os.path.join(path, "norm_mean.npy"), mean)
+    np.save(os.path.join(path, "norm_std.npy"), std)
 
 
 test_array_dummy = [(8, 120, 240), (8, 121, 240), (7, 120, 241), (7, 121, 241)]
-
-
 test_array_xlat_xlon = [(120, 240), (121, 240), (120, 241), (121, 241)]
-
 test_array_mask_features = [(3, 8), (4, 8), (3, 7), (4, 7)]
-
 test_array_timesteps = [(1, 1), (2, 1), (1, 2), (2, 2)]
-
 test_array = [
     (3, 8, 121, 240, 1, 1),
     (3, 8, 60, 120, 1, 1),
@@ -119,14 +120,23 @@ class TestDataset:
     @pytest.mark.parametrize(
         "n_time, n_features, n_lat, n_lon", [(24, 84, 721, 1440), (24, 84, 120, 240)]
     )
-    def test_mock_dataset(self, tmp_path_factory, n_time, n_features, n_lat, n_lon):
+    def test_mock_dataset(
+        self,
+        tmp_path_factory: TempPathFactory,
+        n_time: int,
+        n_features: int,
+        n_lat: int,
+        n_lon: int,
+    ) -> None:
         zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
         generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon)
         zarr_data = xr.open_dataset(zarr_path, engine="zarr")
         assert zarr_data.dims["latitude"] == n_lat
 
     @pytest.mark.parametrize("n_masks, n_lat, n_lon", [(3, 721, 1440), (3, 120, 240)])
-    def test_generate_masks(self, tmp_path_factory, n_masks, n_lat, n_lon):
+    def test_generate_masks(
+        self, tmp_path_factory: TempPathFactory, n_masks: int, n_lat: int, n_lon: int
+    ) -> None:
         mask_path = tmp_path_factory.mktemp("data")
 
         mask_list = generate_mock_masks(mask_path, n_lat, n_lon, n_masks)
@@ -141,8 +151,8 @@ class TestDataset:
 
     @pytest.mark.parametrize("n_masks, n_features", test_array_mask_features)
     def test_era5_dataset_distributed_mask_features(
-        self, tmp_path_factory, n_masks, n_features
-    ):
+        self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
+    ) -> None:
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -235,7 +245,9 @@ class TestDataset:
         assert list(x_0.shape) == list(x_1.shape) == list(x_2.shape) == list(x_3.shape)
 
     @pytest.mark.parametrize("lat, lon", test_array_xlat_xlon)
-    def test_era5_dataset_distributed_spatial(self, tmp_path_factory, lat, lon):
+    def test_era5_dataset_distributed_spatial(
+        self, tmp_path_factory: TempPathFactory, lat: int, lon: int
+    ) -> None:
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -333,8 +345,8 @@ class TestDataset:
 
     @pytest.mark.parametrize("in_timesteps, out_timesteps", test_array_timesteps)
     def test_era5_dataset_distributed_timesteps(
-        self, tmp_path_factory, in_timesteps, out_timesteps
-    ):
+        self, tmp_path_factory: TempPathFactory, in_timesteps: int, out_timesteps: int
+    ) -> None:
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -424,7 +436,7 @@ class TestDataset:
         assert list(x_0.shape) == list(x_1.shape) == list(x_2.shape) == list(x_3.shape)
 
     @pytest.mark.parametrize("n_features, xlat, xlon", test_array_dummy)
-    def test_dummy_dataset(self, n_features, xlat, xlon):
+    def test_dummy_dataset(self, n_features: int, xlat: int, xlon: int) -> None:
         n_time = 48
         time_coords = pd.date_range(
             "2024-01-01", periods=n_time + 1, freq="h"
@@ -442,7 +454,7 @@ class TestDataset:
             rank,
             world_size,
             shape,
-            time_range=[str(time_coords[0]), str(time_coords[-1])],
+            time_range=(str(time_coords[0]), str(time_coords[-1])),
             dt=6,
             n_in_timesteps=in_timesteps,
             n_out_timesteps=out_timesteps,

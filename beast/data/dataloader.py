@@ -1,4 +1,4 @@
-"""Dataset and Dataloader factory."""
+"""Custom GB Dataloaders and Dataloader factory."""
 
 import os
 import time
@@ -68,7 +68,7 @@ def get_dataloader(
     dtype: torch.dtype = torch.float32,
 ) -> GBDataLoader:
     """
-    Utility function to create a GBDataLoader instance from config specifications.
+    Create a GBDataLoader instance from config specifications.
 
     If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
     If no valid path is given (i.e. if the path doesn't exist), it will create a dummy dataset for the time range specified in the config file, filled with random numbers.
@@ -103,6 +103,8 @@ def get_dataloader(
         years = None
 
     batch_size = config_dict["training"]["batch_size"]
+
+    dataset: ERA5DatasetDistributed | DummyDataset | Subset | None = None
     if os.path.exists(config_dict["data"]["train_data_path"]):
         dataset = ERA5DatasetDistributed(
             pg_rank=dtp_rank,
@@ -141,12 +143,12 @@ def get_dataloader(
 
     if mode == "train" and config_dict["data"]["train_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
-        dataset = Subset(dataset, subset_indices)
+        dataset = Subset(dataset, subset_indices.tolist())
     elif mode == "validation" and config_dict["data"]["valid_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
-        dataset = Subset(dataset, subset_indices)
+        dataset = Subset(dataset, subset_indices.tolist())
 
-    sampler = DistributedSampler(
+    sampler: DistributedSampler = DistributedSampler(
         dataset,
         shuffle=(True if mode == "train" else False),
         rank=dp_rank,

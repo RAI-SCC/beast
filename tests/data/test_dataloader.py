@@ -1,8 +1,10 @@
 import math
+from typing import Any
 
 import pandas as pd
 import pytest
 import torch
+from pytest import TempPathFactory
 from test_dataset import (
     generate_mock_masks,
     generate_mock_normalization,
@@ -12,7 +14,7 @@ from test_dataset import (
 from beast.data.dataloader import get_dataloader
 
 
-def create_mock_config():
+def create_mock_config() -> dict[str, Any]:
     """Create a mock dataset and corresponding mock config dictionary."""
     config = {
         "data": {
@@ -67,8 +69,14 @@ class TestDataLoader:
         data_array,
     )
     def test_dataloader_dummy(
-        self, tmp_path_factory, n_time, n_features, n_lat, n_lon, n_masks
-    ):
+        self,
+        tmp_path_factory: TempPathFactory,
+        n_time: int,
+        n_features: int,
+        n_lat: int,
+        n_lon: int,
+        n_masks: int,
+    ) -> None:
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -98,8 +106,14 @@ class TestDataLoader:
         data_array,
     )
     def test_dataloader_era5(
-        self, tmp_path_factory, n_time, n_features, n_lat, n_lon, n_masks
-    ):
+        self,
+        tmp_path_factory: TempPathFactory,
+        n_time: int,
+        n_features: int,
+        n_lat: int,
+        n_lon: int,
+        n_masks: int,
+    ) -> None:
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -169,7 +183,9 @@ class TestDataLoader:
         "n_time, batch_size, dt",
         train_array,
     )
-    def test_dataloader_train(self, tmp_path_factory, n_time, batch_size, dt):
+    def test_dataloader_train(
+        self, tmp_path_factory: TempPathFactory, n_time: int, batch_size: int, dt: int
+    ) -> None:
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -222,8 +238,12 @@ class TestDataLoader:
         loader_array,
     )
     def test_dataloader_loader(
-        self, tmp_path_factory, n_time, train_subset, valid_subset
-    ):
+        self,
+        tmp_path_factory: TempPathFactory,
+        n_time: int,
+        train_subset: int,
+        valid_subset: int,
+    ) -> None:
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -284,8 +304,13 @@ class TestDataLoader:
         distributed_array,
     )
     def test_dataloader_distributed(
-        self, tmp_path_factory, dtp_rank, dtp_size, dp_rank, dp_size
-    ):
+        self,
+        tmp_path_factory: TempPathFactory,
+        dtp_rank: int,
+        dtp_size: int,
+        dp_rank: int,
+        dp_size: int,
+    ) -> None:
         config_dict = create_mock_config()
 
         n_features = 8
