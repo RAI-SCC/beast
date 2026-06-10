@@ -20,6 +20,7 @@ class ERA5DatasetDistributed(Dataset):
     Loads data from a zarr directory, to return an (input, target) pair for model training.
     Assumes that zarr data is chunked along the time domain, as each time-step marks a fundamental data sampel unit.
     In a distributed (domain-parallel) setting, each process loads only it's shard of the channels and spatial latitude.
+    Works only on 2-way channel splitting.
     Both input and target consist of one or more timesteps, which are concatenated in the channel dimension.
 
     Attributes
@@ -39,17 +40,17 @@ class ERA5DatasetDistributed(Dataset):
     years : Tuple(str,st)
         The temporal range to be included into the dataset, in the format`%Y-%m-%d`
     in_timesteps : int
-        Number of timesteps to be concatenated for the input
+        Number of timesteps to be concatenated for the input; concatenation will be done along the channel dimension
     out_timesteps : int
-        Number of timesteps to be concatenated for the target
+        Number of timesteps to be concatenated for the target; concatenation will be done along the channel dimension
     dt : int
         The temporal subsampling timestep in hours
     n_data_items:
         Number of data samples (time steps) in self.zarr_data
     xlat : int
-        Global size of data samples in self.zarr_data in the latitude dimension
+        Global size of data samples in self.zarr_data in the latitude dimension; if this is an odd number, the last value will be clipped.
     xlon : int
-        Global size of data samples in self.zarr_data in the longitude dimension
+        Global size of data samples in self.zarr_data in the longitude dimension; if this is an odd number, the last value will be clipped.
     num_vars: int
         Global number of variables (channels) in self.zarr_data
     constant_masks: torch.Tensor
@@ -88,7 +89,7 @@ class ERA5DatasetDistributed(Dataset):
     n_out_timesteps : int
         The number of output time setps
     dsync_access: bool
-        Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale
+        Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale. Recommended to use when going beyond 512 nodes.
     dtype : torch.dtype
         The dtype for input and target tensors
 

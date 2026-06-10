@@ -14,7 +14,7 @@ from beast.data.dataset import DummyDataset, ERA5DatasetDistributed
 def generate_mock_zarr_data(
     zarr_path: str, n_time: int, n_features: int, n_lat: int, n_lon: int
 ) -> str:
-    # Time: 24 datetime64[ns] steps (hourly starting from 2024-01-01)
+    """Utility function that creates a mock dataset in zarr format, in the format of ERA5 data."""
     time_coords = pd.date_range("2024-01-01", periods=n_time, freq="h")
 
     surf_vars = [
@@ -69,14 +69,8 @@ def generate_mock_zarr_data(
 
 
 def generate_mock_masks(path: str, xlat: int, xlon: int, n_masks: int) -> List[str]:
-    """Generate n_masks numpy files, each containing an [xlat, xlon] array of ones.
+    """Utility function that creates mock masks in .npy format, filled with ones."""
 
-    Args:
-        path: Directory path where the .npy files will be saved.
-        xlat: Number of latitude points (rows).
-        xlon: Number of longitude points (columns).
-        n_masks: Number of mask files to generate.
-    """
     mask_list = []
     for i in range(n_masks):
         mask_name = f"mask_{i:04d}.npy"
@@ -89,6 +83,7 @@ def generate_mock_masks(path: str, xlat: int, xlon: int, n_masks: int) -> List[s
 
 
 def generate_mock_normalization(path: str, n_features: int) -> None:
+    """Utility function that creates mock normalization files in .npy format, filled with ones."""
     mean = np.zeros((n_features, 1, 1), dtype=np.float32)
     std = np.ones((n_features, 1, 1), dtype=np.float32)
 
@@ -128,6 +123,7 @@ class TestDataset:
         n_lat: int,
         n_lon: int,
     ) -> None:
+        """Test for utility function generate_mock_zarr_data"""
         zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
         generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon)
         zarr_data = xr.open_dataset(zarr_path, engine="zarr")
@@ -137,6 +133,7 @@ class TestDataset:
     def test_generate_masks(
         self, tmp_path_factory: TempPathFactory, n_masks: int, n_lat: int, n_lon: int
     ) -> None:
+        """Test for utility function generate_mock_masks"""
         mask_path = tmp_path_factory.mktemp("data")
 
         mask_list = generate_mock_masks(mask_path, n_lat, n_lon, n_masks)
@@ -153,6 +150,7 @@ class TestDataset:
     def test_era5_dataset_distributed_mask_features(
         self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
     ) -> None:
+        """Test for class ERA5DatasetDistributed, for different numbers of masks and features to evaluate channel splitting functionality."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -248,6 +246,7 @@ class TestDataset:
     def test_era5_dataset_distributed_spatial(
         self, tmp_path_factory: TempPathFactory, lat: int, lon: int
     ) -> None:
+        """Test for class ERA5DatasetDistributed, for different spatial input sizes, to test automatic size derivation from the dataset."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -347,6 +346,7 @@ class TestDataset:
     def test_era5_dataset_distributed_timesteps(
         self, tmp_path_factory: TempPathFactory, in_timesteps: int, out_timesteps: int
     ) -> None:
+        """Test for class ERA5DatasetDistributed, for different number of input and output timesteps, to evaluate temporal concatenation."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -437,6 +437,7 @@ class TestDataset:
 
     @pytest.mark.parametrize("n_features, xlat, xlon", test_array_dummy)
     def test_dummy_dataset(self, n_features: int, xlat: int, xlon: int) -> None:
+        """Test for class DummyDataset, for different input timestep sizes (spatial and variables)."""
         n_time = 48
         time_coords = pd.date_range(
             "2024-01-01", periods=n_time + 1, freq="h"

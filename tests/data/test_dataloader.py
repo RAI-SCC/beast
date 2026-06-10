@@ -77,6 +77,7 @@ class TestDataLoader:
         n_lon: int,
         n_masks: int,
     ) -> None:
+        """Test for function get_dataloader, for different input data sizes when no dataset is availalbe, aka the DummyDataset is loaded."""
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -114,6 +115,7 @@ class TestDataLoader:
         n_lon: int,
         n_masks: int,
     ) -> None:
+        """Test for function get_dataloader, for different input data sizes when a zarr dataset is availalbe."""
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -186,6 +188,7 @@ class TestDataLoader:
     def test_dataloader_train(
         self, tmp_path_factory: TempPathFactory, n_time: int, batch_size: int, dt: int
     ) -> None:
+        """Test for function get_dataloader (with existing zarr dataset) for different batch size and temporal subsampling."""
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -244,6 +247,7 @@ class TestDataLoader:
         train_subset: int,
         valid_subset: int,
     ) -> None:
+        """Test for function get_dataloader (with existing zarr dataset) for different training and validation subset sizes."""
         config_dict = create_mock_config()
         dtp_rank = 0
         dtp_size = 4
@@ -311,6 +315,7 @@ class TestDataLoader:
         dp_rank: int,
         dp_size: int,
     ) -> None:
+        """Test for function get_dataloader (with existing zarr dataset) for different dtp and dp ranks and group sizes."""
         config_dict = create_mock_config()
 
         n_features = 8
