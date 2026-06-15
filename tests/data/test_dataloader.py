@@ -258,8 +258,8 @@ class TestDataLoader:
         n_lon = 144
         n_masks = 3
 
-        config_dict["data"]["train_time_range"] = ["2024-01-01", "2024-01-05"]
-        config_dict["data"]["valid_time_range"] = ["2024-01-05", "2024-01-06"]
+        config_dict["data"]["train_time_range"] = ["2024-01-01", "2024-01-02"]
+        config_dict["data"]["valid_time_range"] = ["2024-01-02", "2024-01-03"]
         config_dict["data"]["train_subset"] = train_subset
         config_dict["data"]["valid_subset"] = valid_subset
 
@@ -302,6 +302,49 @@ class TestDataLoader:
             dtype=torch.float32,
         )
         assert len(valid_loader) == valid_subset
+
+    def test_dataloader_empty_time_range_raises(
+        self,
+        tmp_path_factory: TempPathFactory,
+    ) -> None:
+        """Test that time range with empty data set raises the expected error."""
+        config_dict = create_mock_config()
+        n_time = 48
+        n_features = 8
+        n_lat = 72
+        n_lon = 144
+        n_masks = 3
+
+        config_dict["data"]["xlat"] = n_lat
+        config_dict["data"]["xlon"] = n_lon
+        config_dict["data"]["n_variables"] = n_features
+
+        data_path = tmp_path_factory.mktemp("data")
+        zarr_path = generate_mock_zarr_data(
+            (data_path / "test_data.zarr"), n_time, n_features, n_lat, n_lon
+        )
+        mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
+        generate_mock_normalization(data_path, n_features)
+
+        config_dict["data"]["train_data_path"] = zarr_path
+        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["constant_masks_path"] = data_path
+        config_dict["data"]["constant_masks"] = mask_list
+        config_dict["data"]["normalization_dir"] = data_path
+
+        # Range entirely outside the mock data (data only covers 2024-01-01..02).
+        config_dict["data"]["valid_time_range"] = ["2024-02-01", "2024-02-02"]
+
+        with pytest.raises(RuntimeError, match="data items cannot be loaded"):
+            get_dataloader(
+                config_dict,
+                0,
+                4,
+                0,
+                1,
+                mode="validation",
+                dtype=torch.float32,
+            )
 
     @pytest.mark.parametrize(
         "dtp_rank, dtp_size , dp_rank , dp_size",

@@ -543,11 +543,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        # Honour nice_norm here too (the distributed build already does). With
-        # nice_norm=False use the plain Transformer (forward takes only x), which
-        # matches the forward()'s `if self.nice_norm` branches. Previously this
-        # path always built NiceTransformer, crashing the deterministic single-GPU
-        # case (forward calls the block without `noise`).
+        # Use normal transformer if `nice_norm` is set to false
         block_cls = (
             transformer.NiceTransformer if self.nice_norm else transformer.Transformer
         )

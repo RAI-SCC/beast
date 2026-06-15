@@ -95,8 +95,6 @@ def get_dataloader(
     dataloader : GBDataLoader
         The dataloader instance
     """
-    # Select the time range AND the data path by mode (validation previously
-    # loaded train_data_path, silently using the train store for validation).
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
         data_path = config_dict["data"]["train_data_path"]

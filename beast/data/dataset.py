@@ -243,9 +243,7 @@ class ERA5DatasetDistributed(Dataset):
             )
 
         else:
-            # Single-rank (no domain parallelism): all variables. NOTE: this read
-            # `self.in_var`, which is only set in the world_size > 1 branch above,
-            # so it raised AttributeError for world_size == 1.
+            # Single-rank (no domain parallelism): all variables.
             self.in_var = (0, self.n_variables)
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
@@ -293,8 +291,13 @@ class ERA5DatasetDistributed(Dataset):
             )["fields"].values
 
             x = (
-                x - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(-1, 1, 1)
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(-1, 1, 1)
+                x
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
 
             input_list.append(torch.tensor(x, dtype=self.dtype))
 
@@ -320,8 +323,13 @@ class ERA5DatasetDistributed(Dataset):
             )["fields"].values
 
             y = (
-                y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(-1, 1, 1)
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(-1, 1, 1)
+                y
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
 
             target_list.append(torch.tensor(y, dtype=self.dtype))
 
