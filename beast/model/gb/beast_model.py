@@ -543,9 +543,18 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
+        # Honour nice_norm here too (the distributed build already does). With
+        # nice_norm=False use the plain Transformer (forward takes only x), which
+        # matches the forward()'s `if self.nice_norm` branches. Previously this
+        # path always built NiceTransformer, crashing the deterministic single-GPU
+        # case (forward calls the block without `noise`).
+        block_cls = (
+            transformer.NiceTransformer if self.nice_norm else transformer.Transformer
+        )
+
         self.transformer_1 = torch.nn.ModuleList(
             [
-                transformer.NiceTransformer(
+                block_cls(
                     in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
@@ -561,7 +570,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_down = torch.nn.ModuleList(
             [
-                transformer.NiceTransformer(
+                block_cls(
                     in_dim=self.embed_dim * 2,
                     embed_dim=self.embed_dim * 2,
                     out_dim=self.embed_dim * 2,
@@ -577,7 +586,7 @@ class Beast(torch.nn.Module):
 
         self.transformer_2 = torch.nn.ModuleList(
             [
-                transformer.NiceTransformer(
+                block_cls(
                     in_dim=self.embed_dim,
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,

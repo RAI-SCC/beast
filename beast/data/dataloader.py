@@ -95,21 +95,26 @@ def get_dataloader(
     dataloader : GBDataLoader
         The dataloader instance
     """
+    # Select the time range AND the data path by mode (validation previously
+    # loaded train_data_path, silently using the train store for validation).
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
+        data_path = config_dict["data"]["train_data_path"]
     elif mode == "validation":
         years = config_dict["data"]["valid_time_range"]
+        data_path = config_dict["data"]["valid_data_path"]
     else:
         years = None
+        data_path = config_dict["data"]["train_data_path"]
 
     batch_size = config_dict["training"]["batch_size"]
 
     dataset: ERA5DatasetDistributed | DummyDataset | Subset | None = None
-    if os.path.exists(config_dict["data"]["train_data_path"]):
+    if os.path.exists(data_path):
         dataset = ERA5DatasetDistributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
-            data_path=config_dict["data"]["train_data_path"],
+            data_path=data_path,
             constant_masks_path=config_dict["data"]["constant_masks_path"],
             constant_masks=config_dict["data"]["constant_masks"],
             normalization_dir=config_dict["data"]["normalization_dir"],
@@ -117,12 +122,12 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=config_dict["training"]["dtype"],
+            dtype=dtype,
         )
     else:
         if dist.get_rank(group=None) == 0:
             print(
-                f"`train_data_path` not found. Running dummy dataset for time range {years}"
+                f"`{data_path}` not found. Running dummy dataset for time range {years}"
             )
 
         shape = (
@@ -138,7 +143,7 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=config_dict["training"]["dtype"],
+            dtype=dtype,
         )
 
     # if train_subset <=0, the entire dataset will be used for training
