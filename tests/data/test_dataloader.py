@@ -129,8 +129,7 @@ class TestDataLoader:
         mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        config_dict["data"]["train_data_path"] = zarr_path
-        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["data_path"] = zarr_path
         config_dict["data"]["constant_masks_path"] = data_path
         config_dict["data"]["constant_masks"] = mask_list
         config_dict["data"]["normalization_dir"] = data_path
@@ -212,8 +211,7 @@ class TestDataLoader:
         mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        config_dict["data"]["train_data_path"] = zarr_path
-        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["data_path"] = zarr_path
         config_dict["data"]["constant_masks_path"] = data_path
         config_dict["data"]["constant_masks"] = mask_list
         config_dict["data"]["normalization_dir"] = data_path
@@ -269,8 +267,7 @@ class TestDataLoader:
         mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        config_dict["data"]["train_data_path"] = zarr_path
-        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["data_path"] = zarr_path
         config_dict["data"]["constant_masks_path"] = data_path
         config_dict["data"]["constant_masks"] = mask_list
         config_dict["data"]["normalization_dir"] = data_path
@@ -318,8 +315,7 @@ class TestDataLoader:
         mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        config_dict["data"]["train_data_path"] = zarr_path
-        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["data_path"] = zarr_path
         config_dict["data"]["constant_masks_path"] = data_path
         config_dict["data"]["constant_masks"] = mask_list
         config_dict["data"]["normalization_dir"] = data_path
@@ -372,8 +368,7 @@ class TestDataLoader:
         mask_list = generate_mock_masks(data_path, n_lat, n_lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        config_dict["data"]["train_data_path"] = zarr_path
-        config_dict["data"]["valid_data_path"] = zarr_path
+        config_dict["data"]["data_path"] = zarr_path
         config_dict["data"]["constant_masks_path"] = data_path
         config_dict["data"]["constant_masks"] = mask_list
         config_dict["data"]["normalization_dir"] = data_path
