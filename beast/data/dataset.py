@@ -2,12 +2,13 @@
 
 import os
 from datetime import datetime
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import numpy as np
 import pandas as pd
 import torch
 import xarray as xr
+from torch import Tensor
 from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
@@ -65,6 +66,11 @@ class ERA5DatasetDistributed(Dataset):
         The start and stop value of the spatial range (in the longitude) for this particluar rank
     input_pad_oddrank: int
         The number of channels that need to be padded on odd ranks for
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+
 
     Parameters
     ----------
@@ -80,18 +86,22 @@ class ERA5DatasetDistributed(Dataset):
         The file names of the constant masks to be used
     normalization_dir : str
         The path to the .npy files containing normalization values `norm_mean.npy` and `norm_std.npy`
-    time_range : Tuple(str,st)
-        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
     dt : int
         The temporal subsampling timestep in hours
     n_in_timesteps : int
         The number of input time setps
     n_out_timesteps : int
         The number of output time setps
-    dsync_access: bool
-        Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale. Recommended to use when going beyond 512 nodes.
     dtype : torch.dtype
         The dtype for input and target tensors
+    dsync_access: bool
+        Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale. Recommended to use when going beyond 512 nodes.
+    time_range : Tuple(str, str)
+        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
 
     """
 
@@ -109,6 +119,8 @@ class ERA5DatasetDistributed(Dataset):
         dtype: torch.dtype = torch.float32,
         dsync_access: bool = False,
         time_range: Tuple[str, str] | None = None,
+        transform: Callable | None = None,
+        target_transform: Callable | None = None,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -247,6 +259,12 @@ class ERA5DatasetDistributed(Dataset):
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
 
+        self.transform = transform
+        if target_transform is None:
+            self.target_transform = transform
+        else:
+            self.target_transform = target_transform
+
         try:
             _ = self.__getitem__(0)
         except Exception:
@@ -329,6 +347,12 @@ class ERA5DatasetDistributed(Dataset):
                 target = torch.nn.functional.pad(
                     target, (0, 0, 0, 0, 0, self.output_pad_oddrank)
                 )
+
+        if self.transform is not None:
+            input = self.transform(input)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
 
         return input, target
 
@@ -419,6 +443,10 @@ class DummyDataset(Dataset):
         The start and stop value of the spatial range (in the latitude) for this particluar rank
     in_out_xlon : Tuple(int, int)
         The start and stop value of the spatial range (in the longitude) for this particluar rank
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
 
     Parameters
     ----------
@@ -440,6 +468,10 @@ class DummyDataset(Dataset):
         The number of output time setps
     dtype : torch.dtype
         The dtype for input and target tensors
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
 
     """
 
@@ -454,6 +486,8 @@ class DummyDataset(Dataset):
         n_in_timesteps: int = 1,
         n_out_timesteps: int = 1,
         dtype: torch.dtype = torch.float32,
+        transform: Callable | None = None,
+        target_transform: Callable | None = None,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -497,13 +531,19 @@ class DummyDataset(Dataset):
             self.in_var = [0, self.num_vars]
             self.in_out_xlon = [0, self.xlon]
 
+        self.transform = transform
+        if target_transform is None:
+            self.target_transform = transform
+        else:
+            self.target_transform = target_transform
+
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
         """
         Return single input, target.
 
@@ -514,10 +554,10 @@ class DummyDataset(Dataset):
 
         Returns
         -------
-        input : torch.Tensor
+        input : Tensor
             The input sample of shape [channel shard * number of input timesteps, xlat, longitudinal shard].
 
-        target : torch.Tensor
+        target : Tensor
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
         shape_in = (
@@ -537,5 +577,11 @@ class DummyDataset(Dataset):
         else:
             input = torch.rand(shape_in, dtype=self.dtype)
             target = torch.rand(shape_out, dtype=self.dtype)
+
+        if self.transform is not None:
+            input = self.transform(input)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
 
         return input, target
