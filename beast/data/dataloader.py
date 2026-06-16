@@ -2,6 +2,7 @@
 
 import os
 import time
+import warnings
 from typing import Any, Callable
 
 import torch
@@ -13,9 +14,9 @@ from torch.utils.data.dataloader import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
-from beast.data.dataset import (
-    DummyDataset,
-    ERA5DatasetDistributed,
+from beast.data.era5 import (
+    ERA5Distributed,
+    ERA5Dummy,
 )
 
 
@@ -65,7 +66,6 @@ def get_dataloader(
     dp_rank: int,
     dp_size: int,
     mode: str = "train",
-    dtype: torch.dtype = torch.float32,
     transform: Callable | None = None,
     target_transform: Callable | None = None,
 ) -> GBDataLoader:
@@ -89,8 +89,6 @@ def get_dataloader(
         The size of the data-parallel process group (torch.DistributedDataParallel)
     mode : str
         The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
-    dtype : torch.dtype
-        The datatype that the data items will have
     transform: Callable
         The transformation to be applied to the input weather data
     target_transform: Callable
@@ -101,6 +99,8 @@ def get_dataloader(
     dataloader : GBDataLoader
         The dataloader instance
     """
+    data_path = config_dict["data"]["data_path"]
+
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
     elif mode == "validation":
@@ -110,12 +110,12 @@ def get_dataloader(
 
     batch_size = config_dict["training"]["batch_size"]
 
-    dataset: ERA5DatasetDistributed | DummyDataset | Subset | None = None
-    if os.path.exists(config_dict["data"]["train_data_path"]):
-        dataset = ERA5DatasetDistributed(
+    dataset: torch.utils.data.Dataset
+    if os.path.exists(data_path):
+        dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
-            data_path=config_dict["data"]["train_data_path"],
+            data_path=data_path,
             constant_masks_path=config_dict["data"]["constant_masks_path"],
             constant_masks=config_dict["data"]["constant_masks"],
             normalization_dir=config_dict["data"]["normalization_dir"],
@@ -129,8 +129,9 @@ def get_dataloader(
         )
     else:
         if dist.get_rank(group=None) == 0:
-            print(
-                f"`train_data_path` not found. Running dummy dataset for time range {years}"
+            warnings.warn(
+                f"`{data_path}` not found. Running dummy dataset for time range {years}",
+                UserWarning,
             )
 
         shape = (
@@ -138,7 +139,7 @@ def get_dataloader(
             config_dict["data"]["xlat"],
             config_dict["data"]["xlon"],
         )
-        dataset = DummyDataset(
+        dataset = ERA5Dummy(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
             global_shape=shape,

@@ -9,7 +9,7 @@ import xarray as xr
 from pytest import TempPathFactory
 
 import beast.data.transforms as trf
-from beast.data.dataset import DummyDataset, ERA5DatasetDistributed
+from beast.data.era5 import ERA5Distributed, ERA5Dummy
 
 
 def generate_mock_zarr_data(
@@ -151,7 +151,7 @@ class TestDataset:
     def test_era5_dataset_distributed_mask_features(
         self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
     ) -> None:
-        """Test for class ERA5DatasetDistributed, for different numbers of masks and features to evaluate channel splitting functionality."""
+        """Test for class ERA5Distributed, for different numbers of masks and features to evaluate channel splitting functionality."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -171,7 +171,7 @@ class TestDataset:
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        dataset_r0 = ERA5DatasetDistributed(
+        dataset_r0 = ERA5Distributed(
             0,
             world_size,
             zarr_path,
@@ -186,7 +186,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r1 = ERA5DatasetDistributed(
+        dataset_r1 = ERA5Distributed(
             1,
             world_size,
             zarr_path,
@@ -201,7 +201,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r2 = ERA5DatasetDistributed(
+        dataset_r2 = ERA5Distributed(
             2,
             world_size,
             zarr_path,
@@ -216,7 +216,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r3 = ERA5DatasetDistributed(
+        dataset_r3 = ERA5Distributed(
             3,
             world_size,
             zarr_path,
@@ -247,7 +247,7 @@ class TestDataset:
     def test_era5_dataset_distributed_spatial(
         self, tmp_path_factory: TempPathFactory, lat: int, lon: int
     ) -> None:
-        """Test for class ERA5DatasetDistributed, for different spatial input sizes, to test automatic size derivation from the dataset."""
+        """Test for class ERA5Distributed, for different spatial input sizes, to test automatic size derivation from the dataset."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -263,7 +263,7 @@ class TestDataset:
         mask_list = generate_mock_masks(data_path, lat, lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        dataset_r0 = ERA5DatasetDistributed(
+        dataset_r0 = ERA5Distributed(
             0,
             world_size,
             zarr_path,
@@ -278,7 +278,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r1 = ERA5DatasetDistributed(
+        dataset_r1 = ERA5Distributed(
             1,
             world_size,
             zarr_path,
@@ -293,7 +293,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r2 = ERA5DatasetDistributed(
+        dataset_r2 = ERA5Distributed(
             2,
             world_size,
             zarr_path,
@@ -308,7 +308,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r3 = ERA5DatasetDistributed(
+        dataset_r3 = ERA5Distributed(
             3,
             world_size,
             zarr_path,
@@ -347,7 +347,7 @@ class TestDataset:
     def test_era5_dataset_distributed_timesteps(
         self, tmp_path_factory: TempPathFactory, in_timesteps: int, out_timesteps: int
     ) -> None:
-        """Test for class ERA5DatasetDistributed, for different number of input and output timesteps, to evaluate temporal concatenation."""
+        """Test for class ERA5Distributed, for different number of input and output timesteps, to evaluate temporal concatenation."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -364,7 +364,7 @@ class TestDataset:
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        dataset_r0 = ERA5DatasetDistributed(
+        dataset_r0 = ERA5Distributed(
             0,
             world_size,
             zarr_path,
@@ -379,7 +379,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r1 = ERA5DatasetDistributed(
+        dataset_r1 = ERA5Distributed(
             1,
             world_size,
             zarr_path,
@@ -394,7 +394,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r2 = ERA5DatasetDistributed(
+        dataset_r2 = ERA5Distributed(
             2,
             world_size,
             zarr_path,
@@ -409,7 +409,7 @@ class TestDataset:
             dsync_access=False,
         )
 
-        dataset_r3 = ERA5DatasetDistributed(
+        dataset_r3 = ERA5Distributed(
             3,
             world_size,
             zarr_path,
@@ -438,7 +438,7 @@ class TestDataset:
 
     @pytest.mark.parametrize("n_features, xlat, xlon", test_array_dummy)
     def test_dummy_dataset(self, n_features: int, xlat: int, xlon: int) -> None:
-        """Test for class DummyDataset, for different input timestep sizes (spatial and variables)."""
+        """Test for class ERA5Dummy, for different input timestep sizes (spatial and variables)."""
         n_time = 48
         time_coords = pd.date_range(
             "2024-01-01", periods=n_time + 1, freq="h"
@@ -450,9 +450,9 @@ class TestDataset:
         out_timesteps = 1
 
         shape = (n_features, xlat, xlon)
-        print(f"DummyDataset time_coords {time_coords}")
+        print(f"ERA5Dummy time_coords {time_coords}")
 
-        dataset = DummyDataset(
+        dataset = ERA5Dummy(
             rank,
             world_size,
             shape,
@@ -483,7 +483,7 @@ class TestDataset:
     def test_era5_dataset_distributed_transform_integration(
         self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
     ) -> None:
-        """Test for class ERA5DatasetDistributed, for different numbers of masks and features to evaluate transformation functionality."""
+        """Test for class ERA5Distributed, for different numbers of masks and features to evaluate transformation functionality."""
         data_path = tmp_path_factory.mktemp("data")
         n_time = 48
         world_size = 4
@@ -503,7 +503,7 @@ class TestDataset:
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
-        dataset_r0 = ERA5DatasetDistributed(
+        dataset_r0 = ERA5Distributed(
             0,
             world_size,
             zarr_path,
@@ -519,7 +519,7 @@ class TestDataset:
             transform=trf.Identity(),
         )
 
-        dataset_r1 = ERA5DatasetDistributed(
+        dataset_r1 = ERA5Distributed(
             1,
             world_size,
             zarr_path,
@@ -535,7 +535,7 @@ class TestDataset:
             transform=trf.Downsample(factor=6, dims=(-1, -2)),
         )
 
-        dataset_r2 = ERA5DatasetDistributed(
+        dataset_r2 = ERA5Distributed(
             2,
             world_size,
             zarr_path,
@@ -551,7 +551,7 @@ class TestDataset:
             transform=trf.DownsampleMeanStd(factor=6, dims=(-1, -2)),
         )
 
-        dataset_r3 = ERA5DatasetDistributed(
+        dataset_r3 = ERA5Distributed(
             3,
             world_size,
             zarr_path,

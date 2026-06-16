@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 from beast.comm import execute_in_waves
 
 
-class ERA5DatasetDistributed(Dataset):
+class ERA5Distributed(Dataset):
     """
     Genaralized ERA5 dataset for native and domain-parallel data.
 
@@ -255,7 +255,8 @@ class ERA5DatasetDistributed(Dataset):
             )
 
         else:
-            self.in_var = (0, self.in_var)
+            # Single-rank (no domain parallelism): all variables.
+            self.in_var = (0, self.n_variables)
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
 
@@ -267,10 +268,11 @@ class ERA5DatasetDistributed(Dataset):
 
         try:
             _ = self.__getitem__(0)
-        except Exception:
-            Exception(
-                "Dataset was instantiated, but data items cannot be loaded. Data seems to be empty, or does not contain `fields`"
-            )
+        except Exception as err:
+            raise RuntimeError(
+                "Dataset was instantiated, but data items cannot be loaded. Data "
+                "seems to be empty, or does not contain `fields`."
+            ) from err
 
     def __len__(self) -> int:
         """Return total number of samples."""
@@ -307,8 +309,13 @@ class ERA5DatasetDistributed(Dataset):
             )["fields"].values
 
             x = (
-                x - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+                x
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
 
             input_list.append(torch.tensor(x, dtype=self.dtype))
 
@@ -334,8 +341,13 @@ class ERA5DatasetDistributed(Dataset):
             )["fields"].values
 
             y = (
-                y - self.norm_values["mean"][self.in_var[0] : self.in_var[1]]
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]]
+                y
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
 
             target_list.append(torch.tensor(y, dtype=self.dtype))
 
@@ -398,7 +410,7 @@ class ERA5DatasetDistributed(Dataset):
         return masks
 
 
-class DummyDataset(Dataset):
+class ERA5Dummy(Dataset):
     """
     Generates a dummy dataset, returning tensors (input, target) for a specified shape.
 
