@@ -18,6 +18,7 @@ from beast.data.era5 import (
     ERA5Distributed,
     ERA5Dummy,
 )
+from beast.utils import set_dtype
 
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
@@ -109,6 +110,7 @@ def get_dataloader(
         years = None
 
     batch_size = config_dict["training"]["batch_size"]
+    dtype = set_dtype(config_dict["training"]["dtype"])
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
@@ -123,7 +125,7 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=config_dict["training"]["dtype"],
+            dtype=dtype,
             transform=transform,
             target_transform=target_transform,
         )
@@ -147,7 +149,7 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=config_dict["training"]["dtype"],
+            dtype=dtype,
             transform=transform,
             target_transform=target_transform,
         )
