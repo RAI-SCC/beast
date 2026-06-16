@@ -258,8 +258,8 @@ class TestDataLoader:
         n_lon = 144
         n_masks = 3
 
-        config_dict["data"]["train_time_range"] = ["2024-01-01", "2024-01-02"]
-        config_dict["data"]["valid_time_range"] = ["2024-01-02", "2024-01-03"]
+        config_dict["data"]["train_time_range"] = ["2024-01-01", "2024-01-03"]
+        config_dict["data"]["valid_time_range"] = ["2024-01-02", "2024-01-04"]
         config_dict["data"]["train_subset"] = train_subset
         config_dict["data"]["valid_subset"] = valid_subset
 
