@@ -1,96 +1,11 @@
-import math
+"""Utils module."""
+
 import os
 import random
-import re
-import time
+from typing import Any
 
 import numpy as np
-import pandas as pd
 import torch
-import torch.distributed as dist
-import torch.nn.init as init
-import xarray as xr
-import yaml
-from torch.utils.flop_counter import FlopCounterMode
-
-from beast.comm import get_process_group
-
-
-def execute_in_waves(func, wave_size: int = 128):
-    world_size = dist.get_world_size(group=None)
-    num_groups = (world_size + wave_size - 1) // wave_size
-    global_rank = dist.get_rank(group=None)
-    result = None
-
-    for group in range(num_groups):
-        wave_start = time.time()
-        start_rank = group * wave_size
-        end_rank = start_rank + wave_size
-
-        if global_rank < end_rank and global_rank >= start_rank:
-            result = func()
-
-        dist.barrier(group=None)  # Synchronize after each wave
-        wave_end = time.time()
-        if global_rank == 0:
-            print(
-                f"R{global_rank}/{world_size}: Wave {group} of {func.__name__} executed in {wave_end - wave_start}"
-            )
-
-    return result
-
-
-def download_1_5_degree_data(data_path):
-    # data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../data")
-
-    file_name = "weather_test_data.zarr"
-    full_path = os.path.join(data_path, file_name)
-
-    ds = xr.open_dataset(
-        "gs://weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
-    )
-
-    variable_list_surface = [
-        "2m_temperature",
-        "10m_u_component_of_wind",
-        "10m_v_component_of_wind",
-        "mean_sea_level_pressure",
-    ]
-    variable_list_pressure = [
-        "u_component_of_wind",
-        "v_component_of_wind",
-        "geopotential",
-        "specific_humidity",
-        "temperature",
-    ]
-    variable_list = [*variable_list_surface, *variable_list_pressure]
-
-    p_level_list = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
-
-    ds = ds[variable_list]
-
-    times = pd.to_datetime(ds["time"].values)
-    dataset_in_range = times[
-        (times.year == 2020) & (times.month == 1) & (times.day >= 1) & (times.day <= 6)
-    ]
-    ds = ds.sel(time=dataset_in_range)
-
-    ds_surface = ds[variable_list_surface]
-    ds_pressure = ds[variable_list_pressure]
-    ds_pressure = ds_pressure.sel(level=p_level_list)
-
-    ds = xr.merge([ds_surface, ds_pressure])
-
-    # print(ds)
-
-    ds.to_zarr(full_path, mode="w", consolidated=True, zarr_format=2)
-
-    return full_path
-
-
-def _init_uniform_override(self, parameter, fan_in) -> None:
-    bound = math.sqrt(6.0 / fan_in) if fan_in > 0 else 0
-    init.uniform_(parameter, -bound, bound)
 
 
 def set_all_seeds(seed_value: int) -> None:
@@ -104,8 +19,20 @@ def set_all_seeds(seed_value: int) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed_value)  # python hash seed.
 
 
-def set_dtype(dtype: str):
-    """Set datatype from config file"""
+def set_dtype(dtype: str) -> torch.dtype:
+    """
+    Set datatype from config file.
+
+    Parameters
+    ----------
+    dtype : str
+        Data type as a string, e.g., "float32", "bfloat16"
+
+    Returns
+    -------
+    torch.dtype
+        Corresponding torch data type.
+    """
     match dtype:
         case "float32":
             return torch.float32
@@ -177,7 +104,24 @@ def count_flops(
 
 
 @torch.no_grad()
-def get_spatial_weights(config_dict, device):
+def get_spatial_weights(
+    config_dict: dict[str, Any], device: torch.device
+) -> torch.Tensor:
+    """
+    Calculate spatial weights based on latitude for loss weighting.
+
+    Parameters
+    ----------
+    config_dict : dict
+        Configuration dictionary containing data parameters, including "xlat" for the number of latitude points.
+    device : torch.device
+        Device to place the resulting weights tensor on.
+
+    Returns
+    -------
+    torch.Tensor
+        A tensor of shape (1, 1, n_lat, 1) containing the spatial weights normalized by the cosine of the latitude.
+    """
     n_lat = config_dict["data"]["xlat"]
     latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
     cossum = np.sum(np.cos(latitude))
@@ -185,84 +129,3 @@ def get_spatial_weights(config_dict, device):
         torch.float32
     )
     return weight.view(1, 1, n_lat, 1)
-
-
-
-def load_configuration_yaml(directory):
-    yaml_path = os.path.join(directory, "config.yaml")
-    with open(f"{yaml_path}", "r") as f:
-        config_dict = yaml.load(f, Loader=yaml.SafeLoader)
-
-    return config_dict
-
-
-
-
-
-def dist_clip_grad_norm_(params, max_norm, norm_type=2.0, group=None):
-    params = [
-        p for p in params if p.grad is not None
-    ]  # Convert generator to list for foreach_map
-    max_norm = torch.tensor(max_norm, device=params[0].device)
-
-    def _get_local_norms(param):
-        if param.grad is not None:
-            if norm_type == 2.0:
-                norm = torch.sqrt(torch.sum(torch.square(torch.abs(param.grad))))
-            elif norm_type == 1.0:
-                norm = torch.sum(torch.abs(param.grad))
-            else:
-                raise ValueError(f"Unsupported norm type: {norm_type}")
-
-            return norm
-        else:
-            return None
-
-    def _reduce_norms(params, norms, norm_type=2.0, group=None):
-        reduced_norms = []
-        for param, norm in zip(params, norms):
-            if (
-                hasattr(param, "sharded_dims")
-                and (param.sharded_dims is not None)
-                and (norm is not None)
-            ):
-                if norm_type == 2.0:
-                    norm = torch.square(norm)
-                    norm = dist.dnn.all_reduce(norm, group=group)
-                if norm_type == 2.0:
-                    norm = torch.sqrt(norm)
-            reduced_norms.append(norm)
-
-        return reduced_norms
-
-    with torch.no_grad():
-        # compute local norms
-        norms = [_get_local_norms(p) for p in params]
-
-        # reduce norms across ranks if required
-        norms = _reduce_norms(params, norms, norm_type=norm_type, group=group)
-
-        # now reduce the norms in the vector
-        # Filter out None values before stacking
-        valid_norms = [n for n in norms if n is not None]
-
-        if len(valid_norms) == 0:
-            # we don't want to clip in this case
-            total_norm = torch.tensor(0.0, device=params[0].device)
-        else:
-            normvec = torch.stack(valid_norms)
-
-            if norm_type == 2.0:
-                total_norm = torch.sqrt(torch.sum(torch.square(normvec)))
-            elif norm_type == 1.0:
-                total_norm = torch.sum(torch.abs(normvec))
-            else:
-                raise ValueError(f"Unsupported norm type: {norm_type}")
-
-            # clip grads and return total norm
-            clip_coef = max_norm / (total_norm + 1e-6)
-            clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
-            for param in params:
-                param.grad.mul_(clip_coef_clamped)
-
-    return total_norm

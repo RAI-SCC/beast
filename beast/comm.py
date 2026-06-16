@@ -6,7 +6,9 @@ CustomDeviceMesh implementation when the native torch.device_mesh
 functionality is not available or suitable.
 """
 
-from typing import Sequence
+import time
+from collections.abc import Callable
+from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
@@ -118,6 +120,46 @@ def get_process_group(name: str) -> dist.ProcessGroup:
     if name not in _process_group_dict:
         raise ValueError(f"Process group '{name}' not found.")
     return _process_group_dict[name]
+
+
+def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
+    """Execute a function across distributed ranks in waves to reduce contention.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to execute on each rank. Should contain the logic that
+        needs to be executed in a distributed manner.
+    wave_size : int, optional
+        The number of ranks to execute the function in each wave (default is 128).
+
+    Returns
+    -------
+    Any
+        The result of the function execution on the current rank, or None if
+        the rank is not part of the current wave.
+    """
+    world_size = dist.get_world_size(group=None)
+    num_groups = (world_size + wave_size - 1) // wave_size
+    global_rank = dist.get_rank(group=None)
+    result = None
+
+    for group in range(num_groups):
+        wave_start = time.time()
+        start_rank = group * wave_size
+        end_rank = start_rank + wave_size
+
+        if global_rank < end_rank and global_rank >= start_rank:
+            result = func()
+
+        dist.barrier(group=None)  # Synchronize after each wave
+        wave_end = time.time()
+        if global_rank == 0:
+            print(
+                f"R{global_rank}/{world_size}: Wave {group} of {func.__name__} executed in {wave_end - wave_start}"
+            )
+
+    return result
 
 
 def shutdown_comm() -> None:
