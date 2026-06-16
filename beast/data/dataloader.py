@@ -3,6 +3,7 @@
 import os
 import time
 from typing import Any
+import warnings
 
 import torch
 import torch.distributed as dist
@@ -13,9 +14,9 @@ from torch.utils.data.dataloader import (
 )
 from torch.utils.data.distributed import DistributedSampler
 
-from beast.data.dataset import (
-    DummyDataset,
-    ERA5DatasetDistributed,
+from beast.data.era5 import (
+    ERA5Dummy,
+    ERA5Distributed,
 )
 
 
@@ -65,7 +66,6 @@ def get_dataloader(
     dp_rank: int,
     dp_size: int,
     mode: str = "train",
-    dtype: torch.dtype = torch.float32,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
@@ -87,29 +87,25 @@ def get_dataloader(
         The size of the data-parallel process group (torch.DistributedDataParallel)
     mode : str
         The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
-    dtype : torch.dtype
-        The datatype that the data items will have
-
     Returns
     -------
     dataloader : GBDataLoader
         The dataloader instance
     """
+    data_path = config_dict["data"]["data_path"]
+
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
-        data_path = config_dict["data"]["train_data_path"]
     elif mode == "validation":
         years = config_dict["data"]["valid_time_range"]
-        data_path = config_dict["data"]["valid_data_path"]
     else:
         years = None
-        data_path = config_dict["data"]["train_data_path"]
 
     batch_size = config_dict["training"]["batch_size"]
 
-    dataset: ERA5DatasetDistributed | DummyDataset | Subset | None = None
+    dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
-        dataset = ERA5DatasetDistributed(
+        dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
             data_path=data_path,
@@ -120,12 +116,12 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype,
+            dtype=config_dict["training"]["dtype"],
         )
     else:
         if dist.get_rank(group=None) == 0:
-            print(
-                f"`{data_path}` not found. Running dummy dataset for time range {years}"
+            warnings.warn(
+                f"`{data_path}` not found. Running dummy dataset for time range {years}", UserWarning
             )
 
         shape = (
@@ -133,7 +129,7 @@ def get_dataloader(
             config_dict["data"]["xlat"],
             config_dict["data"]["xlon"],
         )
-        dataset = DummyDataset(
+        dataset = ERA5Dummy(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
             global_shape=shape,
@@ -141,7 +137,7 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype,
+            dtype=config_dict["training"]["dtype"],
         )
 
     # if train_subset <=0, the entire dataset will be used for training

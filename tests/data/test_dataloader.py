@@ -19,8 +19,7 @@ def create_mock_config() -> dict[str, Any]:
     config = {
         "data": {
             "dt": 6,
-            "train_data_path": "test_data.zarr",
-            "valid_data_path": "test_data.zarr",
+            "data_path": "test_data.zarr",
             "constant_masks_path": "test_masks",
             "constant_masks": ["mask_0001.npy", "mask_0002.npy", "mask_0003.npy"],
             "normalization_dir": "normalization",
@@ -95,7 +94,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
 
         assert len(dummy_loader) == int(n_time - config_dict["data"]["dt"]) // (
@@ -147,7 +145,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == int(n_time - config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
@@ -161,7 +158,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == int(n_time - 2 * config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
@@ -175,7 +171,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == int(n_time - 4 * config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
@@ -230,7 +225,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == int(n_time - config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
@@ -288,7 +282,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == train_subset
 
@@ -299,7 +292,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="validation",
-            dtype=torch.float32,
         )
         assert len(valid_loader) == valid_subset
 
@@ -343,7 +335,6 @@ class TestDataLoader:
                 0,
                 1,
                 mode="validation",
-                dtype=torch.float32,
             )
 
     @pytest.mark.parametrize(
@@ -394,7 +385,6 @@ class TestDataLoader:
             dp_rank,
             dp_size,
             mode="train",
-            dtype=torch.float32,
         )
         assert len(train_loader) == math.ceil(
             (n_time - config_dict["data"]["dt"])

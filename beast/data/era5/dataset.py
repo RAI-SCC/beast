@@ -13,7 +13,7 @@ from torch.utils.data import Dataset
 from beast.comm import execute_in_waves
 
 
-class ERA5DatasetDistributed(Dataset):
+class ERA5Distributed(Dataset):
     """
     Genaralized ERA5 dataset for native and domain-parallel data.
 
@@ -343,6 +343,7 @@ class ERA5DatasetDistributed(Dataset):
                 )
 
         return input, target
+        
 
     def get_constant_masks(self) -> torch.Tensor:
         """
@@ -386,7 +387,7 @@ class ERA5DatasetDistributed(Dataset):
         return masks
 
 
-class DummyDataset(Dataset):
+class ERA5Dummy(Dataset):
     """
     Generates a dummy dataset, returning tensors (input, target) for a specified shape.
 
