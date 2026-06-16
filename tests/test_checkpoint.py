@@ -88,7 +88,7 @@ class TestCheckpoint:
         )
 
         output_loaded = model_loaded(input_beasting)
-        assert output_loaded == output_native
+        assert torch.equal(output_loaded, output_native)
 
     @pytest.mark.gpu
     @pytest.mark.dist(4)
@@ -118,8 +118,8 @@ class TestCheckpoint:
         )
 
         height = large_config["height"]
-        width = large_config["width"] // jspatial_pg.size
-        in_channels = large_config["in_channels"] // jchannel_pg.size
+        width = large_config["width"] // jspatial_pg.size()
+        in_channels = large_config["in_channels"] // jchannel_pg.size()
         input_beast = torch.ones((1, in_channels, height, width), device=device)
         output_native = model(input_beast)
 
@@ -145,7 +145,7 @@ class TestCheckpoint:
             checkpoint["epoch"],
         )
         output_loaded = model_loaded(input_beast)
-        assert output_loaded == output_native
+        assert torch.equal(output_loaded, output_native)
 
     def test_parse_checkpoint(self) -> None:
         """Test that parsing a checkpoint file name works."""
