@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import Any
+from typing import Any, Callable
 
 import torch
 import torch.distributed as dist
@@ -66,6 +66,8 @@ def get_dataloader(
     dp_size: int,
     mode: str = "train",
     dtype: torch.dtype = torch.float32,
+    transform: Callable | None = None,
+    target_transform: Callable | None = None,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
@@ -89,6 +91,10 @@ def get_dataloader(
         The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
     dtype : torch.dtype
         The datatype that the data items will have
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
 
     Returns
     -------
@@ -118,6 +124,8 @@ def get_dataloader(
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
             dtype=config_dict["training"]["dtype"],
+            transform=transform,
+            target_transform=target_transform,
         )
     else:
         if dist.get_rank(group=None) == 0:
@@ -139,6 +147,8 @@ def get_dataloader(
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
             dtype=config_dict["training"]["dtype"],
+            transform=transform,
+            target_transform=target_transform,
         )
 
     # if train_subset <=0, the entire dataset will be used for training
