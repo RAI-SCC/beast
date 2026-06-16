@@ -8,6 +8,7 @@ import torch
 import xarray as xr
 from pytest import TempPathFactory
 
+import beast.data.transforms as trf
 from beast.data.dataset import DummyDataset, ERA5DatasetDistributed
 
 
@@ -477,3 +478,112 @@ class TestDataset:
             lon -= 1
         assert list(x.shape) == [n_vars // 2, lat, lon // 2]
         assert list(target.shape) == [n_vars // 2, lat, lon // 2]
+
+    @pytest.mark.parametrize("n_masks, n_features", test_array_mask_features)
+    def test_era5_dataset_distributed_transform_integration(
+        self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
+    ) -> None:
+        """Test for class ERA5DatasetDistributed, for different numbers of masks and features to evaluate transformation functionality."""
+        data_path = tmp_path_factory.mktemp("data")
+        n_time = 48
+        world_size = 4
+
+        xlat = 120
+        xlon = 240
+        in_timesteps = 1
+        out_timesteps = 1
+
+        n_vars = n_masks + n_features
+        if n_vars % 2 == 1:
+            n_vars += 1
+
+        zarr_path = generate_mock_zarr_data(
+            (data_path / "test_data.zarr"), n_time, n_features, xlat, xlon
+        )
+        mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
+        generate_mock_normalization(data_path, n_features)
+
+        dataset_r0 = ERA5DatasetDistributed(
+            0,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            transform=trf.Identity(),
+        )
+
+        dataset_r1 = ERA5DatasetDistributed(
+            1,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            transform=trf.Downsample(factor=6, dims=(-1, -2)),
+        )
+
+        dataset_r2 = ERA5DatasetDistributed(
+            2,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            transform=trf.DownsampleMeanStd(factor=6, dims=(-1, -2)),
+        )
+
+        dataset_r3 = ERA5DatasetDistributed(
+            3,
+            world_size,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=in_timesteps,
+            n_out_timesteps=out_timesteps,
+            dtype=torch.float32,
+            dsync_access=False,
+            transform=trf.DownsampleMeanStd(factor=6, dims=(-1, -2)),
+            target_transform=trf.Downsample(factor=6, dims=(-1, -2)),
+        )
+
+        x_0, target_0 = dataset_r0[0]
+        x_1, target_1 = dataset_r1[0]
+        x_2, target_2 = dataset_r2[0]
+        x_3, target_3 = dataset_r3[0]
+
+        assert len(dataset_r0) == n_time - 6
+        assert list(x_0.shape) == [n_vars // 2, 120, 120]
+        if n_features % 2 == 1:
+            n_features += 1
+        assert list(target_0.shape) == [n_features // 2, 120, 120]
+
+        assert list(x_1.shape) == [n_vars // 2, 20, 20]
+        assert list(target_1.shape) == [n_features // 2, 20, 20]
+
+        assert list(x_2.shape) == [n_vars // 2, 20, 20, 2]
+        assert list(target_2.shape) == [n_features // 2, 20, 20, 2]
+
+        assert list(x_3.shape) == [n_vars // 2, 20, 20, 2]
+        assert list(target_3.shape) == [n_features // 2, 20, 20]
