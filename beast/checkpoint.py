@@ -1,3 +1,5 @@
+"""Utilities for saving and loading model checkpoints and state_dicts."""
+
 import os
 import re
 from typing import Tuple
@@ -37,6 +39,11 @@ def save_checkpoint(
         Current step (batch).
     loss: torch.Tensor | int
         Average loss value.
+
+    Returns
+    -------
+    str
+        Path to the checkpoint
     """
     try:
         channel_group = model.channel_group
@@ -75,7 +82,24 @@ def save_checkpoint(
 def load_checkpoint(
     checkpoint_path: str, map_location="cpu"
 ) -> tuple[dict, dict, int, int | None, int, int, float]:
-    """Loads a checkpoint and returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank."""
+    """
+    Load a checkpoint.
+
+    Returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank.
+
+    Parameters
+    ----------
+    checkpoint_path: str
+        Path to the checkpoint file
+    map_location: Callable | device | str |
+        A function, torch.device, string or a dict specifying how to remap storage locations
+
+    Returns
+    -------
+    checkpoint:  Tuple[dict, dict, int, int | None, int, int, float]
+        Model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank.
+
+    """
     checkpoint = torch.load(
         checkpoint_path, map_location=map_location, weights_only=False
     )
@@ -93,7 +117,8 @@ def parse_checkpoint_path(fname: str) -> dict:
 
     Returns
     -------
-    dictionary of epoch, step, channel rank, checkpoint file name.
+    dictionary
+        of epoch, step, channel rank, checkpoint file name.
     """
     if "jc" in fname:
         m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-jc(\d+)\.pt$", fname)
@@ -125,7 +150,6 @@ def parse_checkpoint_path(fname: str) -> dict:
 def parse_latest_model_state(directory: str) -> dict:
     """
     Parse the latest model state and return checkpoint.
-
 
     Given a directory where several checkpoints have been stored,
     this function looks through the directory, finds the latest
@@ -175,6 +199,8 @@ def load_state_dict(
     """
     Load state dict for a given model.
 
+    Parameters
+    ----------
     model: torch.nn.Module
         Model to load state dict into.
     optimizer: torch.optim
@@ -185,8 +211,12 @@ def load_state_dict(
         State dict of the optimizer.
     last_epoch: int
         Epoch to load
-    """
 
+    Returns
+    -------
+    torch.nn.Module | Tuple[torch.nn.Module, torch.optim, int]
+        Either just the model, or a tuple of the model, optimizer and starting epoch
+    """
     # DDP checks
     is_state_dict_ddp = any(k.startswith("module.") for k in model_state_dict.keys())
     if isinstance(model, DDP) and not is_state_dict_ddp:

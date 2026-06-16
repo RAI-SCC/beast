@@ -1,17 +1,18 @@
-import pytest
-import torch
 import pathlib
 
+import pytest
+import torch
+
 from beast.checkpoint import (
-    save_checkpoint,
     load_checkpoint,
+    load_state_dict,
     parse_checkpoint_path,
     parse_latest_model_state,
-    load_state_dict,
+    save_checkpoint,
 )
+from beast.comm import create_process_mesh_dict, shutdown_comm
 from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.model.gb.beast_model import Beast
-from beast.comm import create_process_mesh_dict, shutdown_comm
 
 
 @pytest.fixture(scope="module")
@@ -31,6 +32,7 @@ class TestCheckpoint:
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
         tmp_path = str(tmp_path)
+
         full_path = save_checkpoint(
             tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
         )
@@ -57,6 +59,12 @@ class TestCheckpoint:
         small_config["in_channels"] = small_config["in_channels"]
         model = Beast(**small_config, dropout=0 if bayesian else 1e-1, device=device)
 
+        height = small_config["height"]
+        width = small_config["width"]
+        in_channels = small_config["in_channels"]
+        input_beasting = torch.ones((1, in_channels, height, width), device=device)
+        output_native = model(input_beasting)
+
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
 
@@ -70,6 +78,17 @@ class TestCheckpoint:
         assert isinstance(checkpoint["epoch"], int)
         assert isinstance(checkpoint["step"], int)
         assert checkpoint["loss"] == loss_value
+
+        model_loaded, optimizer_loaded, start_epoch = load_state_dict(
+            model,
+            optimizer,
+            checkpoint["model_state_dict"],
+            checkpoint["optimizer_state_dict"],
+            checkpoint["epoch"],
+        )
+
+        output_loaded = model_loaded(input_beasting)
+        assert output_loaded == output_native
 
     @pytest.mark.gpu
     @pytest.mark.dist(4)
@@ -98,6 +117,12 @@ class TestCheckpoint:
             spatial_group=jspatial_pg,
         )
 
+        height = large_config["height"]
+        width = large_config["width"] // jspatial_pg.size
+        in_channels = large_config["in_channels"] // jchannel_pg.size
+        input_beast = torch.ones((1, in_channels, height, width), device=device)
+        output_native = model(input_beast)
+
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
 
@@ -111,6 +136,16 @@ class TestCheckpoint:
         assert isinstance(checkpoint["epoch"], int)
         assert isinstance(checkpoint["step"], int)
         assert checkpoint["loss"] == loss_value
+
+        model_loaded, optimizer_loaded, start_epoch = load_state_dict(
+            model,
+            optimizer,
+            checkpoint["model_state_dict"],
+            checkpoint["optimizer_state_dict"],
+            checkpoint["epoch"],
+        )
+        output_loaded = model_loaded(input_beast)
+        assert output_loaded == output_native
 
     def test_parse_checkpoint(self) -> None:
         """Test that parsing a checkpoint file name works."""
