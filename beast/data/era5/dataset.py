@@ -136,8 +136,8 @@ class ERA5Distributed(Dataset):
                 )
 
             try:
-                self.xlat = self.zarr_data.dims["latitude"]
-                self.xlon = self.zarr_data.dims["longitude"]
+                self.xlat = self.zarr_data.sizes["latitude"]
+                self.xlon = self.zarr_data.sizes["longitude"]
             except Exception:
                 raise Exception(
                     "Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension"
@@ -160,14 +160,14 @@ class ERA5Distributed(Dataset):
                 self.zarr_data = self.zarr_data.sel(time=train_years)
 
             try:
-                self.n_data_items = self.zarr_data.dims["time"]
+                self.n_data_items = self.zarr_data.sizes["time"]
             except Exception:
                 raise Exception(
                     "Zarr directory has no dimension `time`. Cannot access temporal dimension"
                 )
 
             try:
-                self.n_variables = self.zarr_data.dims["feature"]
+                self.n_variables = self.zarr_data.sizes["feature"]
             except Exception:
                 raise Exception(
                     "Zarr directory has no dimension `feature`. Cannot access feature dimension"
