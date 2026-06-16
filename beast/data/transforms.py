@@ -101,6 +101,8 @@ class Downsample(nn.Module):
     """
 
     def __init__(self, factor: int, dims: Tuple[int, ...] = (-1,)):
+        super().__init__()
+
         assert factor > 0, (
             f"Downsampling factor must be greater than zero (given: {factor})"
         )
@@ -144,7 +146,7 @@ class Downsample(nn.Module):
         return x.mean(dim=target_dims)
 
 
-class DownSampleMeanStd(Downsample):
+class DownsampleMeanStd(Downsample):
     """
     Downsampling transformation returning mean and standard deviation.
 
