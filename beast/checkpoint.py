@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -14,7 +14,7 @@ from beast.comm import get_process_group
 def save_checkpoint(
     checkpoint_path: str,
     model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
+    optimizer: Optional[torch.optim.Optimizer],
     epoch: int,
     step: int | None,
     loss: float,
@@ -46,7 +46,7 @@ def save_checkpoint(
         Path to the checkpoint
     """
     try:
-        channel_group = model.channel_group
+        channel_group: Optional[dist.ProcessGroup] = model.channel_group  # type: ignore[assignment]
     except Exception:
         channel_group = None
 
@@ -57,13 +57,17 @@ def save_checkpoint(
         channel_group_rank = channel_group.rank()
         ddp_rank = get_process_group("DDP").rank()
 
+    # Ensure loss is a plain float to avoid tensor attributes on save
+    loss_value = float(loss) if isinstance(loss, (int, float, torch.Tensor)) else loss
     cp = {
         "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict()
+        if optimizer is not None
+        else None,
         "epoch": epoch,
         "step": step,
         "channel_group_rank": channel_group_rank,
-        "loss": loss.item() if isinstance(loss, torch.Tensor) else loss,
+        "loss": loss_value,
         "format": 1,
     }
 
@@ -80,8 +84,8 @@ def save_checkpoint(
 
 
 def load_checkpoint(
-    checkpoint_path: str, map_location="cpu"
-) -> tuple[dict, dict, int, int | None, int, int, float]:
+    checkpoint_path: str, map_location: str | torch.device = "cpu"
+) -> Dict[str, Any]:
     """
     Load a checkpoint.
 
@@ -96,17 +100,17 @@ def load_checkpoint(
 
     Returns
     -------
-    checkpoint:  Tuple[dict, dict, int, int | None, int, int, float]
-        Model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank.
+    checkpoint:  Dict[str, Any]
+        Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
 
     """
-    checkpoint = torch.load(
+    checkpoint: Dict[str, Any] = torch.load(
         checkpoint_path, map_location=map_location, weights_only=False
     )
     return checkpoint
 
 
-def parse_checkpoint_path(fname: str) -> dict:
+def parse_checkpoint_path(fname: str) -> Optional[Dict[str, Any]]:
     """Parse epochs, step, and channel rank from the checkpoint name.
 
     Parameters
@@ -123,7 +127,7 @@ def parse_checkpoint_path(fname: str) -> dict:
     if "jc" in fname:
         m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-jc(\d+)\.pt$", fname)
         if not m:
-            return m
+            return None
         epoch, step, jchannel_rank = (
             int(m.group(1)),
             int(m.group(2)) if m.group(2) else -1,
@@ -132,7 +136,7 @@ def parse_checkpoint_path(fname: str) -> dict:
     else:
         m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?.pt$", fname)
         if not m:
-            return m
+            return None
         epoch, step, jchannel_rank = (
             int(m.group(1)),
             int(m.group(2)) if m.group(2) else -1,
@@ -147,7 +151,7 @@ def parse_checkpoint_path(fname: str) -> dict:
     }
 
 
-def parse_latest_model_state(directory: str) -> dict:
+def parse_latest_model_state(directory: str) -> Dict[str, Any]:
     """
     Parse the latest model state and return checkpoint.
 
@@ -169,10 +173,12 @@ def parse_latest_model_state(directory: str) -> dict:
     """
     path_base = os.path.join(directory)
 
-    checkpoints = [fname for fname in os.listdir(path_base) if fname.endswith(".pt")]
+    checkpoints: list[str] = [
+        fname for fname in os.listdir(path_base) if fname.endswith(".pt")
+    ]
     local_checkpoint = ""
 
-    parsed = []
+    parsed: list[Dict[str, Any]] = []
     for fname in checkpoints:
         info = parse_checkpoint_path(fname)
         if info is None:
@@ -191,11 +197,11 @@ def parse_latest_model_state(directory: str) -> dict:
 
 def load_state_dict(
     model: torch.nn.Module,
-    optimizer: torch.optim,
+    optimizer: Optional[torch.optim.Optimizer],
     model_state_dict: dict,
     optimizer_state_dict: dict,
     last_epoch: int,
-) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim, int]:
+) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim.Optimizer, int]:
     """
     Load state dict for a given model.
 
