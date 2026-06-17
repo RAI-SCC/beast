@@ -74,7 +74,15 @@ def _reshape_for_downsampling(
     for i, dim in enumerate(reversed(dim_list)):
         target_dims.append(i + dim + 1)
 
-    x = x.reshape(tuple(target_shape))
+    try:
+        x = x.reshape(tuple(target_shape))
+    except RuntimeError as err:
+        if " is invalid for input of size " in str(err):
+            raise RuntimeError(
+                f"not all dimensions at positions {dims} of tensor with shape {list(x_shape)} are divisible by {factor}"
+            )
+        else:
+            raise err
 
     return x, tuple(target_dims)
 

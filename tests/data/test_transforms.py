@@ -1,6 +1,10 @@
 """Tests for beast.data.transforms"""
 
+import re
+
+import pytest
 import torch
+import torchvision.transforms as trf
 
 from beast.data.transforms import Downsample, DownsampleMeanStd, Identity
 
@@ -52,3 +56,35 @@ def test_downsampling(device: torch.device) -> None:
     assert torch.allclose(
         torch.stack((x_target, x_target_std), dim=-1), downsampling_by_two2(x)
     ), "Factor 2 downsampling failed for class DownsampleMeanStd"
+
+
+def test_exception(device: torch.device) -> None:
+    x = torch.randn(4, 3, device=device)
+    dims = (-1,)
+
+    downsampler = Downsample(2, dims)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            f"not all dimensions at positions {dims} of tensor with shape {list(x.shape)} are divisible by {2}"
+        ),
+    ):
+        downsampler(x)
+
+
+def test_torchvision_integration(device: torch.device) -> None:
+    x = torch.randn(4, 4, device=device)
+    dims1 = (-1,)
+    dims2 = (0,)
+
+    downsampler1 = Downsample(2, dims1)
+    random_flip = trf.RandomHorizontalFlip(p=0.5)
+    downsampler2 = Downsample(2, dims2)
+
+    full_transformation = trf.Compose([downsampler1, random_flip, downsampler2])
+
+    output = full_transformation(x)
+
+    assert list(output.shape) == [2, 2], (
+        f"Composed transformations did not yield the correct dimensions ({list(output.shape)} instead of [2, 2])"
+    )
