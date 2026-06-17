@@ -13,6 +13,7 @@ from beast.checkpoint import (
 from beast.comm import create_process_mesh_dict, shutdown_comm
 from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.model.gb.beast_model import Beast
+from beast.utils import set_all_seeds
 
 
 @pytest.fixture(scope="module")
@@ -63,6 +64,7 @@ class TestCheckpoint:
         width = small_config["width"]
         in_channels = small_config["in_channels"]
         input_beasting = torch.ones((1, in_channels, height, width), device=device)
+        set_all_seeds(42)
         output_native = model(input_beasting)
 
         optimizer = torch.optim.AdamW(model.parameters())
@@ -87,6 +89,7 @@ class TestCheckpoint:
             checkpoint["epoch"],
         )
 
+        set_all_seeds(42)
         output_loaded = model_loaded(input_beasting)
         assert torch.equal(output_loaded, output_native)
 
@@ -121,6 +124,7 @@ class TestCheckpoint:
         width = large_config["width"] // jspatial_pg.size()
         in_channels = large_config["in_channels"] // jchannel_pg.size()
         input_beast = torch.ones((1, in_channels, height, width), device=device)
+        set_all_seeds(42)
         output_native = model(input_beast)
 
         optimizer = torch.optim.AdamW(model.parameters())
@@ -144,6 +148,7 @@ class TestCheckpoint:
             checkpoint["optimizer_state_dict"],
             checkpoint["epoch"],
         )
+        set_all_seeds(42)
         output_loaded = model_loaded(input_beast)
         assert torch.equal(output_loaded, output_native)
 
