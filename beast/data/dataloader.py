@@ -2,8 +2,8 @@
 
 import os
 import time
-from typing import Any
 import warnings
+from typing import Any, Callable
 
 import torch
 import torch.distributed as dist
@@ -15,8 +15,8 @@ from torch.utils.data.dataloader import (
 from torch.utils.data.distributed import DistributedSampler
 
 from beast.data.era5 import (
-    ERA5Dummy,
     ERA5Distributed,
+    ERA5Dummy,
 )
 from beast.utils import set_dtype
 
@@ -67,6 +67,8 @@ def get_dataloader(
     dp_rank: int,
     dp_size: int,
     mode: str = "train",
+    transform: Callable | None = None,
+    target_transform: Callable | None = None,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
@@ -88,6 +90,11 @@ def get_dataloader(
         The size of the data-parallel process group (torch.DistributedDataParallel)
     mode : str
         The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+
     Returns
     -------
     dataloader : GBDataLoader
@@ -118,12 +125,15 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype
+            dtype=dtype,
+            transform=transform,
+            target_transform=target_transform,
         )
     else:
         if dist.get_rank(group=None) == 0:
             warnings.warn(
-                f"`{data_path}` not found. Running dummy dataset for time range {years}", UserWarning
+                f"`{data_path}` not found. Running dummy dataset for time range {years}",
+                UserWarning,
             )
 
         shape = (
@@ -139,7 +149,9 @@ def get_dataloader(
             dt=config_dict["data"]["dt"],
             n_in_timesteps=config_dict["data"]["n_in_timesteps"],
             n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype
+            dtype=dtype,
+            transform=transform,
+            target_transform=target_transform,
         )
 
     # if train_subset <=0, the entire dataset will be used for training
