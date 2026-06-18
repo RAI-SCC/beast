@@ -236,6 +236,7 @@ class DistributedTransformer(torch.nn.Module):
         dropout: float,
         local_rank: int,
         device: torch.device,
+        model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
         bayesian: bool,
@@ -259,6 +260,8 @@ class DistributedTransformer(torch.nn.Module):
             Rank of the DTP group.
         device: torch.device
             Device that the computations are occuring on.
+        model_group: dist.ProcessGroup
+            DTP process group.
         spatial_group: dist.ProcessGroup
             Domain-parallel process group.
         channel_group: dist.ProcessGroup
@@ -303,8 +306,9 @@ class DistributedTransformer(torch.nn.Module):
             dropout=dropout,
             local_rank=local_rank,
             device=device,
-            model_group=channel_group,
-            sync_group=spatial_group,
+            model_group=model_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
             bayesian=bayesian,
         ).to(device)
 
@@ -341,6 +345,7 @@ class DistributedNICETransformer(torch.nn.Module):
         dropout: float,
         local_rank: int,
         device: torch.device,
+        model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
         bayesian: bool,
@@ -397,6 +402,7 @@ class DistributedNICETransformer(torch.nn.Module):
             noise_dim,
             local_rank,
             device,
+            model_group,
             spatial_group,
             channel_group,
         ).to(device)
@@ -405,6 +411,7 @@ class DistributedNICETransformer(torch.nn.Module):
             noise_dim,
             local_rank,
             device,
+            model_group,
             spatial_group,
             channel_group,
         ).to(device)
@@ -418,7 +425,8 @@ class DistributedNICETransformer(torch.nn.Module):
             local_rank=local_rank,
             device=device,
             model_group=channel_group,
-            sync_group=spatial_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
             bayesian=bayesian,
         ).to(device)
 

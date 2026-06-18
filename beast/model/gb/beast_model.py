@@ -284,14 +284,14 @@ class Beast(torch.nn.Module):
 
         # each process would have weights: [embed //2 , embed]
         self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
-            self.embed_dim,
-            self.embed_dim,
+            in_dim=self.embed_dim,
+            out_dim=self.embed_dim,
             bias=True,
-            self.local_rank,
-            self.device,
-            self.channel_group,
-            self.spatial_group,
-            self.channel_group,
+            local_rank=self.local_rank,
+            device=self.device,
+            model_group=self.channel_group,
+            tensor_group=self.spatial_group,
+            domain_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
@@ -326,6 +326,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -347,6 +348,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -368,6 +370,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -388,6 +391,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -408,6 +412,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -428,6 +433,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -753,14 +759,12 @@ class Beast(torch.nn.Module):
         x_res = x.clone()
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         # TODO: fuse as x.permute(0, 2, 3, 1)
-        x = x.reshape(batch_size, channels, xlat * xlon).mT.view(
-            batch_size, xlat, xlon, channels
-        )
+        x = x.permute(0, 2, 3, 1).contiguous()
 
         # attention
         for i in range(self.n_full_blocks[0]):
             x = self._get_windows(x, self.window_size_outer)
-            # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
+            # x has shape: [(S), B*n_windows, window_size_outer[0] * window_size_outer[1], channels]
             n_windows = x.shape[0] // batch_size
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
