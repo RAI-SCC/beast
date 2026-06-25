@@ -229,7 +229,6 @@ class Beast(torch.nn.Module):
             self.embed_dim,  # global values
             self.kernel_size,
 
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
@@ -248,7 +247,6 @@ class Beast(torch.nn.Module):
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
@@ -268,7 +266,6 @@ class Beast(torch.nn.Module):
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
@@ -299,7 +296,6 @@ class Beast(torch.nn.Module):
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
