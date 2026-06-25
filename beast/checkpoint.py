@@ -14,7 +14,7 @@ from beast.comm import get_process_group
 def save_checkpoint(
     checkpoint_path: str,
     model: torch.nn.Module,
-    optimizer: Optional[torch.optim.Optimizer],
+    optimizer: torch.optim.Optimizer | None,
     epoch: int,
     step: int | None,
     loss: float,
@@ -78,14 +78,18 @@ def save_checkpoint(
     )
 
     if ddp_rank == 0:
-        torch.save(cp, f"{checkpoint_path}/{model_name}.pt")
+        torch.save(
+            cp,
+            f"{checkpoint_path}/{model_name}.pt",
+            _use_new_zipfile_serialization=False,
+        )
 
     return f"{checkpoint_path}/{model_name}.pt"
 
 
 def load_checkpoint(
     checkpoint_path: str, map_location: str | torch.device = "cpu"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Load a checkpoint.
 
@@ -104,13 +108,10 @@ def load_checkpoint(
         Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
 
     """
-    checkpoint: Dict[str, Any] = torch.load(
-        checkpoint_path, map_location=map_location, weights_only=False
-    )
-    return checkpoint
+    return torch.load(checkpoint_path, map_location=map_location, weights_only=False)
 
 
-def parse_checkpoint_path(fname: str) -> Optional[Dict[str, Any]]:
+def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
     """Parse epochs, step, and channel rank from the checkpoint name.
 
     Parameters
@@ -151,7 +152,7 @@ def parse_checkpoint_path(fname: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def parse_latest_model_state(directory: str) -> Dict[str, Any]:
+def parse_latest_model_state(directory: str) -> dict[str, Any]:
     """
     Parse the latest model state and return checkpoint.
 
@@ -197,7 +198,7 @@ def parse_latest_model_state(directory: str) -> Dict[str, Any]:
 
 def load_state_dict(
     model: torch.nn.Module,
-    optimizer: Optional[torch.optim.Optimizer],
+    optimizer: torch.optim.Optimizer | None,
     model_state_dict: dict,
     optimizer_state_dict: dict,
     last_epoch: int,

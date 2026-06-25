@@ -22,6 +22,7 @@ dependencies = [
     "h5py>=3.16.0",
     "torch-blue @ git+https://github.com/RAI-SCC/torch_blue@stable-beast",
     "torch>=2.11.0",
+    "torchvision",
     "xarray>=2026.4.0",
     "matplotlib",
     "zarr",

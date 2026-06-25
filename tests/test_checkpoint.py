@@ -2,6 +2,7 @@ import pathlib
 
 import pytest
 import torch
+import torch.distributed as dist
 
 from beast.checkpoint import (
     load_checkpoint,
@@ -11,31 +12,28 @@ from beast.checkpoint import (
     save_checkpoint,
 )
 from beast.comm import create_process_mesh_dict, shutdown_comm
+from beast.model import convert_jigsaw_vi, get_model
 from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
-from beast.model.gb.beast_model import Beast
 from beast.utils import set_all_seeds
-
-
-@pytest.fixture(scope="module")
-def process_mesh_dict():
-    process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-    yield process_mesh_dict
-    shutdown_comm()
 
 
 class TestCheckpoint:
     @pytest.mark.dist(4)
     def test_save_checkpoint(
-        self, tmp_path: pathlib.Path, device: torch.device, process_mesh_dict: dict
+        self,
+        shared_tmp_path: pathlib.Path,
+        device: torch.device,
+        process_mesh_dict: dict,
     ) -> None:
         """Test to save and load a dummy model."""
+        print(shared_tmp_path)
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
-        tmp_path = str(tmp_path)
+        shared_tmp_path = str(shared_tmp_path)
 
         full_path = save_checkpoint(
-            tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
+            shared_tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
         )
         checkpoint = load_checkpoint(full_path)
 
@@ -45,24 +43,25 @@ class TestCheckpoint:
         assert isinstance(checkpoint["step"], int)
         assert checkpoint["loss"] == loss_value
 
+    @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("bayesian", [False, True])
-    def test_save_beast_checkpoint(
+    def test_save_beast_checkpoint_ddp(
         self,
         device: torch.device,
-        tmp_path: pathlib.Path,
+        shared_tmp_path: pathlib.Path,
         bayesian: bool,
-        process_mesh_dict: dict,
     ) -> None:
         """Test that initializing, saving, and loading beast works."""
-        small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
-        small_config["bayesian"] = bayesian
-        small_config["in_channels"] = small_config["in_channels"]
-        model = Beast(**small_config, dropout=0 if bayesian else 1e-1, device=device)
+        create_process_mesh_dict(mesh_dims=[1, 4, 1, 1, 1])
 
-        height = small_config["height"]
-        width = small_config["width"]
-        in_channels = small_config["in_channels"]
+        config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
+        model = get_model("BEASTLING", bayesian=True, device=device)
+        model = convert_jigsaw_vi(model)
+
+        height = config["height"]
+        width = config["width"]
+        in_channels = config["in_channels"]
         input_beasting = torch.ones((1, in_channels, height, width), device=device)
         set_all_seeds(42)
         output_native = model(input_beasting)
@@ -71,8 +70,12 @@ class TestCheckpoint:
         loss_value = torch.tensor([1.2], device=device)
 
         full_path = save_checkpoint(
-            str(tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
+            str(shared_tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
         )
+        dist.barrier()
+        files = list(shared_tmp_path.iterdir())
+        assert len(files) == 1
+
         checkpoint = load_checkpoint(full_path)
 
         assert isinstance(checkpoint["model_state_dict"], dict)
@@ -93,36 +96,32 @@ class TestCheckpoint:
         output_loaded = model_loaded(input_beasting)
         assert torch.equal(output_loaded, output_native)
 
+        shutdown_comm()
+
     @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("bayesian", [False, True])
-    def test_save_dist_beast_checkpoint(
+    def test_save_beast_checkpoint_dtp(
         self,
         device: torch.device,
-        tmp_path: pathlib.Path,
+        shared_tmp_path: pathlib.Path,
         bayesian: bool,
         process_mesh_dict: dict,
     ) -> None:
+
+        create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         """Test that initializing, saving, and loading distributed beast works."""
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]
 
-        large_config = BEAST_CONFIGURATIONS["BEAST-JUPITER-0.7B-1.8K"]["config"].copy()
-        large_config["bayesian"] = bayesian
-        large_config["in_channels"] = large_config["in_channels"]
-        model = Beast(
-            **large_config,
-            dropout=0 if bayesian else 1e-1,
-            device=device,
-            dtp_group=dtp_pg,
-            channel_group=jchannel_pg,
-            spatial_group=jspatial_pg,
-        )
+        config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
+        model = get_model("BEASTLING", bayesian=True, device=device)
+        convert_jigsaw_vi(model)
 
-        height = large_config["height"]
-        width = large_config["width"] // jspatial_pg.size()
-        in_channels = large_config["in_channels"] // jchannel_pg.size()
+        height = config["height"]
+        width = config["width"]
+        in_channels = config["in_channels"]
         input_beast = torch.ones((1, in_channels, height, width), device=device)
         set_all_seeds(42)
         output_native = model(input_beast)
@@ -131,8 +130,10 @@ class TestCheckpoint:
         loss_value = torch.tensor([1.2], device=device)
 
         full_path = save_checkpoint(
-            str(tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
+            str(shared_tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
         )
+        dist.barrier()
+        assert len(list(shared_tmp_path.iterdir()) == 2)
         checkpoint = load_checkpoint(full_path)
 
         assert isinstance(checkpoint["model_state_dict"], dict)
@@ -171,29 +172,36 @@ class TestCheckpoint:
         m = parse_checkpoint_path(fname)
         assert m is None
 
-    def test_parse_latest_model_state(self, tmp_path: pathlib.Path) -> None:
+    def test_parse_latest_model_state(self, shared_tmp_path: pathlib.Path) -> None:
         """Test that the latest model state is returned when multiple states are in a dir."""
         model = torch.nn.Linear(10, 10)
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2])
-        tmp_path = str(tmp_path)
-        save_checkpoint(tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value)
-        save_checkpoint(tmp_path, model, optimizer, epoch=1, step=2, loss=loss_value)
-        save_checkpoint(tmp_path, model, optimizer, epoch=1, step=0, loss=loss_value)
-        print(f"path {tmp_path}")
-        m = parse_latest_model_state(tmp_path)
+        shared_tmp_path = str(shared_tmp_path)
+        save_checkpoint(
+            shared_tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
+        )
+        save_checkpoint(
+            shared_tmp_path, model, optimizer, epoch=1, step=2, loss=loss_value
+        )
+        save_checkpoint(
+            shared_tmp_path, model, optimizer, epoch=1, step=0, loss=loss_value
+        )
+        dist.barrier()
+        print(f"path {shared_tmp_path}")
+        m = parse_latest_model_state(shared_tmp_path)
         assert m["epoch"] == 1
         assert m["step"] == 2
 
-    def test_load_state_dict(self, tmp_path: pathlib.Path) -> None:
+    def test_load_state_dict(self, shared_tmp_path: pathlib.Path) -> None:
         """Test load state dict function."""
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = 1.0
-        tmp_path = str(tmp_path)
+        shared_tmp_path = str(shared_tmp_path)
         checkpoint_path = save_checkpoint(
-            tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
+            shared_tmp_path, model, optimizer, epoch=0, step=1, loss=loss_value
         )
         m = load_checkpoint(checkpoint_path)
         model_1, optimizer_1, start_epoch = load_state_dict(
