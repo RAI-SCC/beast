@@ -162,7 +162,7 @@ def get_dataloader(
     elif mode == "validation" and config_dict["data"]["valid_subset"] > 0:
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
-
+    
     sampler: DistributedSampler = DistributedSampler(
         dataset,
         shuffle=(True if mode == "train" else False),
