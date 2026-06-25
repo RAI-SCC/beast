@@ -242,7 +242,8 @@ def select_variables(
                     if local_start <= g_idx < local_end:
                         indices.append(g_idx - local_start)
 
-    idx_tensor = torch.tensor(indices, dtype=torch.long)
+    index_device = t.device if isinstance(t, torch.Tensor) else t[0].device
+    idx_tensor = torch.tensor(indices, dtype=torch.long, device=index_device)
 
     if isinstance(t, torch.Tensor):
         return t.index_select(dim, idx_tensor)
