@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import torch
 import torch.distributed as dist
@@ -46,16 +46,19 @@ def save_checkpoint(
         Path to the checkpoint
     """
     try:
-        channel_group: Optional[dist.ProcessGroup] = model.channel_group  # type: ignore[assignment]
+        channel_group: dist.ProcessGroup | None = get_process_group("JChannel")
+        ddp_group: dist.ProcessGroup | None = get_process_group("DDP")
+
     except Exception:
         channel_group = None
+        ddp_group = None
 
     if channel_group is None:
         channel_group_rank = -1
         ddp_rank = dist.get_rank(group=None)
     else:
         channel_group_rank = channel_group.rank()
-        ddp_rank = get_process_group("DDP").rank()
+        ddp_rank = ddp_group.rank()
 
     # Ensure loss is a plain float to avoid tensor attributes on save
     loss_value = float(loss) if isinstance(loss, (int, float, torch.Tensor)) else loss

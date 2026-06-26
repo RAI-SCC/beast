@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from beast.comm import create_process_mesh_dict, shutdown_comm
+from beast.comm import create_process_mesh_dict
 from beast.layers import transformer
 
 
@@ -90,22 +90,14 @@ class TestNiceTransformer:
         assert isinstance(y, torch.Tensor)
 
 
-@pytest.fixture(scope="module")
-def process_mesh_dict():
-    process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-    yield process_mesh_dict
-    shutdown_comm()
-
 
 class TestDistributedTransformer:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self) -> dict:
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
     @pytest.mark.dist(4)
     def test_distributed_transformer_init(
-        self, device: torch.device, process_mesh_dict: dict
+        self, device: torch.device
     ) -> None:
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0
@@ -140,14 +132,12 @@ class TestDistributedTransformer:
 
 
 class TestDistributedNiceTransformer:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self) -> dict:
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
     @pytest.mark.dist(4)
     def test_distributed_nice_transformer_init(
-        self, device: torch.device, process_mesh_dict: dict
+        self, device: torch.device
     ) -> None:
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0
@@ -173,8 +163,9 @@ class TestDistributedNiceTransformer:
 
     @pytest.mark.dist(4)
     def test_distributed_transformer_forward(
-        self, device: torch.device, process_mesh_dict: dict
+        self, device: torch.device
     ) -> None:
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0

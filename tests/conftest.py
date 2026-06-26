@@ -50,7 +50,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     skip_marker = item.get_closest_marker("dist")
     if skip_marker:
         ranks = int(skip_marker.args[0]) if len(skip_marker.args) == 1 else None
-        if mpi_size <= 1 or (ranks is not None and ranks != mpi_size):
+        if mpi_size < 2 or (ranks is not None and ranks != mpi_size):
             pytest.skip(
                 f"Skipping distributed test, only {mpi_size} ranks available, but {ranks if ranks else '> 1'} required"
             )
@@ -107,7 +107,7 @@ def dist_st(
     return sync_data
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def shared_tmp_path(tmp_path_factory) -> pathlib.Path:
     if mpi_rank == 0:
         tmp_path = tmp_path_factory.mktemp("test_data")
