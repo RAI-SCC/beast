@@ -90,13 +90,9 @@ class TestNiceTransformer:
         assert isinstance(y, torch.Tensor)
 
 
-
 class TestDistributedTransformer:
-
     @pytest.mark.dist(4)
-    def test_distributed_transformer_init(
-        self, device: torch.device
-    ) -> None:
+    def test_distributed_transformer_init(self, device: torch.device) -> None:
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
@@ -109,6 +105,7 @@ class TestDistributedTransformer:
             dropout=dropout,
             local_rank=process_mesh_dict["DTP"].rank(),
             device=device,
+            model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
             bayesian=False,
@@ -132,11 +129,8 @@ class TestDistributedTransformer:
 
 
 class TestDistributedNiceTransformer:
-
     @pytest.mark.dist(4)
-    def test_distributed_nice_transformer_init(
-        self, device: torch.device
-    ) -> None:
+    def test_distributed_nice_transformer_init(self, device: torch.device) -> None:
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
@@ -152,6 +146,7 @@ class TestDistributedNiceTransformer:
             dropout=dropout,
             local_rank=process_mesh_dict["DTP"].rank(),
             device=device,
+            model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
             bayesian=False,
@@ -162,9 +157,7 @@ class TestDistributedNiceTransformer:
         assert isinstance(model, transformer.DistributedNICETransformer)
 
     @pytest.mark.dist(4)
-    def test_distributed_transformer_forward(
-        self, device: torch.device
-    ) -> None:
+    def test_distributed_transformer_forward(self, device: torch.device) -> None:
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
@@ -179,6 +172,7 @@ class TestDistributedNiceTransformer:
             dropout=dropout,
             local_rank=process_mesh_dict["DTP"].rank(),
             device=device,
+            model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
             bayesian=False,
