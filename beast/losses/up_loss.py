@@ -118,7 +118,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             The prior matching loss term. Captures how well the variational distribution matches the prior distribution.
         """
         if self.feature_weights is not None:
-            print(f"Devices: model_output - {model_output.device}, feature_weights - {self.feature_weights.device}")
             expert_output = model_output * self.feature_weights
             expert_target = target * self.feature_weights[0]
         else:
