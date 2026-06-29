@@ -22,6 +22,7 @@ dependencies = [
     "h5py>=3.16.0",
     "torch-blue @ git+https://github.com/RAI-SCC/torch_blue@stable-beast",
     "torch>=2.11.0",
+    "torchvision",
     "xarray>=2026.4.0",
     "matplotlib",
     "zarr",
@@ -87,7 +88,7 @@ exclude = ["docs", "examples", "beast/model/test_models/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "D", "D417", "N"]
-ignore = ["E501", "NPY201"]
+ignore = ["E501", "NPY201", "N817"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D"]

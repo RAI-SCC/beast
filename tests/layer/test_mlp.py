@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+import torch.distributed as dist
 from jigsaw import utils_aggregate
 
 from beast.comm import create_process_mesh_dict
@@ -9,17 +10,14 @@ from beast.layers import mlp
 
 
 class TestDistributedMLPNice:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self) -> dict:
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-
     @pytest.mark.dist(4)
-    def test_distributed_mlp_nice_init(
-        self, device: torch.device, process_mesh_dict: dict
-    ) -> None:
-        spatial_group, channel_group = (
+    def test_distributed_mlp_nice_init(self, device: torch.device) -> None:
+        local_rank = dist.get_rank()
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
+            process_mesh_dict["DTP"],
         )
 
         in_dim, hidden_dim, out_dim = 4, 6, 8
@@ -28,8 +26,9 @@ class TestDistributedMLPNice:
             hidden_dim=hidden_dim,
             out_dim=out_dim,
             bias=True,
-            local_rank=channel_group.rank(),
+            local_rank=local_rank,
             device=device,
+            model_group=model_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
         )
@@ -63,10 +62,12 @@ class TestDistributedMLPNice:
 
     @pytest.mark.dist(4)
     def test_distributed_mlp_nice_sync(self, device: torch.device) -> None:
+        local_rank = dist.get_rank()
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-        spatial_group, channel_group = (
+        spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
+            process_mesh_dict["DTP"],
         )
 
         in_dim, hidden_dim, out_dim = 4, 8, 8
@@ -75,8 +76,9 @@ class TestDistributedMLPNice:
             hidden_dim=hidden_dim,
             out_dim=out_dim,
             bias=True,
-            local_rank=channel_group.rank(),
+            local_rank=local_rank,
             device=device,
+            model_group=model_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
         )
@@ -125,17 +127,14 @@ class TestDistributedMLPNice:
 
 
 class TestDistributedMLPSync:
-    @pytest.fixture(scope="session")
-    def process_mesh_dict(self) -> dict:
-        return create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-
     @pytest.mark.dist(4)
-    def test_distributed_mlp_sync_init(
-        self, device: torch.device, process_mesh_dict: dict
-    ) -> None:
-        spatial_group, channel_group = (
+    def test_distributed_mlp_sync_init(self, device: torch.device) -> None:
+        local_rank = dist.get_rank()
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
+            process_mesh_dict["DTP"],
         )
 
         in_dim, hidden_dim, out_dim = 4, 6, 8
@@ -145,10 +144,11 @@ class TestDistributedMLPSync:
             out_dim=out_dim,
             bias=True,
             dropout=0.0,
-            local_rank=channel_group.rank(),
+            local_rank=local_rank,
             device=device,
-            model_group=channel_group,
-            sync_group=spatial_group,
+            model_group=model_group,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
         )
 
         assert isinstance(model, mlp.DistributedSynchronizedMLP)
@@ -180,10 +180,12 @@ class TestDistributedMLPSync:
 
     @pytest.mark.dist(4)
     def test_distributed_mlp_sync(self, device: torch.device) -> None:
+        local_rank = dist.get_rank()
         process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-        spatial_group, channel_group = (
+        spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
+            process_mesh_dict["DTP"],
         )
 
         in_dim, hidden_dim, out_dim = 4, 8, 8
@@ -193,10 +195,11 @@ class TestDistributedMLPSync:
             out_dim=out_dim,
             bias=True,
             dropout=0.0,
-            local_rank=channel_group.rank(),
+            local_rank=local_rank,
             device=device,
-            sync_group=spatial_group,
-            model_group=channel_group,
+            channel_group=channel_group,
+            spatial_group=spatial_group,
+            model_group=model_group,
         )
 
         seq, local_dim = 12 // 2, in_dim // 2
