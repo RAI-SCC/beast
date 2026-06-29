@@ -25,7 +25,7 @@ class DummyModule(nn.Module):
         return x + self.parameter
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def dummy_module(device: torch.device) -> nn.Module:
     """Helper function to create a dummy VIModule for testing."""
     model = DummyModule().to(device)
@@ -117,7 +117,7 @@ def test_split_forward(dummy_module: vi.VIModule, device: torch.device) -> None:
 
 @pytest.mark.dist(2)
 @pytest.mark.parametrize(
-    "feature_weights", [torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0])]
+    "feature_weights", [None, torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0])]
 )
 def test_feature_weights(
     feature_weights: Optional[Tensor], dummy_module: vi.VIModule, device: torch.device
