@@ -13,7 +13,7 @@ class TestTransformer:
         heads = 4
         noise_dim = 16
 
-        model = transformer.Transformer(
+        model = transformer.TransformerBlock(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
@@ -24,7 +24,7 @@ class TestTransformer:
             dtype=torch.float32,
         )
 
-        assert isinstance(model, transformer.Transformer)
+        assert isinstance(model, transformer.TransformerBlock)
 
     def test_nice_transformer_forward(self, device: torch.device) -> None:
         in_dim, embed_dim, out_dim = 256, 256, 256
@@ -32,7 +32,7 @@ class TestTransformer:
         noise_dim = 16
         seq_length = 32
 
-        model = transformer.Transformer(
+        model = transformer.TransformerBlock(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,

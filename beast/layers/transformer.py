@@ -9,7 +9,7 @@ from jigsaw import attention, hooks  # type: ignore
 from beast.layers import mlp, nice_norm
 
 
-class Transformer(torch.nn.Module):
+class TransformerBlock(torch.nn.Module):
     """Transformer block with windowed attention.
 
     Parameters

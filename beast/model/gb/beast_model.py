@@ -228,11 +228,9 @@ class Beast(torch.nn.Module):
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
-
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
@@ -250,13 +248,11 @@ class Beast(torch.nn.Module):
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=2,
             padding=self.padding,
             dilation=self.dilation,
             groups=1,
             bias=True,
-
             parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
@@ -287,26 +283,28 @@ class Beast(torch.nn.Module):
             local_rank=self.local_rank,
             device=self.device,
             model_group=self.channel_group,
-            column_group=self.spatial_group,
-            row_group=self.channel_group,
+            row_group=self.spatial_group,
+            column_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
-            self.embed_dim * 2,
-            self.out_channels,  # global values
-            self.kernel_size,
-            self.device,
-            self.spatial_group,
-            self.channel_group,
-            stride=self.stride,
-            padding=self.padding,
-            dilation=self.dilation,
-            groups=1,
-            bias=True,
-            parallelism=self._parallelism,
-            bayesian=self.bayesian,
-            dtype=self.dtype,
+        self.patch_recovery: torch.nn.Module = (
+            conv_transpose.DistributedConvTranspose2D(
+                self.embed_dim * 2,
+                self.out_channels,  # global values
+                self.kernel_size,
+                self.device,
+                self.spatial_group,
+                self.channel_group,
+                stride=self.stride,
+                padding=self.padding,
+                dilation=self.dilation,
+                groups=1,
+                bias=True,
+                parallelism=self._parallelism,
+                bayesian=self.bayesian,
+                dtype=self.dtype,
+            )
         )
 
         # Transformer blocks
@@ -551,7 +549,9 @@ class Beast(torch.nn.Module):
 
         # Use normal transformer if `nice_norm` is set to false
         block_cls = (
-            transformer.NiceTransformer if self.nice_norm else transformer.Transformer
+            transformer.NiceTransformer
+            if self.nice_norm
+            else transformer.TransformerBlock
         )
 
         self.transformer_1 = torch.nn.ModuleList(

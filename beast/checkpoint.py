@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 
 import torch
 import torch.distributed as dist
@@ -58,7 +58,7 @@ def save_checkpoint(
         ddp_rank = dist.get_rank(group=None)
     else:
         channel_group_rank = channel_group.rank()
-        ddp_rank = ddp_group.rank()
+        ddp_rank = ddp_group.rank() if ddp_group 0
 
     # Ensure loss is a plain float to avoid tensor attributes on save
     loss_value = float(loss) if isinstance(loss, (int, float, torch.Tensor)) else loss
@@ -111,7 +111,7 @@ def load_checkpoint(
         Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
 
     """
-    return torch.load(checkpoint_path, map_location=map_location, weights_only=False)
+    return cast(torch.load(checkpoint_path, map_location=map_location, weights_only=False), dict[str, any])
 
 
 def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
