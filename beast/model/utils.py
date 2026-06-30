@@ -3,7 +3,7 @@
 import types
 
 import jigsaw.hooks as hooks  # type: ignore[import-not-found]
-import jigsaw.normalization as normalization  # type: ignore[import-not-found]
+from jigsaw import normalization  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi as vi

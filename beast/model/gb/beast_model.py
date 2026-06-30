@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import convolutions, hooks, linear, roll  # type: ignore
+from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
 
@@ -224,7 +224,7 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding: torch.nn.Module = convolutions.DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = conv.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -243,7 +243,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample: torch.nn.Module = convolutions.DistributedConv2D(
+        self.downsample: torch.nn.Module = conv.DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -262,7 +262,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample: torch.nn.Module = convolutions.DistributedConvTranspose2D(
+        self.upsample: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -292,7 +292,7 @@ class Beast(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = convolutions.DistributedConvTranspose2D(
+        self.patch_recovery: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
