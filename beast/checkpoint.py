@@ -111,7 +111,7 @@ def load_checkpoint(
         Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
 
     """
-    return cast(torch.load(checkpoint_path, map_location=map_location, weights_only=False), dict[str, any])
+    return cast(dict[str, any], torch.load(checkpoint_path, map_location=map_location, weights_only=False))
 
 
 def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
