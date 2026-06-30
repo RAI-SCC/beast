@@ -142,8 +142,8 @@ class DistributedMLPNICE(torch.nn.Module):
             local_rank,
             device,
             model_group=model_group,
-            tensor_group=spatial_group,
-            domain_group=channel_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=False,
         )
 
@@ -239,8 +239,8 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             local_rank,
             device,
             model_group=model_group,
-            tensor_group=spatial_group,
-            domain_group=channel_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=bayesian,
         )
 
@@ -251,8 +251,8 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             local_rank,
             device,
             model_group=model_group,
-            tensor_group=spatial_group,
-            domain_group=channel_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=bayesian,
         )
 

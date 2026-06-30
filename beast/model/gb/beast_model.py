@@ -287,8 +287,8 @@ class Beast(torch.nn.Module):
             local_rank=self.local_rank,
             device=self.device,
             model_group=self.channel_group,
-            tensor_group=self.spatial_group,
-            domain_group=self.channel_group,
+            column_group=self.spatial_group,
+            row_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
