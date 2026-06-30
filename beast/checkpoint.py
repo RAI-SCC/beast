@@ -58,7 +58,7 @@ def save_checkpoint(
         ddp_rank = dist.get_rank(group=None)
     else:
         channel_group_rank = channel_group.rank()
-        ddp_rank = ddp_group.rank() if ddp_group 0
+        ddp_rank = ddp_group.rank() if ddp_group else 0
 
     # Ensure loss is a plain float to avoid tensor attributes on save
     loss_value = float(loss) if isinstance(loss, (int, float, torch.Tensor)) else loss
