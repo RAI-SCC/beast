@@ -1,5 +1,5 @@
 import os
-import sys
+import pathlib
 import warnings
 from collections.abc import Callable, Generator
 from typing import Any
@@ -34,12 +34,6 @@ def pytest_configure(config: pytest.Config) -> None:
         "gpu: Mark test to run only when a CUDA device is available and selected",
     )
 
-    """Configure rank 0 to be the only printing rank."""
-    if mpi_rank != 0:
-        config.option.verbose = -1
-        sys.stdout = open(os.devnull, "w")
-        sys.stderr = open(os.devnull, "w")
-
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="torch")
     warnings.filterwarnings("ignore", category=UserWarning, module="torch")
 
@@ -56,7 +50,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     skip_marker = item.get_closest_marker("dist")
     if skip_marker:
         ranks = int(skip_marker.args[0]) if len(skip_marker.args) == 1 else None
-        if mpi_size <= 1 or (ranks is not None and ranks != mpi_size):
+        if mpi_size < 2 or (ranks is not None and ranks != mpi_size):
             pytest.skip(
                 f"Skipping distributed test, only {mpi_size} ranks available, but {ranks if ranks else '> 1'} required"
             )
@@ -85,7 +79,7 @@ def dist_env(device: torch.device) -> Generator[None, None, None]:
         assert dist.is_gloo_available()
 
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
+    os.environ["MASTER_PORT"] = "12345"
 
     dist.init_process_group(
         backend="nccl" if device.type == "cuda" else "gloo",
@@ -111,3 +105,13 @@ def dist_st(
     sync_data = comm.bcast(data, root=0)
 
     return sync_data
+
+
+@pytest.fixture()
+def shared_tmp_path(tmp_path_factory) -> pathlib.Path:
+    if mpi_rank == 0:
+        tmp_path = tmp_path_factory.mktemp("test_data")
+    else:
+        tmp_path = None
+    tmp_path = comm.bcast(tmp_path, root=0)
+    return tmp_path

@@ -93,6 +93,7 @@ class DistributedMLPNICE(torch.nn.Module):
         bias: bool,
         local_rank: int,
         device: torch.device,
+        model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
     ):
@@ -123,6 +124,7 @@ class DistributedMLPNICE(torch.nn.Module):
         super().__init__()
         self.local_rank = local_rank
         self.device = device
+        self.model_group = model_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
@@ -133,6 +135,7 @@ class DistributedMLPNICE(torch.nn.Module):
         self.linear1 = torch.nn.Linear(
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
+        
         self.linear2 = linear.DistributedXWT(
             hidden_dim,
             out_dim,
@@ -140,8 +143,8 @@ class DistributedMLPNICE(torch.nn.Module):
             local_rank,
             device,
             model_group=channel_group,
-            spatial_group=spatial_group,
-            channel_group=channel_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=False,
         )
 
@@ -190,7 +193,8 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         local_rank: int,
         device: torch.device,
         model_group: dist.ProcessGroup,
-        sync_group: dist.ProcessGroup,
+        spatial_group: dist.ProcessGroup,
+        channel_group: dist.ProcessGroup,
         bayesian: bool = False,
     ):
         """
@@ -214,8 +218,10 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             Device to perform computations on.
         model_group: dist.ProcessGroup
             Channel group, where model is sharded.
-        sync_group: dist.ProcessGroup,
+        spatial_group: dist.ProcessGroup,
             Spatial group, where model is domain-but-not-tensor parallel.
+        channel_group: dist.ProcessGroup
+            Channel group, where model is tensor parallel.
         bayesian: bool
             Flag for whether the model is Bayesian.
         """
@@ -223,7 +229,8 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.local_rank = local_rank
         self.device = device
         self.model_group = model_group
-        self.sync_group = sync_group
+        self.spatial_group = spatial_group
+        self.channel_group = channel_group
 
         # pass in global dimensions for linear layers.
         self.linear1 = linear.DistributedXWT(
@@ -233,8 +240,8 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             local_rank,
             device,
             model_group=model_group,
-            spatial_group=sync_group,
-            channel_group=model_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=bayesian,
         )
 
@@ -245,15 +252,15 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             local_rank,
             device,
             model_group=model_group,
-            spatial_group=sync_group,
-            channel_group=model_group,
+            row_group=spatial_group,
+            column_group=channel_group,
             bayesian=bayesian,
         )
 
         for p in self.parameters():
-            dist.broadcast(p.data, group_src=0, group=self.sync_group)
+            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
             p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.sync_group)
+                hooks.make_grad_sync_hook(self.spatial_group)
             )
 
         self.activation = torch.nn.GELU()

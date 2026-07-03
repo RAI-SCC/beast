@@ -90,7 +90,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "noise_dim": 32,
             "qk_norm": False,
             "bayesian": False,
-            "nice_norm": True,
+            "nice_norm": False,
         },
     },
 }

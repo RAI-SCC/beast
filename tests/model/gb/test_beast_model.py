@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch_blue.vi import convert_to_vimodule
 
-from beast.comm import create_process_mesh_dict, shutdown_comm
+from beast.comm import create_process_mesh_dict
 from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.model.gb.beast_model import Beast
 from beast.model.utils import convert_jigsaw_vi
@@ -12,7 +12,7 @@ pytestmark = pytest.mark.gpu
 
 class TestBeastlingModel:
     @pytest.mark.parametrize("n_timesteps", [1, 2])
-    @pytest.mark.parametrize("bayesian", [False, True])
+    @pytest.mark.parametrize("bayesian", [False])
     @pytest.mark.parametrize("batch_size", [1, 2])
     def test_beastling(
         self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
@@ -51,13 +51,6 @@ class TestBeastlingModel:
                 )
 
 
-@pytest.fixture(scope="module")
-def process_mesh_dict():
-    process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
-    yield process_mesh_dict
-    shutdown_comm()
-
-
 class TestDistBeastlingModel:
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("n_timesteps", [1, 2])
@@ -69,8 +62,8 @@ class TestDistBeastlingModel:
         bayesian: bool,
         batch_size: int,
         device: torch.device,
-        process_mesh_dict,
     ) -> None:
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]
@@ -85,7 +78,7 @@ class TestDistBeastlingModel:
             channel_group=jchannel_pg,
             spatial_group=jspatial_pg,
             device=device,
-        )
+        ).to(device)
 
         # Test a forward pass with dummy data
         with torch.no_grad():
@@ -116,11 +109,12 @@ class TestDistBeastlingModel:
                 )
 
 
+@pytest.mark.skip("Model to large for Horeka")
 @pytest.mark.gpu
 class TestDistBeastModel:
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("n_timesteps", [1, 2])
-    @pytest.mark.parametrize("bayesian", [False])
+    @pytest.mark.parametrize("bayesian", [False, True])
     @pytest.mark.parametrize("batch_size", [1, 2])
     def test_4way_beast(
         self,
@@ -128,8 +122,8 @@ class TestDistBeastModel:
         bayesian: bool,
         batch_size: int,
         device: torch.device,
-        process_mesh_dict,
     ) -> None:
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]

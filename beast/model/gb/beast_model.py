@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import convolutions, hooks, linear, roll  # type: ignore
+from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
 
@@ -224,16 +224,13 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding: torch.nn.Module = convolutions.DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = conv.DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
-
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
@@ -244,31 +241,27 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample: torch.nn.Module = convolutions.DistributedConv2D(
+        self.downsample: torch.nn.Module = conv.DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=2,
             padding=self.padding,
             dilation=self.dilation,
             groups=1,
             bias=True,
-
             parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
-        self.upsample: torch.nn.Module = convolutions.DistributedConvTranspose2D(
+        self.upsample: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
-            self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
@@ -284,33 +277,34 @@ class Beast(torch.nn.Module):
 
         # each process would have weights: [embed //2 , embed]
         self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
-            self.embed_dim,
-            self.embed_dim,
+            in_dim=self.embed_dim,
+            out_dim=self.embed_dim,
             bias=True,
-            self.local_rank,
-            self.device,
-            self.channel_group,
-            self.spatial_group,
-            self.channel_group,
+            local_rank=self.local_rank,
+            device=self.device,
+            model_group=self.channel_group,
+            row_group=self.spatial_group,
+            column_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = convolutions.DistributedConvTranspose2D(
-            self.embed_dim * 2,
-            self.out_channels,  # global values
-            self.kernel_size,
-            self.local_rank,
-            self.device,
-            self.spatial_group,
-            self.channel_group,
-            stride=self.stride,
-            padding=self.padding,
-            dilation=self.dilation,
-            groups=1,
-            bias=True,
-            parallelism=self._parallelism,
-            bayesian=self.bayesian,
-            dtype=self.dtype,
+        self.patch_recovery: torch.nn.Module = (
+            conv_transpose.DistributedConvTranspose2D(
+                self.embed_dim * 2,
+                self.out_channels,  # global values
+                self.kernel_size,
+                self.device,
+                self.spatial_group,
+                self.channel_group,
+                stride=self.stride,
+                padding=self.padding,
+                dilation=self.dilation,
+                groups=1,
+                bias=True,
+                parallelism=self._parallelism,
+                bayesian=self.bayesian,
+                dtype=self.dtype,
+            )
         )
 
         # Transformer blocks
@@ -326,6 +320,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -347,6 +342,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -368,6 +364,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -388,6 +385,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -408,6 +406,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -428,6 +427,7 @@ class Beast(torch.nn.Module):
                         dropout=self.dropout,  # dropout
                         local_rank=self.local_rank,
                         device=self.device,
+                        model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
@@ -549,7 +549,9 @@ class Beast(torch.nn.Module):
 
         # Use normal transformer if `nice_norm` is set to false
         block_cls = (
-            transformer.NiceTransformer if self.nice_norm else transformer.Transformer
+            transformer.NiceTransformer
+            if self.nice_norm
+            else transformer.TransformerBlock
         )
 
         self.transformer_1 = torch.nn.ModuleList(
@@ -753,14 +755,12 @@ class Beast(torch.nn.Module):
         x_res = x.clone()
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         # TODO: fuse as x.permute(0, 2, 3, 1)
-        x = x.reshape(batch_size, channels, xlat * xlon).mT.view(
-            batch_size, xlat, xlon, channels
-        )
+        x = x.permute(0, 2, 3, 1).contiguous()
 
         # attention
         for i in range(self.n_full_blocks[0]):
             x = self._get_windows(x, self.window_size_outer)
-            # x has shape: [(S), B*n_windows, window_size_outer[0], window_size_outer[1], channels]
+            # x has shape: [(S), B*n_windows, window_size_outer[0] * window_size_outer[1], channels]
             n_windows = x.shape[0] // batch_size
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)

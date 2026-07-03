@@ -95,6 +95,7 @@ class DistributedNICENorm(torch.nn.Module):
         noise_dim: int,
         rank: int,
         device: torch.device,
+        model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
     ):
@@ -120,6 +121,7 @@ class DistributedNICENorm(torch.nn.Module):
         self.noise_dim = noise_dim
         self.rank = rank
         self.device = device
+        self.model_group = model_group
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
@@ -135,6 +137,7 @@ class DistributedNICENorm(torch.nn.Module):
             bias=True,
             local_rank=self.rank,
             device=self.device,
+            model_group=self.model_group,
             spatial_group=self.spatial_group,
             channel_group=self.channel_group,
         )

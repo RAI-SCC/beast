@@ -10,6 +10,7 @@ import torch_blue.vi as vi
 from torch import Tensor, nn
 
 from beast.losses.up_loss import MeanStdPriorMatchingAggregation, UPAllGaussLoss
+from beast.utils import set_all_seeds
 
 
 class DummyModule(nn.Module):
@@ -125,6 +126,10 @@ def test_feature_weights(
 
     dataset_size = 10
     up_group = dist.group.WORLD
+
+    if isinstance(feature_weights, torch.Tensor) :
+        feature_weights = feature_weights.to(device)
+
     loss = UPAllGaussLoss(
         model=dummy_module,
         dataset_size=dataset_size,
@@ -138,18 +143,20 @@ def test_feature_weights(
         feature_weights=None,
     )
 
-    target = torch.randn(4, 5, 2, 2, device=device, generator=torch.manual_seed(13))
-    samples = torch.randn(6, 4, 5, 2, 2, device=device, generator=torch.manual_seed(1))
+    set_all_seeds(42)
+    target = torch.randn(4, 5, 2, 2, device=device)
+    samples = torch.randn(6, 4, 5, 2, 2, device=device)
 
     world_size = up_group.size() if up_group is not None else 1
     rank = up_group.rank() if up_group is not None else 0
     local_samples = samples[rank::world_size, ...]
+    print(f"Device: target - {target.device}, samples - {samples.device}, local_samples - {local_samples.device}")
 
     data_fit, prior_matching = loss.split_forward(local_samples, target)
 
     ref_data_fit_list, ref_prior_matching_list = [], []
     if feature_weights is None:
-        feature_weights = torch.ones(5)
+        feature_weights = torch.ones(5).to(device)
     for i in range(5):
         rdf, rpm = ref_loss.split_forward(
             local_samples[..., i, :, :], target[..., i, :, :]
@@ -193,11 +200,12 @@ def test_heat(dummy_module: vi.VIModule, device: torch.device, heat: float) -> N
 def test_aggregation(dummy_module: vi.VIModule, device: torch.device) -> None:
     """Test that the MeanStdPriorMatchingAggregation correctly aggregates statistics (and the corresponding gradients) and computes the prior matching term."""
 
+    set_all_seeds(42)
     up_group = dist.group.WORLD
     world_size = up_group.size() if up_group is not None else 1
     rank = up_group.rank() if up_group is not None else 0
 
-    samples = torch.randn(8, 3, 4, 2, 2, device=device, generator=torch.manual_seed(7))
+    samples = torch.randn(8, 3, 4, 2, 2, device=device)
     local_samples = samples[rank::world_size, ...].requires_grad_(True)
 
     parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)

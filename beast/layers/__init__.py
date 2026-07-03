@@ -9,14 +9,14 @@ from beast.layers.transformer import (
     DistributedNICETransformer,
     DistributedTransformer,
     NiceTransformer,
-    Transformer,
+    TransformerBlock,
 )
 
 __all__ = [
     "ExpertWeightingLayer",
     "Expert",
     "NiceTransformer",
-    "Transformer",
+    "TransformerBlock",
     "DistributedNICETransformer",
     "DistributedTransformer",
 ]
