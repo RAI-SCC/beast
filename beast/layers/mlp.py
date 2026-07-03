@@ -147,7 +147,6 @@ class DistributedMLPNICE(torch.nn.Module):
             column_group=channel_group,
             bayesian=False,
         )
-        print(f'DistributedMLPNice init: channel group {channel_group.size()} out dim {out_dim} spatial grop size {spatial_group.size()} bias shape {self.linear2.bias.shape}')
 
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
