@@ -14,8 +14,6 @@ export MASTER_ADDR=$master_addr
 export MASTER_PORT=12355
 echo "MASTER_ADDR="$MASTER_ADDR
 
-source /hkfs/work/workspace/scratch/bl7340-beast_ablation/beast/.venv/bin/activate
+source ../.venv/bin/activate
 
-srun python -u /hkfs/work/workspace/scratch/bl7340-beast_ablation/beast/ablation_train.py
-
-
+srun python -u ../ablation/ablation_train.py

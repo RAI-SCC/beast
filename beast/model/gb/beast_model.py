@@ -228,12 +228,10 @@ class Beast(torch.nn.Module):
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
-
             self.local_rank,
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
@@ -252,13 +250,11 @@ class Beast(torch.nn.Module):
             self.device,
             self.spatial_group,
             self.channel_group,
-
             stride=2,
             padding=self.padding,
             dilation=self.dilation,
             groups=1,
             bias=True,
-
             parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
@@ -286,7 +282,7 @@ class Beast(torch.nn.Module):
         self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
             self.embed_dim,
             self.embed_dim,
-            bias=True,
+            True,
             self.local_rank,
             self.device,
             self.channel_group,
