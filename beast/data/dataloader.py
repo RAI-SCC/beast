@@ -155,11 +155,11 @@ def get_dataloader(
         )
 
     # if train_subset <=0, the entire dataset will be used for training
-    if mode == "train" and config_dict["data"]["train_subset"] > 0:
+    if mode == "train" and config_dict["data"]["train_subset"] > 0 and (config_dict["data"]["train_subset"] < len(dataset)):
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
     # if valid_subset <=0, the entire dataset will be used for validation
-    elif mode == "validation" and config_dict["data"]["valid_subset"] > 0:
+    elif mode == "validation" and config_dict["data"]["valid_subset"] > 0 and (config_dict["data"]["valid_subset"] < len(dataset)):
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
     
