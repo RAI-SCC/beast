@@ -402,7 +402,7 @@ class DistributedNICETransformer(torch.nn.Module):
             noise_dim,
             local_rank,
             device,
-            model_group,
+            channel_group,
             spatial_group,
             channel_group,
         ).to(device)
@@ -411,7 +411,7 @@ class DistributedNICETransformer(torch.nn.Module):
             noise_dim,
             local_rank,
             device,
-            model_group,
+            channel_group,
             spatial_group,
             channel_group,
         ).to(device)

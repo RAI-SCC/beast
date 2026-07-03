@@ -135,17 +135,19 @@ class DistributedMLPNICE(torch.nn.Module):
         self.linear1 = torch.nn.Linear(
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
+        
         self.linear2 = linear.DistributedXWT(
             hidden_dim,
             out_dim,
             bias,
             local_rank,
             device,
-            model_group=model_group,
+            model_group=channel_group,
             row_group=spatial_group,
             column_group=channel_group,
             bayesian=False,
         )
+        print(f'DistributedMLPNice init: channel group {channel_group.size()} out dim {out_dim} spatial grop size {spatial_group.size()} bias shape {self.linear2.bias.shape}')
 
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
