@@ -1,8 +1,9 @@
 """Dataset definitions."""
 
+import importlib
 import os
 from datetime import datetime
-from typing import Callable, List, Tuple
+from typing import Callable, List, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -102,6 +103,8 @@ class ERA5Distributed(Dataset):
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    backend: str
+        Backend used to access zarr data items. Supported values are `xarray` and `tensorstore`.
 
     """
 
@@ -121,6 +124,7 @@ class ERA5Distributed(Dataset):
         time_range: Tuple[str, str] | None = None,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
+        backend: Literal["xarray", "tensorstore"] = "xarray",
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -132,69 +136,23 @@ class ERA5Distributed(Dataset):
 
         self.datapath = data_path
         self.years = time_range
+        self.backend = backend.lower()
+        self.mask_path = constant_masks_path
+        self.mask_list = constant_masks
+        self.normalization_dir = normalization_dir
 
-        mask_path = constant_masks_path
-        mask_list = constant_masks
+        if self.backend not in {"xarray", "tensorstore"}:
+            raise ValueError(
+                "Unsupported backend. Expected one of: 'xarray', 'tensorstore'."
+            )
 
         self.norm_values: dict[str, np.array] = {}
-
-        def load_data() -> None:
-            """Inline utility function for initial data acceess."""
-            try:
-                self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
-            except Exception:
-                raise OSError(
-                    "Given path does not point to a zarr directory. Data must be in zarr format."
-                )
-
-            try:
-                self.xlat = self.zarr_data.sizes["latitude"]
-                self.xlon = self.zarr_data.sizes["longitude"]
-            except Exception:
-                raise Exception(
-                    "Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension"
-                )
-
-            if self.xlat % 2 == 1:
-                self.xlat -= 1
-            if self.xlon % 2 == 1:
-                self.xlon -= 1
-
-            try:
-                times = pd.to_datetime(self.zarr_data.time)
-            except Exception:
-                raise Exception(
-                    "Time values of data cannot be accessed. Zarr data must be chunked in the time domain. "
-                )
-
-            if self.years is not None:
-                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
-                self.zarr_data = self.zarr_data.sel(time=train_years)
-
-            try:
-                self.n_data_items = self.zarr_data.sizes["time"]
-            except Exception:
-                raise Exception(
-                    "Zarr directory has no dimension `time`. Cannot access temporal dimension"
-                )
-
-            try:
-                self.n_variables = self.zarr_data.sizes["feature"]
-            except Exception:
-                raise Exception(
-                    "Zarr directory has no dimension `feature`. Cannot access feature dimension"
-                )
-
-            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
-            self.n_masks = self.constant_masks.shape[0]
-
-            self.norm_values["mean"] = np.load(f"{normalization_dir}/norm_mean.npy")
-            self.norm_values["std"] = np.load(f"{normalization_dir}/norm_std.npy")
+        self._time_indices = np.array([], dtype=int)
 
         if dsync_access:
-            execute_in_waves(load_data)
+            execute_in_waves(self.load_data)
         else:
-            load_data()
+            self.load_data()
 
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
@@ -274,6 +232,98 @@ class ERA5Distributed(Dataset):
                 "seems to be empty, or does not contain `fields`."
             ) from err
 
+    def load_data(self) -> None:
+        """Load metadata, masks, and normalization values for the configured backend."""
+        if self.backend == "xarray":
+            self._load_data_xarray()
+        else:
+            self._load_data_tensorstore()
+
+        self.constant_masks = self._load_constant_mask_2d(self.mask_path, self.mask_list)
+        self.n_masks = self.constant_masks.shape[0]
+
+        self.norm_values["mean"] = np.load(f"{self.normalization_dir}/norm_mean.npy")
+        self.norm_values["std"] = np.load(f"{self.normalization_dir}/norm_std.npy")
+
+    def _load_data_xarray(self) -> None:
+        """Load metadata from the zarr store via xarray."""
+        try:
+            self.zarr_metadata = xr.open_dataset(self.datapath, engine="zarr")
+        except Exception:
+            raise OSError(
+                "Given path does not point to a zarr directory. Data must be in zarr format."
+            )
+
+        try:
+            self.xlat = self.zarr_metadata.sizes["latitude"]
+            self.xlon = self.zarr_metadata.sizes["longitude"]
+        except Exception:
+            raise Exception(
+                "Zarr directory has no dimensions `latitude` and/or `longitude`. Cannot access spatial dimension"
+            )
+
+        if self.xlat % 2 == 1:
+            self.xlat -= 1
+        if self.xlon % 2 == 1:
+            self.xlon -= 1
+
+        try:
+            times = pd.to_datetime(self.zarr_metadata.time)
+        except Exception:
+            raise Exception(
+                "Time values of data cannot be accessed. Zarr data must be chunked in the time domain. "
+            )
+
+        if self.years is not None:
+            time_mask = (times >= self.years[0]) & (times < self.years[1])
+            self._time_indices = np.flatnonzero(np.asarray(time_mask))
+            self.zarr_metadata = self.zarr_metadata.sel(time=times[time_mask])
+        else:
+            self._time_indices = np.arange(self.zarr_metadata.sizes["time"], dtype=int)
+
+        try:
+            self.n_data_items = self.zarr_metadata.sizes["time"]
+        except Exception:
+            raise Exception(
+                "Zarr directory has no dimension `time`. Cannot access temporal dimension"
+            )
+
+        try:
+            self.n_variables = self.zarr_metadata.sizes["feature"]
+        except Exception:
+            raise Exception(
+                "Zarr directory has no dimension `feature`. Cannot access feature dimension"
+            )
+
+        self.zarr_data = self.zarr_metadata
+
+    def _load_data_tensorstore(self) -> None:
+        """Load metadata from the zarr store via tensorstore."""
+        time_values = self._read_tensorstore_coordinate("time")
+        latitude_values = self._read_tensorstore_coordinate("latitude")
+        longitude_values = self._read_tensorstore_coordinate("longitude")
+        feature_values = self._read_tensorstore_coordinate("feature")
+
+        self.xlat = latitude_values.shape[0]
+        self.xlon = longitude_values.shape[0]
+
+        if self.xlat % 2 == 1:
+            self.xlat -= 1
+        if self.xlon % 2 == 1:
+            self.xlon -= 1
+
+        times = pd.to_datetime(time_values)
+        if self.years is not None:
+            time_mask = (times >= self.years[0]) & (times < self.years[1])
+            self._time_indices = np.flatnonzero(np.asarray(time_mask))
+            self.n_data_items = int(np.count_nonzero(time_mask))
+        else:
+            self._time_indices = np.arange(times.shape[0], dtype=int)
+            self.n_data_items = times.shape[0]
+
+        self.n_variables = feature_values.shape[0]
+        self.zarr_data = self._open_tensorstore_zarr("fields")
+
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
@@ -301,12 +351,12 @@ class ERA5Distributed(Dataset):
 
         input_list = []
         for i in range(self.in_timesteps):
-            x = self.zarr_data.isel(
-                time=(idx + i * self.dt),
-                feature=range(self.in_var[0], self.in_var[1]),
-                latitude=range(0, self.xlat),
-                longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-            )["fields"].values
+            x = self._read_fields(
+                idx + i * self.dt,
+                feature_slice=slice(self.in_var[0], self.in_var[1]),
+                latitude_slice=slice(0, self.xlat),
+                longitude_slice=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
+            )
 
             x = (
                 x
@@ -333,12 +383,12 @@ class ERA5Distributed(Dataset):
         # Output data
         target_list = []
         for j in range(self.out_timesteps):
-            y = self.zarr_data.isel(
-                time=(target_idx + j * self.dt),
-                feature=range(self.in_var[0], self.in_var[1]),
-                latitude=range(0, self.xlat),
-                longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-            )["fields"].values
+            y = self._read_fields(
+                target_idx + j * self.dt,
+                feature_slice=slice(self.in_var[0], self.in_var[1]),
+                latitude_slice=slice(0, self.xlat),
+                longitude_slice=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
+            )
 
             y = (
                 y
@@ -367,6 +417,54 @@ class ERA5Distributed(Dataset):
             target = self.target_transform(target)
 
         return input, target
+
+    def _open_tensorstore_zarr(self, array_name: str):
+        """Open the ERA5 zarr store with tensorstore."""
+        try:
+            ts = importlib.import_module("tensorstore")
+        except ImportError as err:
+            raise ImportError(
+                "backend='tensorstore' requires the tensorstore package to be installed."
+            ) from err
+
+        spec = {
+            "driver": "zarr",
+            "kvstore": {"driver": "file", "path": self.datapath},
+            "path": array_name,
+        }
+        return ts.open(spec, open=True).result()
+
+    def _read_tensorstore_coordinate(self, array_name: str) -> np.ndarray:
+        """Read a one-dimensional coordinate array from tensorstore."""
+        return np.asarray(self._open_tensorstore_zarr(array_name).read().result())
+
+    def _read_fields(
+        self,
+        time_index: int,
+        feature_slice: slice,
+        latitude_slice: slice,
+        longitude_slice: slice,
+    ) -> np.ndarray:
+        """Read a single 3D field from the selected backend."""
+        if self.backend == "xarray":
+            return self.zarr_data.isel(
+                time=time_index,
+                feature=feature_slice,
+                latitude=latitude_slice,
+                longitude=longitude_slice,
+            )["fields"].values
+
+        resolved_time_index = int(self._time_indices[time_index])
+        return np.asarray(
+            self.zarr_data[
+                resolved_time_index,
+                feature_slice,
+                latitude_slice,
+                longitude_slice,
+            ]
+            .read()
+            .result()
+        )
 
     def get_constant_masks(self) -> torch.Tensor:
         """
