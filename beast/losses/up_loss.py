@@ -344,7 +344,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
 
 
-@torch.compile
+# @torch.compile
 def gaussian_prior_matching(
     prior_means: Tensor,
     prior_log_stds: Tensor,
