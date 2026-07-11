@@ -8,6 +8,7 @@ from typing import Any, Dict, Tuple, cast
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import math
 
 from beast.comm import get_process_group
 
@@ -127,15 +128,15 @@ def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
         of epoch, step, channel rank, checkpoint file name.
     """
 
-    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-jc(\d+)\.pt$", fname)
+    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?(?:-jc(\d+))?\.pt$", fname)
     if not m:
         warnings.warn(f"File {fname} does not match the beast cp naming pattern.")
         return None
 
     epoch, step, jchannel_rank = (
         int(m.group(1)),
-        int(m.group(2)) if m.group(2) else -1,
-        int(m.group(3)) if m.group(3) else -1,
+        int(m.group(2)) if m.group(2) else math.inf,
+        int(m.group(3)) if m.group(3) else math.inf,
     )
 
     return {
