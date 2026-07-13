@@ -1,5 +1,6 @@
 """Utilities for saving and loading model checkpoints and state_dicts."""
 
+import warnings
 import os
 import re
 from typing import Any, Dict, Tuple, cast
@@ -7,6 +8,7 @@ from typing import Any, Dict, Tuple, cast
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import math
 
 from beast.comm import get_process_group
 
@@ -73,12 +75,9 @@ def save_checkpoint(
         "loss": loss_value,
         "format": 1,
     }
-
-    model_name = (
-        f"cp-epoch{epoch}-step{step}"
-        if channel_group is None
-        else f"cp-epoch{epoch}-step{step}-jc{channel_group.rank()}"
-    )
+    step_str = f"-step{step}" if step else ""
+    channel_str = f"-jc{channel_group.rank()}" if channel_group else ""
+    model_name = f"cp-epoch{epoch}" + step_str + channel_str
 
     if ddp_rank == 0:
         torch.save(
@@ -128,24 +127,17 @@ def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
     dictionary
         of epoch, step, channel rank, checkpoint file name.
     """
-    if "jc" in fname:
-        m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?-jc(\d+)\.pt$", fname)
-        if not m:
-            return None
-        epoch, step, jchannel_rank = (
-            int(m.group(1)),
-            int(m.group(2)) if m.group(2) else -1,
-            int(m.group(3)),
-        )
-    else:
-        m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?.pt$", fname)
-        if not m:
-            return None
-        epoch, step, jchannel_rank = (
-            int(m.group(1)),
-            int(m.group(2)) if m.group(2) else -1,
-            -1,
-        )
+
+    m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?(?:-jc(\d+))?\.pt$", fname)
+    if not m:
+        warnings.warn(f"File {fname} does not match the beast cp naming pattern.")
+        return None
+
+    epoch, step, jchannel_rank = (
+        int(m.group(1)),
+        int(m.group(2)) if m.group(2) else math.inf,
+        int(m.group(3)) if m.group(3) else math.inf,
+    )
 
     return {
         "epoch": epoch,
