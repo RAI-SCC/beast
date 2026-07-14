@@ -3,14 +3,15 @@
 import os
 import time
 import warnings
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import torch
 import torch.distributed as dist
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
     _MultiProcessingDataLoaderIter,
+    default_collate,
 )
 from torch.utils.data.distributed import DistributedSampler
 
@@ -60,6 +61,165 @@ class GBDataLoader(DataLoader):
         return GBDataLoaderIter(self)
 
 
+class _MapAndCollate:
+    """
+    Transform that maps a batch of indices through a dataset and collates the result.
+
+    Applies ``dataset.__getitem__`` to every index of a batch and collates the
+    resulting samples with ``collate_fn``. Used as the ``map_fn`` of a
+    ``torchdata.nodes.ParallelMapper``.
+    """
+
+    def __init__(self, dataset: Dataset, collate_fn: Callable) -> None:
+        self.dataset = dataset
+        self.collate_fn = collate_fn
+
+    def __call__(self, batch_of_indices: list[int]) -> Any:
+        """
+        Fetch and collate a batch given its indices.
+
+        Parameters
+        ----------
+        batch_of_indices : list[int]
+            The indices of the samples that make up the batch.
+
+        Returns
+        -------
+        Any
+            The collated batch.
+        """
+        batch = [self.dataset[i] for i in batch_of_indices]
+        return self.collate_fn(batch)
+
+
+class GBTorchDataLoaderIter:
+    """
+    Iterator wrapper around a ``torchdata.nodes`` iterator that tracks fetch timings.
+
+    Wraps the iterator obtained from a ``torchdata.nodes.Loader`` and appends the
+    start and stop time (in ns) of the ``__next__`` call to the returned data,
+    mirroring the behaviour of :class:`GBDataLoaderIter`.
+    """
+
+    def __init__(self, loader_iter: Iterator[Any]) -> None:
+        self._loader_iter = loader_iter
+
+    def __iter__(self) -> "GBTorchDataLoaderIter":
+        return self
+
+    def __next__(self) -> tuple[Any, float, float]:
+        """
+        Get the next item of the iterator.
+
+        Returns
+        -------
+        *data : torch.Tensor
+            The next data item
+        start : float
+            The time stamp before fetching the next data item in ns
+        stop : float
+            The time stamp after fetching the next data item in ns
+        """
+        start = time.time_ns()
+        data = next(self._loader_iter)
+        end = time.time_ns()
+
+        return *data, start, end
+
+
+class GBTorchDataLoader:
+    """
+    ``torchdata.nodes``-based drop-in replacement for :class:`GBDataLoader`.
+
+    Builds an equivalent data loading pipeline using ``torchdata.nodes`` primitives
+    (``SamplerWrapper`` -> ``Batcher`` -> ``ParallelMapper`` -> optional ``PinMemory``
+    -> ``Prefetcher`` -> ``Loader``) while exposing the same interface used by the
+    training code: ``__len__``, ``__iter__`` (yielding ``(*data, start, end)``), a
+    ``sampler`` attribute with ``set_epoch`` support and a ``dataset`` attribute.
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int,
+        sampler: DistributedSampler,
+        drop_last: bool = True,
+        pin_memory: bool = False,
+        prefetch_factor: int = 2,
+        num_workers: int = 0,
+        collate_fn: Callable | None = None,
+    ) -> None:
+        # torchdata is an optional (beta) dependency; import lazily so the rest of
+        # the module keeps working when it is not installed.
+        import torchdata.nodes as tn
+
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.sampler = sampler
+        self.drop_last = drop_last
+        self.pin_memory = pin_memory
+        self.prefetch_factor = prefetch_factor
+        self.num_workers = num_workers
+        self.collate_fn = collate_fn or default_collate
+
+        # Wrap the (distributed) sampler as a node and batch its indices.
+        node: Any = tn.SamplerWrapper(self.sampler)
+        node = tn.Batcher(node, batch_size=self.batch_size, drop_last=self.drop_last)
+
+        # Map indices to samples and collate them, parallelised across workers.
+        map_and_collate = _MapAndCollate(self.dataset, self.collate_fn)
+        node = tn.ParallelMapper(
+            node,
+            map_fn=map_and_collate,
+            num_workers=self.num_workers,
+            method="process",
+            in_order=True,
+        )
+
+        if self.pin_memory:
+            node = tn.PinMemory(node)
+
+        # Prefetch a couple of batches ahead, mirroring DataLoader's prefetch_factor.
+        node = tn.Prefetcher(node, prefetch_factor=max(self.prefetch_factor, 1))
+
+        # Loader turns the (single-use) node into a reusable iterable that handles
+        # epoch resets and state management.
+        self._loader = tn.Loader(node)
+
+    def __len__(self) -> int:
+        """
+        Return the number of batches produced per epoch.
+
+        Returns
+        -------
+        int
+            The number of batches, accounting for ``drop_last``.
+        """
+        num_samples = len(self.sampler)
+        if self.drop_last:
+            return num_samples // self.batch_size
+        return (num_samples + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self) -> GBTorchDataLoaderIter:
+        """
+        Return a timing-aware iterator over the batches of one epoch.
+
+        Returns
+        -------
+        GBTorchDataLoaderIter
+            An iterator yielding ``(*data, start, end)`` tuples.
+        """
+        return GBTorchDataLoaderIter(iter(self._loader))
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the state of the underlying ``torchdata.nodes.Loader``."""
+        return self._loader.state_dict()
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Restore the state of the underlying ``torchdata.nodes.Loader``."""
+        self._loader.load_state_dict(state_dict)
+
+
 def get_dataloader(
     config_dict: dict[str, Any],
     dtp_rank: int,
@@ -69,7 +229,8 @@ def get_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-) -> GBDataLoader:
+    use_torchdata: bool = True,
+) -> GBDataLoader | GBTorchDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
 
@@ -94,11 +255,13 @@ def get_dataloader(
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    use_torchdata : bool
+        If True, build the data loading pipeline with the (beta) ``torchdata.nodes`` utilities, replacing the ``DistributedSampler`` + ``GBDataLoader`` combination with a ``GBTorchDataLoader``. Defaults to False.
 
     Returns
     -------
-    dataloader : GBDataLoader
-        The dataloader instance
+    dataloader : GBDataLoader | GBTorchDataLoader
+        The dataloader instance. A :class:`GBTorchDataLoader` is returned when ``use_torchdata`` is True, otherwise a :class:`GBDataLoader`.
     """
     data_path = config_dict["data"]["data_path"]
 
@@ -111,6 +274,7 @@ def get_dataloader(
 
     batch_size = config_dict["training"]["batch_size"]
     dtype = set_dtype(config_dict["training"]["dtype"])
+    print(f"Backend: {config_dict['data']['backend']}")
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
@@ -128,6 +292,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
+            backend=config_dict["data"].get("backend", "xarray"),
         )
     else:
         if dist.get_rank(group=None) == 0:
@@ -171,15 +336,28 @@ def get_dataloader(
         seed=42,
     )
 
-    dataloader = GBDataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=(sampler is None),
-        sampler=sampler,
-        drop_last=True,
-        pin_memory=torch.cuda.is_available(),
-        prefetch_factor=config_dict["data"]["prefetch_factor"],
-        num_workers=config_dict["data"]["num_workers"],
-    )
+    dataloader: GBDataLoader | GBTorchDataLoader
+    if use_torchdata:
+        print("Using a tensorstore and torchdata.")
+        dataloader = GBTorchDataLoader(
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            drop_last=True,
+            pin_memory=torch.cuda.is_available(),
+            prefetch_factor=config_dict["data"]["prefetch_factor"],
+            num_workers=config_dict["data"]["num_workers"],
+        )
+    else:
+        dataloader = GBDataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=(sampler is None),
+            sampler=sampler,
+            drop_last=True,
+            pin_memory=torch.cuda.is_available(),
+            prefetch_factor=config_dict["data"]["prefetch_factor"],
+            num_workers=config_dict["data"]["num_workers"],
+        )
 
     return dataloader

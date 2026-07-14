@@ -1,4 +1,6 @@
 import os
+import sys
+import types
 from typing import List
 
 import numpy as np
@@ -113,6 +115,74 @@ test_array = [
 
 
 class TestDataset:
+    def test_era5_dataset_tensorstore_backend(
+        self, tmp_path_factory: TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test for class ERA5Distributed with a tensorstore-backed reader."""
+        data_path = tmp_path_factory.mktemp("data")
+        n_time = 12
+        n_features = 8
+        xlat = 6
+        xlon = 8
+        n_masks = 3
+
+        zarr_path = generate_mock_zarr_data(
+            (data_path / "test_data.zarr"), n_time, n_features, xlat, xlon
+        )
+        mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
+        generate_mock_normalization(data_path, n_features)
+
+        class FakeTensorStoreFuture:
+            def __init__(self, value: np.ndarray):
+                self._value = value
+
+            def result(self) -> np.ndarray:
+                return self._value
+
+        class FakeTensorStoreArray:
+            def __init__(self, value: np.ndarray):
+                self._value = value
+
+            def read(self) -> FakeTensorStoreFuture:
+                return FakeTensorStoreFuture(self._value)
+
+            def __getitem__(self, key: tuple[slice | int, ...]) -> FakeTensorStoreFuture:
+                return FakeTensorStoreFuture(self._value[key])
+
+        def fake_open(spec: dict, open: bool = True) -> FakeTensorStoreFuture:
+            assert open is True
+            assert spec["driver"] == "zarr"
+            name = spec["path"]
+            ds = xr.open_dataset(spec["kvstore"]["path"], engine="zarr")
+            if name == "fields":
+                return FakeTensorStoreFuture(FakeTensorStoreArray(ds["fields"].values))
+            return FakeTensorStoreFuture(FakeTensorStoreArray(ds[name].values))
+
+        monkeypatch.setitem(
+            sys.modules, "tensorstore", types.SimpleNamespace(open=fake_open)
+        )
+
+        dataset = ERA5Distributed(
+            0,
+            1,
+            zarr_path,
+            data_path,
+            mask_list,
+            data_path,
+            time_range=None,
+            dt=6,
+            n_in_timesteps=1,
+            n_out_timesteps=1,
+            dtype=torch.float32,
+            dsync_access=False,
+            backend="tensorstore",
+        )
+
+        x, target = dataset[0]
+
+        assert list(x.shape) == [n_features + n_masks, xlat, xlon]
+        assert list(target.shape) == [n_features, xlat, xlon]
+
     @pytest.mark.parametrize(
         "n_time, n_features, n_lat, n_lon", [(24, 84, 721, 1440), (24, 84, 120, 240)]
     )
