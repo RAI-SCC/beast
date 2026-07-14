@@ -12,12 +12,12 @@ from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
     _MultiProcessingDataLoaderIter,
 )
-from torch.utils.data.distributed import DistributedSampler
 
 from beast.data.era5 import (
     ERA5Distributed,
     ERA5Dummy,
 )
+from beast.data.sampler import ResumableDistributedSampler
 from beast.utils import set_dtype
 
 
@@ -163,12 +163,13 @@ def get_dataloader(
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
     
-    sampler: DistributedSampler = DistributedSampler(
+    sampler = ResumableDistributedSampler(
         dataset,
-        shuffle=(True if mode == "train" else False),
+        shuffle=True,
         rank=dp_rank,
         num_replicas=dp_size,
         seed=42,
+        resume_idx=0  # set from checkpoint on resume
     )
 
     dataloader = GBDataLoader(

@@ -85,7 +85,6 @@ def save_checkpoint(
             f"{checkpoint_path}/{model_name}.pt",
             _use_new_zipfile_serialization=False,
         )
-
     return f"{checkpoint_path}/{model_name}.pt"
 
 
