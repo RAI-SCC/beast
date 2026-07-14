@@ -1,14 +1,14 @@
 """Utilities for saving and loading model checkpoints and state_dicts."""
 
-import warnings
+import math
 import os
 import re
+import warnings
 from typing import Any, Dict, Tuple, cast
 
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-import math
 
 from beast.comm import get_process_group
 
@@ -109,7 +109,10 @@ def load_checkpoint(
         Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
 
     """
-    return cast(dict[str, any], torch.load(checkpoint_path, map_location=map_location, weights_only=False))
+    return cast(
+        dict[str, any],
+        torch.load(checkpoint_path, map_location=map_location, weights_only=False),
+    )
 
 
 def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
@@ -126,7 +129,6 @@ def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
     dictionary
         of epoch, step, channel rank, checkpoint file name.
     """
-
     m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?(?:-jc(\d+))?\.pt$", fname)
     if not m:
         warnings.warn(f"File {fname} does not match the beast cp naming pattern.")

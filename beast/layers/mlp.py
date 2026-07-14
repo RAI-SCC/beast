@@ -135,7 +135,7 @@ class DistributedMLPNICE(torch.nn.Module):
         self.linear1 = torch.nn.Linear(
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
-        
+
         self.linear2 = linear.DistributedXWT(
             hidden_dim,
             out_dim,
