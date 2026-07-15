@@ -12,12 +12,12 @@ from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
     _MultiProcessingDataLoaderIter,
 )
-from torch.utils.data.distributed import DistributedSampler
 
 from beast.data.era5 import (
     ERA5Distributed,
     ERA5Dummy,
 )
+from beast.data.sampler import ResumableDistributedSampler
 from beast.utils import set_dtype
 
 
@@ -155,20 +155,29 @@ def get_dataloader(
         )
 
     # if train_subset <=0, the entire dataset will be used for training
-    if mode == "train" and config_dict["data"]["train_subset"] > 0 and (config_dict["data"]["train_subset"] < len(dataset)):
+    if (
+        mode == "train"
+        and config_dict["data"]["train_subset"] > 0
+        and (config_dict["data"]["train_subset"] < len(dataset))
+    ):
         subset_indices = torch.arange(config_dict["data"]["train_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
     # if valid_subset <=0, the entire dataset will be used for validation
-    elif mode == "validation" and config_dict["data"]["valid_subset"] > 0 and (config_dict["data"]["valid_subset"] < len(dataset)):
+    elif (
+        mode == "validation"
+        and config_dict["data"]["valid_subset"] > 0
+        and (config_dict["data"]["valid_subset"] < len(dataset))
+    ):
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
-    
-    sampler: DistributedSampler = DistributedSampler(
+
+    sampler = ResumableDistributedSampler(
         dataset,
-        shuffle=(True if mode == "train" else False),
+        shuffle=True,
         rank=dp_rank,
         num_replicas=dp_size,
         seed=42,
+        resume_idx=0,  # set from checkpoint on resume
     )
 
     dataloader = GBDataLoader(

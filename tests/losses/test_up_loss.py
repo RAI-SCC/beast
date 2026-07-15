@@ -127,7 +127,7 @@ def test_feature_weights(
     dataset_size = 10
     up_group = dist.group.WORLD
 
-    if isinstance(feature_weights, torch.Tensor) :
+    if isinstance(feature_weights, torch.Tensor):
         feature_weights = feature_weights.to(device)
 
     loss = UPAllGaussLoss(
@@ -150,7 +150,9 @@ def test_feature_weights(
     world_size = up_group.size() if up_group is not None else 1
     rank = up_group.rank() if up_group is not None else 0
     local_samples = samples[rank::world_size, ...]
-    print(f"Device: target - {target.device}, samples - {samples.device}, local_samples - {local_samples.device}")
+    print(
+        f"Device: target - {target.device}, samples - {samples.device}, local_samples - {local_samples.device}"
+    )
 
     data_fit, prior_matching = loss.split_forward(local_samples, target)
 

@@ -3,11 +3,11 @@
 import types
 
 import jigsaw.hooks as hooks  # type: ignore[import-not-found]
-from jigsaw import normalization  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
+from jigsaw import normalization  # type: ignore[import-not-found]
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 

@@ -2,7 +2,6 @@
 
 import os
 import random
-from typing import Any
 
 import numpy as np
 import torch
@@ -45,9 +44,7 @@ def set_dtype(dtype: str) -> torch.dtype:
 
 
 @torch.no_grad()
-def get_spatial_weights(
-    n_lat: int, device: torch.device
-) -> torch.Tensor:
+def get_spatial_weights(n_lat: int, device: torch.device) -> torch.Tensor:
     """
     Calculate spatial weights based on latitude for loss weighting.
 
