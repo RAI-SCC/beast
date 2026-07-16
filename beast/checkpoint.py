@@ -239,10 +239,6 @@ def load_state_dict(
         if dist.get_rank() == 0:
             print(err)
             print("Model cannot be loaded from checkpoint. Reinitializing model.")
-
         start_epoch = 0
 
-    if optimizer is None:
-        return model
-    else:
-        return model, optimizer, start_epoch
+    return model, optimizer, start_epoch # return optimizer regardless, even if it is None

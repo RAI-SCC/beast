@@ -322,7 +322,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
@@ -344,7 +344,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
@@ -366,7 +366,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
@@ -387,7 +387,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
@@ -408,7 +408,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
@@ -429,7 +429,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         bayesian=self.bayesian,
-                        qk_norm=False,
+                        qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
