@@ -4,6 +4,7 @@ from typing import Any, Optional, cast
 
 import torch
 import torch.distributed as dist
+from torch.cuda import nvtx
 import torch_blue.vi as vi
 from torch import Tensor
 from torch_blue.vi.distributions import MeanFieldNormal
@@ -140,14 +141,18 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             expert_output = model_output
             expert_target = target
 
+        nvtx.range_push("agg_stats")
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
             expert_output,
             self.up_group,
             *self._get_flat_params(),
             self.feature_weights,
         )
+        nvtx.range_pop()
 
+        nvtx.range_push("data_fitting")
         data_fit = self.data_fitting(mean, std, expert_target)
+        nvtx.range_pop()
 
         if self._track and self.log is not None:
             self.log["data_fitting"].append(data_fit.item())
@@ -171,7 +176,9 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         Tensor
             The combined KL loss consisting of the data fitting and prior matching terms.
         """
+        nvtx.range_push("split_forward")
         data_fit, prior_matching = self.split_forward(model_output, target)
+        nvtx.range_pop()
 
         return data_fit + cast(float, self.heat) * prior_matching
 
@@ -243,9 +250,11 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             async_op=True,
         )
 
+        nvtx.range_push("gauss_prior_matching")
         prior_matching, variance_ratio, mse_part_half = gaussian_prior_matching(
             prior_means, prior_log_stds, variational_means, variational_log_stds
         )
+        nvtx.range_pop()
 
         handle.wait()
         var = m2 / (total_samples - 1)

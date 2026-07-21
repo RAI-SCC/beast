@@ -4,6 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
+from torch.cuda import nvtx
 from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
@@ -751,7 +752,10 @@ class Beast(torch.nn.Module):
         # self.mask_out, self.mask_in = self._define_masks(x.shape)
 
         # x has global shape (B, channels, xlat, xlon)
+        nvtx.range_push("patch_embedding")
         x = self.patch_embedding(x)
+        nvtx.range_pop()
+
         x_res = x.clone()
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         # TODO: fuse as x.permute(0, 2, 3, 1)
@@ -759,20 +763,31 @@ class Beast(torch.nn.Module):
 
         # attention
         for i in range(self.n_full_blocks[0]):
+            nvtx.range_push("get_window")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
             # x has shape: [(S), B*n_windows, window_size_outer[0] * window_size_outer[1], channels]
             n_windows = x.shape[0] // batch_size
             # noise has shape [B, noise_dim] --> use interleave to make it [B*n_windows]
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
+            nvtx.range_push("transformer_block_1:0")
             if self.nice_norm:
                 x = self.transformer_1[i * 2](x, noise_transformer)
             else:
                 x = self.transformer_1[i * 2](x)
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("roll_out")
             x = self.roll_out(x)
+            nvtx.range_pop()
+            nvtx.range_push("get_windows")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
+            nvtx.range_push("transformer_block_1:1")
             if self.nice_norm:
                 x = self.transformer_1[i * 2 + 1](
                     x,
@@ -782,24 +797,34 @@ class Beast(torch.nn.Module):
                 x = self.transformer_1[i * 2 + 1](
                     x,
                 )
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("unroll_out")
             x = self.unroll_out(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
 
         x_res2 = x.clone()
         x = x.permute(0, 3, 1, 2).contiguous()
         # (B, channels, lat, lon)
+        nvtx.range_push("downsample")
         x = self.downsample(x)
+        nvtx.range_pop()
         # (B, 2*channels, lat/2, lon/2)
 
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
         x = x.permute(0, 2, 3, 1).contiguous()
 
         for i in range(self.n_full_blocks[1]):
+            nvtx.range_push("get_windows")
             x = self._get_windows(x, self.window_size_inner)
+            nvtx.range_pop()
             n_windows = x.shape[0] // batch_size
             noise_transformer_down = noise.repeat_interleave(n_windows, dim=0)
+            nvtx.range_push("transformer_down:0")
             if self.nice_norm:
                 x = self.transformer_down[i * 2](
                     x,
@@ -809,11 +834,19 @@ class Beast(torch.nn.Module):
                 x = self.transformer_down[i * 2](
                     x,
                 )
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
+            nvtx.range_pop()
+            nvtx.range_push("roll_in")
             x = self.roll_in(x)
+            nvtx.range_pop()
+            nvtx.range_push("get_windows")
             x = self._get_windows(x, self.window_size_inner)
+            nvtx.range_pop()
+            nvtx.range_push("tranformer_down:1")
             if self.nice_norm:
                 x = self.transformer_down[i * 2 + 1](
                     x,
@@ -823,29 +856,43 @@ class Beast(torch.nn.Module):
                 x = self.transformer_down[i * 2 + 1](
                     x,
                 )
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_inner
             )
+            nvtx.range_pop()
+            nvtx.range_push("unroll_in")
             x = self.unroll_in(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
 
         x = x.permute(0, 3, 1, 2).contiguous()
 
+        nvtx.range_push("upsample")
         x = self.upsample(x)
+        nvtx.range_pop()
 
         batch_size, channels, xlat, xlon = x.shape
 
         x = x.permute(0, 2, 3, 1).flatten(start_dim=1, end_dim=2).contiguous()
+        nvtx.range_push("activation")
         x = self.activation(x)
+        nvtx.range_pop()
+        nvtx.range_push("upsample_mix")
         x = self.upsample_mix(x)
+        nvtx.range_pop()
         x = x.reshape(batch_size, xlat, xlon, channels)
 
         x = x + x_res2
 
         for i in range(self.n_full_blocks[2]):
+            nvtx.range_push("get_windows")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
             n_windows = x.shape[0] // batch_size
             noise_transformer = noise.repeat_interleave(n_windows, dim=0)
 
+            nvtx.range_push("transformer_2:0")
             if self.nice_norm:
                 x = self.transformer_2[i * 2](
                     x,
@@ -855,11 +902,19 @@ class Beast(torch.nn.Module):
                 x = self.transformer_2[i * 2](
                     x,
                 )
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("roll_out")
             x = self.roll_out(x)
+            nvtx.range_pop()
+            nvtx.range_push("get_windows")
             x = self._get_windows(x, self.window_size_outer)
+            nvtx.range_pop()
+            nvtx.range_push("transformer_2:1")
             if self.nice_norm:
                 x = self.transformer_2[i * 2 + 1](
                     x,
@@ -869,13 +924,21 @@ class Beast(torch.nn.Module):
                 x = self.transformer_2[i * 2 + 1](
                     x,
                 )
+                
+            nvtx.range_pop()
+            nvtx.range_push("reverse_windows")
             x = self._reverse_windows(
                 x, batch_size, xlat, xlon, channels, self.window_size_outer
             )
+            nvtx.range_pop()
+            nvtx.range_push("unroll_out")
             x = self.unroll_out(x)  # [B, lat, lon, channels]
+            nvtx.range_pop()
         batch_size, xlat, xlon, channels = x.shape  # noqa: N806
         x = x.permute(0, 3, 1, 2).contiguous()
 
+        nvtx.range_push("patch_recovery")
         x = self.patch_recovery(torch.cat((x, x_res), dim=-3))  # concat along channels
+        nvtx.range_pop()
 
         return x
