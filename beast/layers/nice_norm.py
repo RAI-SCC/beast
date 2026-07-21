@@ -142,7 +142,7 @@ class DistributedNICENorm(torch.nn.Module):
             channel_group=self.channel_group,
         )
 
-    # @torch.compile
+    @torch.compile
     def _calc_shift_scale(
         self, x: torch.Tensor, scale_shift: torch.Tensor
     ) -> torch.Tensor:
