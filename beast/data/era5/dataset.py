@@ -281,9 +281,9 @@ class ERA5Distributed(Dataset):
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
-    def _get_sample_list(self, idx: int) -> torch.Tensor:
+    def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
         sample_list = []
-        for i in range(self.in_timesteps):
+        for i in range(steps):
             sample = self.zarr_data.isel(
                 time=(idx + i * self.dt),
                 feature=range(self.in_var[0], self.in_var[1]),
@@ -309,6 +309,7 @@ class ERA5Distributed(Dataset):
         if self.world_size > 1:
             # Odd ranks load second half of variables, so they might have less masks
             if (inbalance != 0) and (self.local_rank % 2 == 1):
+                # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
                 sample = torch.nn.functional.pad(
                     sample, (0, 0, 0, 0, 0, inbalance)
                 )
@@ -331,14 +332,14 @@ class ERA5Distributed(Dataset):
         target : torch.Tensor
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
-        input_list = self._get_sample(idx, cmasks=True)
+        input_list = self._get_sample_list(idx, steps=self.in_timesteps)
         input_list.append(self.get_constant_masks().to(self.dtype))
         input = torch.cat(input_list, dim=0)
         input = self._padsample(input, self.input_pad_oddrank)
 
         # Output data
         target_idx = idx + self.in_timesteps * self.dt
-        target_list = self._get_sample(target_idx, cmasks=False)
+        target_list = self._get_sample_list(target_idx, steps=self.out_timesteps)
         target = torch.cat(target_list, dim=0)
         target = self._padsample(target, self.output_pad_oddrank)
 
