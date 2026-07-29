@@ -1,7 +1,7 @@
 """Dataset definitions."""
 
-import os
 import dataclasses as dc
+import os
 from datetime import datetime, timedelta
 from typing import Callable, List, Tuple
 
@@ -583,6 +583,8 @@ class ERA5Dummy(Dataset):
 
 @dc.dataclass
 class Event:
+    """Dataclass with event data from EWB."""
+
     event_type: str
     title: str
     start_date: datetime
@@ -593,6 +595,8 @@ class Event:
     lon_max: float
 
 class EWBEra5(ERA5Distributed):
+    """Dataset class to forecast EWB events, with Era5 as ground truth."""
+
     def __init__(
         self,
         event_list,
@@ -601,7 +605,8 @@ class EWBEra5(ERA5Distributed):
         pg_size,
         data_path,
         constant_masks_path,
-        constant_masks, normalization_dir,
+        constant_masks, 
+        normalization_dir,
         dt = 6,
         n_in_timesteps = 1,
         n_out_timesteps = 1,
@@ -619,13 +624,14 @@ class EWBEra5(ERA5Distributed):
         super().__init__(pg_rank, pg_size, data_path, constant_masks_path, constant_masks, normalization_dir, dt, n_in_timesteps, n_out_timesteps, dtype, dsync_access, time_range, transform, target_transform)
 
     def __len__(self) -> int:
+        """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
-    def __getitem__(self, idx) -> tuple[Event, list[torch.Tensor], torch.Tensor, Callable, Callable]:
+    def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor], Callable, Callable]:
+        """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
         start_date = event.start_date
-        end_date = event.end_data
     
         # Get the first dates
         # List of timesteps moving forward in time, with length `self.in_timesteps`.
@@ -635,8 +641,7 @@ class EWBEra5(ERA5Distributed):
         for i in range(self.in_timesteps):
 
             dt = timedelta(hours=i * self.dt)
-            sample = self.zarr_data.isel(
-                time=(first_date + dt),
+            sample = self.zarr_data.sel(time=(first_date + dt)).isel(
                 feature=range(self.in_var[0], self.in_var[1]),
                 latitude=range(0, self.xlat),
                 longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),

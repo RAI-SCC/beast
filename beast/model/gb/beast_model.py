@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear, roll, conv, conv_transpose  # type: ignore
+from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
 
