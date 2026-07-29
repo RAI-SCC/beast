@@ -628,6 +628,7 @@ class EWBEra5(ERA5Distributed):
         return len(self.event_lead_list)
 
     def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor], Callable, Callable]:
+        print(f"On EWBEra5 dataset - dtype: {self.dtype}")
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
@@ -655,13 +656,17 @@ class EWBEra5(ERA5Distributed):
             ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
                 -1, 1, 1
             )
+            print(f"Sample dtype: {sample.dtype}")
 
             samples.append(torch.tensor(sample, dtype=self.dtype))
 
         def input_from_list(sample_list: list[torch.Tensor]) -> torch.Tensor:
+
             input_samples = sample_list[-self.in_timesteps:]
+            print(f"Before cat: {input_samples[0].dtype}")
             input_samples.append(self.get_constant_masks())
-            input =  torch.cat(input_samples, dim=0)
+            input = torch.cat(input_samples, dim=0)
+            print(f"Before sampling: {input.dtype}")
             return self._padsample(input, self.input_pad_oddrank)
 
         def list_from_output(output: torch.Tensor) -> list[torch.Tensor]:
@@ -674,5 +679,6 @@ class EWBEra5(ERA5Distributed):
                 )
             return target_list
 
+        
         return event, lead_time, samples, input_from_list, list_from_output
                 
