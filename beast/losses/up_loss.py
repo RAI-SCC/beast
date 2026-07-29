@@ -56,9 +56,19 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         if feature_weights is None:
             self.feature_weights = None
-        else:
+        elif len(feature_weights.shape) == 1:
             self.feature_weights = feature_weights.reshape(
                 (1, 1, -1, 1, 1)
+            )  # (sample, batch, variables, lat, lon)
+        else:
+            self.feature_weights = feature_weights.reshape(
+                (
+                    1,
+                    1,
+                    feature_weights.shape[-3],
+                    feature_weights.shape[-2],
+                    feature_weights.shape[-1],
+                )
             )  # (sample, batch, variables, lat, lon)
 
         self.aggregate_statistics = MeanStdPriorMatchingAggregation.apply
@@ -239,7 +249,15 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
 
         if feature_weights is not None:
             replace_val = feature_weights == 0.0
-            replace_val = replace_val.reshape(1, -1, 1, 1)
+            if feature_weights.shape[-1] == 1:
+                replace_val = replace_val.reshape(1, -1, 1, 1)
+            else:
+                replace_val = replace_val.reshape(
+                    1,
+                    feature_weights.shape[-3],
+                    feature_weights.shape[-2],
+                    feature_weights.shape[-1],
+                )
             replace_val = replace_val.expand(
                 std.shape[0], -1, std.shape[2], std.shape[3]
             )
