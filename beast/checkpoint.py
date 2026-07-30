@@ -242,7 +242,4 @@ def load_state_dict(
 
         start_epoch = 0
 
-    if optimizer is None:
-        return model
-    else:
-        return model, optimizer, start_epoch
+    return model, optimizer, start_epoch
