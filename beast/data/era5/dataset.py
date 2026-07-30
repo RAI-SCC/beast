@@ -190,7 +190,7 @@ class ERA5Distributed(Dataset):
 
             self.norm_values["mean"] = np.load(f"{normalization_dir}/norm_mean.npy")
             self.norm_values["std"] = np.load(f"{normalization_dir}/norm_std.npy")
-
+            
         if dsync_access:
             execute_in_waves(load_data)
         else:
@@ -384,6 +384,24 @@ class ERA5Distributed(Dataset):
                 self.in_out_xlon[0] : self.in_out_xlon[1],
             ]
         )
+    
+    def get_feature_weights(self, channel_rank, ) -> torch.Tensor:
+        
+        feature_weights = torch.ones((self.in_var[1] - self.in_var[0]), self.xlat, self.in_out_xlon[1] - self.in_out_xlon[0])
+    #    if channel_rank == 0:
+            # modify the correct index
+        return feature_weights
+    
+    def get_land_sea_mask(self) -> torch.Tensor:
+        """Return the local shard of the last mask."""
+        
+        return torch.tensor(
+            self.constant_masks[
+                -1,
+                : self.xlat,
+                self.in_out_xlon[0] : self.in_out_xlon[1]
+            ]
+        )
 
     def _load_constant_mask_2d(
         self, folder_path: str, mask_list: List[str]
@@ -402,10 +420,12 @@ class ERA5Distributed(Dataset):
             of shape (n_masks, n_lat, n_lon)
         """
         # Load data from numpy files
-        data_files = [f for f in os.listdir(folder_path) if f in mask_list]
+        
         data = []
-        for file in data_files:
-            data.append(np.load(os.path.join(folder_path, file)))
+        for mask in mask_list:
+            print(f'{os.path.join(folder_path, mask)}')
+            data.append(np.load(os.path.join(folder_path, mask)))
+            
         masks = np.stack(data, axis=0)
         return masks
 
