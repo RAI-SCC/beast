@@ -110,7 +110,7 @@ def load_checkpoint(
 
     """
     return cast(
-        dict[str, any],
+        dict[str, Any],
         torch.load(checkpoint_path, map_location=map_location, weights_only=False),
     )
 
@@ -198,7 +198,7 @@ def load_state_dict(
     model_state_dict: dict,
     optimizer_state_dict: dict,
     last_epoch: int,
-) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim.Optimizer, int]:
+) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim.Optimizer | None, int]:
     """
     Load state dict for a given model.
 
@@ -241,4 +241,8 @@ def load_state_dict(
             print("Model cannot be loaded from checkpoint. Reinitializing model.")
         start_epoch = 0
 
-    return model, optimizer, start_epoch # return optimizer regardless, even if it is None
+    return (
+        model,
+        optimizer,
+        start_epoch,
+    )  # return optimizer regardless, even if it is None
