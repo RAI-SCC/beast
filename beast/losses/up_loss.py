@@ -104,7 +104,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         data_fit = -self.dataset_size * log_prob.sum()
         # flat_lp = log_prob.flatten()
-        
+
         # worst_idx = torch.topk(-flat_lp, 20).indices  # 20 worst (most negative) elements
         # if dist.get_rank() == 0:
         #     for idx in worst_idx:
@@ -232,7 +232,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             ],
             dim=0,
         )
-        
+
         handle = dist.all_reduce(
             local_sum_result,
             op=dist.ReduceOp.SUM,
@@ -247,12 +247,12 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         handle.wait()
         mean = local_sum_result[0, ...]
         var = local_sum_result[1, ...]
-        
+
         var = var - (mean**2) * (total_samples / (total_samples - 1))
         var = torch.abs(var) + 1e-10
 
         std = torch.sqrt(var)
-        
+
         if feature_weights is not None:
             replace_val = feature_weights == 0.0
             if feature_weights.shape[-1] == 1:
@@ -268,7 +268,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
                 std.shape[0], -1, std.shape[2], std.shape[3]
             )
             std = torch.where(replace_val, 1.0, std)
-        
+
         return mean, std, prior_matching, variance_ratio, mse_part_half
 
     @staticmethod
@@ -406,9 +406,9 @@ def gaussian_prior_matching(
     # vr_min, vr_max = variance_ratio.argmin().item(), variance_ratio.argmax().item()
     # if vr_min < 1e-6 or vr_max > 1e6:
     #     print(f'R[{dist.get_rank()}] Min variance ratio: {vr_min} Max variance ratio: {vr_max}')
-    # variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6) 
+    # variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
     # variance_ratio = variance_ratio / 100000000000000
-    
+
     mse_part_half = (variational_means - prior_means) / prior_variance
     mse_part = (variational_means - prior_means) * mse_part_half
 

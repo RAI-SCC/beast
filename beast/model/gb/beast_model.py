@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear, roll, conv, conv_transpose  # type: ignore
+from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
 
 from beast.layers import transformer
 
@@ -288,21 +288,23 @@ class Beast(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
-            self.embed_dim * 2,
-            self.out_channels,  # global values
-            self.kernel_size,
-            self.device,
-            self.spatial_group,
-            self.channel_group,
-            stride=self.stride,
-            padding=self.padding,
-            dilation=self.dilation,
-            groups=1,
-            bias=True,
-            parallelism=self._parallelism,
-            bayesian=self.bayesian,
-            dtype=self.dtype,
+        self.patch_recovery: torch.nn.Module = (
+            conv_transpose.DistributedConvTranspose2D(
+                self.embed_dim * 2,
+                self.out_channels,  # global values
+                self.kernel_size,
+                self.device,
+                self.spatial_group,
+                self.channel_group,
+                stride=self.stride,
+                padding=self.padding,
+                dilation=self.dilation,
+                groups=1,
+                bias=True,
+                parallelism=self._parallelism,
+                bayesian=self.bayesian,
+                dtype=self.dtype,
+            )
         )
 
         # Transformer blocks

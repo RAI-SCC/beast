@@ -388,12 +388,17 @@ class ERA5Distributed(Dataset):
             ]
         )
 
-    def get_feature_weights(
-        self,
-        channel_rank,
-        sst_idx=4
-    ) -> torch.Tensor:
+    def get_feature_weights(self, channel_rank: int, sst_idx: int = 4) -> torch.Tensor:
+        """
+        Return feature weights with SST being masked over land.
 
+        Parameters
+        ----------
+        channel_rank : int
+            The Jigsaw channel rank of the process.
+        sst_idx : int
+            The index along the feature dimension at which SST is stored, default: 4.
+        """
         feature_weights = torch.ones(
             (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
             self.xlat,
@@ -401,16 +406,17 @@ class ERA5Distributed(Dataset):
         )
         if channel_rank == 0:
             for i in range(self.out_timesteps):
-                feature_weights[i * (self.in_var[1]-self.in_var[0]) + sst_idx] = 1 - self.get_land_sea_mask(folder_path=self.mask_path)
+                feature_weights[i * (self.in_var[1] - self.in_var[0]) + sst_idx] = (
+                    1 - self.get_land_sea_mask(folder_path=self.mask_path)
+                )
 
         # modify the correct index
         return feature_weights
 
     def get_land_sea_mask(
-        self, folder_path, sst_mask_name="sst_mask.npy"
+        self, folder_path: str, sst_mask_name: str = "sst_mask.npy"
     ) -> torch.Tensor:
         """Return the local shard of the sst mask."""
-
         return torch.tensor(
             np.load(os.path.join(folder_path, sst_mask_name))[
                 : self.xlat, self.in_out_xlon[0] : self.in_out_xlon[1]
