@@ -310,9 +310,7 @@ class ERA5Distributed(Dataset):
             # Odd ranks load second half of variables, so they might have less masks
             if (inbalance != 0) and (self.local_rank % 2 == 1):
                 # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
-                sample = torch.nn.functional.pad(
-                    sample, (0, 0, 0, 0, 0, inbalance)
-                )
+                sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
         return sample
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -581,10 +579,12 @@ class ERA5Dummy(Dataset):
 
         return input, target
 
+
 @dc.dataclass
 class Event:
     """Dataclass with event data from EWB."""
 
+    id: str
     event_type: str
     title: str
     start_date: datetime
@@ -593,6 +593,7 @@ class Event:
     lat_max: float
     lon_min: float
     lon_max: float
+
 
 class EWBEra5(ERA5Distributed):
     """Dataset class to forecast EWB events, with Era5 as ground truth."""
@@ -605,48 +606,70 @@ class EWBEra5(ERA5Distributed):
         pg_size,
         data_path,
         constant_masks_path,
-        constant_masks, 
+        constant_masks,
         normalization_dir,
-        dt = 6,
-        n_in_timesteps = 1,
-        n_out_timesteps = 1,
-        dtype = torch.float32,
-        dsync_access = False,
-        time_range = None,
-        transform = None,
-        target_transform = None,
+        dt=6,
+        n_in_timesteps=1,
+        n_out_timesteps=1,
+        dtype=torch.float32,
+        dsync_access=False,
+        time_range=None,
+        transform=None,
+        target_transform=None,
     ):
         # Setup event list
         self.event_lead_list: list[tuple[Event, int]] = [
             (event, lead_time) for event in event_list for lead_time in lead_times
         ]
-        
-        super().__init__(pg_rank, pg_size, data_path, constant_masks_path, constant_masks, normalization_dir, dt, n_in_timesteps, n_out_timesteps, dtype, dsync_access, time_range, transform, target_transform)
+
+        super().__init__(
+            pg_rank,
+            pg_size,
+            data_path,
+            constant_masks_path,
+            constant_masks,
+            normalization_dir,
+            dt,
+            n_in_timesteps,
+            n_out_timesteps,
+            dtype,
+            dsync_access,
+            time_range,
+            transform,
+            target_transform,
+        )
 
     def __len__(self) -> int:
         """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
-    def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor], Callable, Callable]:
+    def __getitem__(
+        self, idx
+    ) -> tuple[Event, int, list[torch.Tensor], Callable, Callable]:
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
         start_date = event.start_date
-    
+
         # Get the first dates
         # List of timesteps moving forward in time, with length `self.in_timesteps`.
         # Last item is going to be `start_date - lead_time`
-        first_date = start_date - timedelta(hours=(lead_time - self.dt * (self.in_timesteps - 1)))
+        first_date = start_date - timedelta(
+            hours=(lead_time - self.dt * (self.in_timesteps - 1))
+        )
         samples = []
         for i in range(self.in_timesteps):
-
             dt = timedelta(hours=i * self.dt)
-            sample = self.zarr_data.sel(time=(first_date + dt)).isel(
-                feature=slice(self.in_var[0], self.in_var[1]),
-                latitude=slice(0, self.xlat),
-                longitude=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
-            )["fields"].values
-            
+            sample = (
+                self.zarr_data.sel(time=(first_date + dt))
+                .isel(
+                    feature=slice(self.in_var[0], self.in_var[1]),
+                    latitude=slice(0, self.xlat),
+                    longitude=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
+                )["fields"]
+                .values
+            )
+
             sample = (
                 sample
                 - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
@@ -660,9 +683,9 @@ class EWBEra5(ERA5Distributed):
 
         def input_from_list(sample_list: list[torch.Tensor]) -> torch.Tensor:
 
-            input_samples = sample_list[-self.in_timesteps:]
+            input_samples = sample_list[-self.in_timesteps :]
             batch_dim = input_samples[0].shape[0]
-            cmasks= self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1,1,1)
+            cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
             input_samples.append(cmasks.to(self.dtype))
             input = torch.cat(input_samples, dim=-3)
             return self._padsample(input, self.input_pad_oddrank)
@@ -673,10 +696,8 @@ class EWBEra5(ERA5Distributed):
             n_vars = self.in_var[1] - self.in_var[0]
             for i in range(self.out_timesteps):
                 target_list.append(
-                    output[:, n_vars * i: n_vars * (i + 1), :, :].contiguous().cpu()
+                    output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
                 )
             return target_list
 
-        
         return event, lead_time, samples, input_from_list, list_from_output
-                
