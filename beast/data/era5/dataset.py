@@ -133,14 +133,13 @@ class ERA5Distributed(Dataset):
 
         self.datapath = data_path
         self.years = time_range
-
-        mask_path = constant_masks_path
+        self.mask_path = constant_masks_path
         mask_list = constant_masks
 
         self.norm_values: dict[str, np.array] = {}
 
         def load_data() -> None:
-            """Inline utility function for initial data acceess."""
+            """Inline utility function for initial data access."""
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
             except Exception:
@@ -186,7 +185,7 @@ class ERA5Distributed(Dataset):
                     "Zarr directory has no dimension `feature`. Cannot access feature dimension"
                 )
 
-            self.constant_masks = self._load_constant_mask_2d(mask_path, mask_list)
+            self.constant_masks = self._load_constant_mask_2d(self.mask_path, mask_list)
             self.n_masks = self.constant_masks.shape[0]
 
             self.norm_values["mean"] = np.load(f"{normalization_dir}/norm_mean.npy")
@@ -203,15 +202,19 @@ class ERA5Distributed(Dataset):
             if row == 0:
                 self.in_var = (
                     0,
-                    self.n_variables // 2
-                    if self.n_variables % 2 == 0
-                    else self.n_variables // 2 + 1,
+                    (
+                        self.n_variables // 2
+                        if self.n_variables % 2 == 0
+                        else self.n_variables // 2 + 1
+                    ),
                 )
             else:
                 self.in_var = (
-                    self.n_variables // 2
-                    if self.n_variables % 2 == 0
-                    else self.n_variables // 2 + 1,
+                    (
+                        self.n_variables // 2
+                        if self.n_variables % 2 == 0
+                        else self.n_variables // 2 + 1
+                    ),
                     self.n_variables,
                 )
 
@@ -366,6 +369,41 @@ class ERA5Distributed(Dataset):
             ]
         )
 
+    def get_feature_weights(self, channel_rank: int, sst_idx: int = 4) -> torch.Tensor:
+        """
+        Return feature weights with SST being masked over land.
+
+        Parameters
+        ----------
+        channel_rank : int
+            The Jigsaw channel rank of the process.
+        sst_idx : int
+            The index along the feature dimension at which SST is stored, default: 4.
+        """
+        feature_weights = torch.ones(
+            (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
+            self.xlat,
+            self.in_out_xlon[1] - self.in_out_xlon[0],
+        )
+        if channel_rank == 0:
+            for i in range(self.out_timesteps):
+                feature_weights[i * (self.in_var[1] - self.in_var[0]) + sst_idx] = (
+                    1 - self.get_land_sea_mask(folder_path=self.mask_path)
+                )
+
+        # modify the correct index
+        return feature_weights
+
+    def get_land_sea_mask(
+        self, folder_path: str, sst_mask_name: str = "sst_mask.npy"
+    ) -> torch.Tensor:
+        """Return the local shard of the sst mask."""
+        return torch.tensor(
+            np.load(os.path.join(folder_path, sst_mask_name))[
+                : self.xlat, self.in_out_xlon[0] : self.in_out_xlon[1]
+            ]
+        ).to(torch.float32)
+
     def _load_constant_mask_2d(
         self, folder_path: str, mask_list: List[str]
     ) -> np.array:
@@ -383,10 +421,11 @@ class ERA5Distributed(Dataset):
             of shape (n_masks, n_lat, n_lon)
         """
         # Load data from numpy files
-        data_files = [f for f in os.listdir(folder_path) if f in mask_list]
+
         data = []
-        for file in data_files:
-            data.append(np.load(os.path.join(folder_path, file)))
+        for mask in mask_list:
+            data.append(np.load(os.path.join(folder_path, mask)))
+
         masks = np.stack(data, axis=0)
         return masks
 

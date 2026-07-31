@@ -56,11 +56,20 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         if feature_weights is None:
             self.feature_weights = None
-        else:
+        elif len(feature_weights.shape) == 1:
             self.feature_weights = feature_weights.reshape(
                 (1, 1, -1, 1, 1)
             )  # (sample, batch, variables, lat, lon)
-
+        else:
+            self.feature_weights = feature_weights.reshape(
+                (
+                    1,
+                    1,
+                    feature_weights.shape[-3],
+                    feature_weights.shape[-2],
+                    feature_weights.shape[-1],
+                )
+            )  # (sample, batch, variables, lat, lon)
         self.aggregate_statistics = MeanStdPriorMatchingAggregation.apply
 
         self.use_fmod = use_fmod
@@ -94,7 +103,14 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
+        # flat_lp = log_prob.flatten()
 
+        # worst_idx = torch.topk(-flat_lp, 20).indices  # 20 worst (most negative) elements
+        # if dist.get_rank() == 0:
+        #     for idx in worst_idx:
+        #         print(f"idx={idx.item()}, log_prob={flat_lp[idx].item():.3e}, "
+        #             f"mean={mean.flatten()[idx].item():.3e}, std={std.flatten()[idx].item():.3e}, "
+        #             f"target={target.flatten()[idx].item():.3e}")
         return cast(Tensor, data_fit)
 
     def split_forward(
@@ -239,7 +255,15 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
 
         if feature_weights is not None:
             replace_val = feature_weights == 0.0
-            replace_val = replace_val.reshape(1, -1, 1, 1)
+            if feature_weights.shape[-1] == 1:
+                replace_val = replace_val.reshape(1, -1, 1, 1)
+            else:
+                replace_val = replace_val.reshape(
+                    1,
+                    feature_weights.shape[-3],
+                    feature_weights.shape[-2],
+                    feature_weights.shape[-1],
+                )
             replace_val = replace_val.expand(
                 std.shape[0], -1, std.shape[2], std.shape[3]
             )
@@ -344,7 +368,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
 
 
-# @torch.compile
+@torch.compile
 def gaussian_prior_matching(
     prior_means: Tensor,
     prior_log_stds: Tensor,
@@ -379,6 +403,12 @@ def gaussian_prior_matching(
         torch.tensor(2, device=variational_means.device) * prior_log_stds
     )
     variance_ratio = variational_variance / prior_variance
+    # vr_min, vr_max = variance_ratio.argmin().item(), variance_ratio.argmax().item()
+    # if vr_min < 1e-6 or vr_max > 1e6:
+    #     print(f'R[{dist.get_rank()}] Min variance ratio: {vr_min} Max variance ratio: {vr_max}')
+    # variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
+    # variance_ratio = variance_ratio / 100000000000000
+
     mse_part_half = (variational_means - prior_means) / prior_variance
     mse_part = (variational_means - prior_means) * mse_part_half
 
