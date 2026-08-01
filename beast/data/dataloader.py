@@ -41,10 +41,10 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
         stop : float
             The time stamp after fetching the next data item in ns
         """
-        start = time.time_ns()
+        start = time.perf_counter_ns()
 
         data = super().__next__()
-        end = time.time_ns()
+        end = time.perf_counter_ns()
 
         return *data, start, end
 
