@@ -682,9 +682,7 @@ class EWBEra5(ERA5Distributed):
         """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
-    def __getitem__(
-        self, idx
-    ) -> tuple[Event, int, list[torch.Tensor], Callable, Callable]:
+    def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor]]:
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
@@ -720,23 +718,56 @@ class EWBEra5(ERA5Distributed):
 
             samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
 
-        def input_from_list(sample_list: list[torch.Tensor]) -> torch.Tensor:
+        return event, lead_time, samples
 
-            input_samples = sample_list[-self.in_timesteps :]
-            batch_dim = input_samples[0].shape[0]
-            cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
-            input_samples.append(cmasks.to(self.dtype))
-            input = torch.cat(input_samples, dim=-3)
-            return self._padsample(input, self.input_pad_oddrank)
+    def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
+        """
+        Format an input tensor out of a list of timesteps. Applies masks and padding. The last n timesteps in the list are used, based on the dataset argument `in_timesteps`.
 
-        def list_from_output(output: torch.Tensor) -> list[torch.Tensor]:
-            # Output shape: LSN, LBS, C, lat, lon
-            target_list = []
-            n_vars = self.in_var[1] - self.in_var[0]
-            for i in range(self.out_timesteps):
-                target_list.append(
-                    output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
-                )
-            return target_list
+        Parameters
+        ----------
+        sample_list: list[torch.Tensor]
+            The list of timesteps
 
-        return event, lead_time, samples, input_from_list, list_from_output
+        Returns
+        -------
+        input: torch.Tensor
+        """
+        input_samples = sample_list[-self.in_timesteps :]
+        batch_dim = input_samples[0].shape[0]
+        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        input_samples.append(cmasks.to(self.dtype))
+        input = torch.cat(input_samples, dim=-3)
+        return self._padsample(input, self.input_pad_oddrank)
+
+    def list_from_output(
+        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
+    ) -> list[torch.Tensor]:
+        """
+        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
+
+        Parameters
+        ----------
+        output: torch.Tensor
+            Model output.
+        feature_weights: torch.Tensor
+            Outputs need to get masked. This tells us which values.
+        fill: float
+            What to put on the masked values.
+
+        Returns
+        -------
+        outputs: list[torch.Tensors]
+            List of output timesteps.
+        """
+        # Output shape: LSN, LBS, C, lat, lon
+
+        target_list = []
+        n_vars = self.in_var[1] - self.in_var[0]
+        output = torch.where(feature_weights == 0, fill, output)
+        for i in range(self.out_timesteps):
+            target_list.append(
+                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
+            )
+
+        return target_list
