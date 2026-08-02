@@ -1,7 +1,8 @@
 """Dataset definitions."""
 
+import dataclasses as dc
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, List, Tuple
 
 import numpy as np
@@ -283,6 +284,38 @@ class ERA5Distributed(Dataset):
             self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
         )
 
+    def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
+        sample_list = []
+        for i in range(steps):
+            sample = self.zarr_data.isel(
+                time=(idx + i * self.dt),
+                feature=range(self.in_var[0], self.in_var[1]),
+                latitude=range(0, self.xlat),
+                longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
+            )["fields"].values
+
+            sample = (
+                sample
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
+
+            sample_list.append(torch.tensor(sample, dtype=self.dtype))
+
+        return sample_list
+
+    def _padsample(self, sample: torch.Tensor, inbalance: int) -> torch.Tensor:
+        # For distributed dataset, we may create inbalances in the variables
+        if self.world_size > 1:
+            # Odd ranks load second half of variables, so they might have less masks
+            if (inbalance != 0) and (self.local_rank % 2 == 1):
+                # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
+                sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
+        return sample
+
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Return single input, target.
@@ -300,68 +333,16 @@ class ERA5Distributed(Dataset):
         target : torch.Tensor
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
-        target_idx = idx + self.in_timesteps * self.dt
-
-        input_list = []
-        for i in range(self.in_timesteps):
-            x = self.zarr_data.isel(
-                time=(idx + i * self.dt),
-                feature=range(self.in_var[0], self.in_var[1]),
-                latitude=range(0, self.xlat),
-                longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-            )["fields"].values
-
-            x = (
-                x
-                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
-                    -1, 1, 1
-                )
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
-                -1, 1, 1
-            )
-
-            input_list.append(torch.tensor(x, dtype=self.dtype))
-
+        input_list = self._get_sample_list(idx, steps=self.in_timesteps)
         input_list.append(self.get_constant_masks().to(self.dtype))
         input = torch.cat(input_list, dim=0)
-
-        # For distributed dataset, we may create inbalances in the variables
-        if self.world_size > 1:
-            # Odd ranks load second half of variables, so they might have less masks
-            if (self.input_pad_oddrank != 0) and (self.local_rank % 2 == 1):
-                input = torch.nn.functional.pad(
-                    input, (0, 0, 0, 0, 0, self.input_pad_oddrank)
-                )
+        input = self._padsample(input, self.input_pad_oddrank)
 
         # Output data
-        target_list = []
-        for j in range(self.out_timesteps):
-            y = self.zarr_data.isel(
-                time=(target_idx + j * self.dt),
-                feature=range(self.in_var[0], self.in_var[1]),
-                latitude=range(0, self.xlat),
-                longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
-            )["fields"].values
-
-            y = (
-                y
-                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
-                    -1, 1, 1
-                )
-            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
-                -1, 1, 1
-            )
-
-            target_list.append(torch.tensor(y, dtype=self.dtype))
-
+        target_idx = idx + self.in_timesteps * self.dt
+        target_list = self._get_sample_list(target_idx, steps=self.out_timesteps)
         target = torch.cat(target_list, dim=0)
-
-        if self.world_size > 1:
-            # Odd ranks load second half of variables, so they might have less masks
-            if (self.output_pad_oddrank != 0) and (self.local_rank % 2 == 1):
-                target = torch.nn.functional.pad(
-                    target, (0, 0, 0, 0, 0, self.output_pad_oddrank)
-                )
+        target = self._padsample(target, self.output_pad_oddrank)
 
         if self.transform is not None:
             input = self.transform(input)
@@ -636,3 +617,157 @@ class ERA5Dummy(Dataset):
             target = self.target_transform(target)
 
         return input, target
+
+
+@dc.dataclass
+class Event:
+    """Dataclass with event data from EWB."""
+
+    id: str
+    event_type: str
+    title: str
+    start_date: datetime
+    end_date: datetime
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+
+
+class EWBEra5(ERA5Distributed):
+    """Dataset class to forecast EWB events, with Era5 as ground truth."""
+
+    def __init__(
+        self,
+        event_list,
+        lead_times,
+        pg_rank,
+        pg_size,
+        data_path,
+        constant_masks_path,
+        constant_masks,
+        normalization_dir,
+        dt=6,
+        n_in_timesteps=1,
+        n_out_timesteps=1,
+        dtype=torch.float32,
+        dsync_access=False,
+        time_range=None,
+        transform=None,
+        target_transform=None,
+    ):
+        # Setup event list
+        self.event_lead_list: list[tuple[Event, int]] = [
+            (event, lead_time) for event in event_list for lead_time in lead_times
+        ]
+
+        super().__init__(
+            pg_rank,
+            pg_size,
+            data_path,
+            constant_masks_path,
+            constant_masks,
+            normalization_dir,
+            dt,
+            n_in_timesteps,
+            n_out_timesteps,
+            dtype,
+            dsync_access,
+            time_range,
+            transform,
+            target_transform,
+        )
+
+    def __len__(self) -> int:
+        """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
+        return len(self.event_lead_list)
+
+    def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor]]:
+        """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
+        event, lead_time = self.event_lead_list[idx]
+
+        start_date = event.start_date
+
+        # Get the first dates
+        # List of timesteps moving forward in time, with length `self.in_timesteps`.
+        # Last item is going to be `start_date - lead_time`
+        first_date = start_date - timedelta(
+            hours=(lead_time - self.dt * (self.in_timesteps - 1))
+        )
+        samples = []
+        for i in range(self.in_timesteps):
+            dt = timedelta(hours=i * self.dt)
+            sample = (
+                self.zarr_data.sel(time=(first_date + dt))
+                .isel(
+                    feature=slice(self.in_var[0], self.in_var[1]),
+                    latitude=slice(0, self.xlat),
+                    longitude=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
+                )["fields"]
+                .values
+            )
+
+            sample = (
+                sample
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
+
+            samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
+
+        return event, lead_time, samples
+
+    def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
+        """
+        Format an input tensor out of a list of timesteps. Applies masks and padding. The last n timesteps in the list are used, based on the dataset argument `in_timesteps`.
+
+        Parameters
+        ----------
+        sample_list: list[torch.Tensor]
+            The list of timesteps
+
+        Returns
+        -------
+        input: torch.Tensor
+        """
+        input_samples = sample_list[-self.in_timesteps :]
+        batch_dim = input_samples[0].shape[0]
+        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        input_samples.append(cmasks.to(self.dtype))
+        input = torch.cat(input_samples, dim=-3)
+        return self._padsample(input, self.input_pad_oddrank)
+
+    def list_from_output(
+        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
+    ) -> list[torch.Tensor]:
+        """
+        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
+
+        Parameters
+        ----------
+        output: torch.Tensor
+            Model output.
+        feature_weights: torch.Tensor
+            Outputs need to get masked. This tells us which values.
+        fill: float
+            What to put on the masked values.
+
+        Returns
+        -------
+        outputs: list[torch.Tensors]
+            List of output timesteps.
+        """
+        # Output shape: LSN, LBS, C, lat, lon
+
+        target_list = []
+        n_vars = self.in_var[1] - self.in_var[0]
+        output = torch.where(feature_weights == 0, fill, output)
+        for i in range(self.out_timesteps):
+            target_list.append(
+                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
+            )
+
+        return target_list
