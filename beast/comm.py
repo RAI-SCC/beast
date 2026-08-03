@@ -53,7 +53,6 @@ def create_process_mesh_dict(
 
     world_size = dist.get_world_size()
 
-    print(mesh_dims)
     if torch.prod(torch.tensor(mesh_dims)).item() != world_size:
         raise ValueError("Product of mesh dimensions must equal world size.")
 
