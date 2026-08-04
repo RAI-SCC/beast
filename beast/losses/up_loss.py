@@ -368,7 +368,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
 
 
-@torch.compile
+@torch.compile 
 def gaussian_prior_matching(
     prior_means: Tensor,
     prior_log_stds: Tensor,
@@ -403,12 +403,8 @@ def gaussian_prior_matching(
         torch.tensor(2, device=variational_means.device) * prior_log_stds
     )
     variance_ratio = variational_variance / prior_variance
-    # vr_min, vr_max = variance_ratio.argmin().item(), variance_ratio.argmax().item()
-    # if vr_min < 1e-6 or vr_max > 1e6:
-    #     print(f'R[{dist.get_rank()}] Min variance ratio: {vr_min} Max variance ratio: {vr_max}')
-    # variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
-    # variance_ratio = variance_ratio / 100000000000000
-
+    variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
+        
     mse_part_half = (variational_means - prior_means) / prior_variance
     mse_part = (variational_means - prior_means) * mse_part_half
 

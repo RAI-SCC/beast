@@ -115,6 +115,7 @@ def get_dataloader(
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
+        # print(f'kwargs {kwargs}')
         dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
@@ -192,6 +193,7 @@ def get_dataloader(
         pin_memory=torch.cuda.is_available(),
         prefetch_factor=config_dict["data"]["prefetch_factor"],
         num_workers=config_dict["data"]["num_workers"],
+        persistent_workers=True
     )
 
     return dataloader
