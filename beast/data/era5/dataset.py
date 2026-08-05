@@ -771,3 +771,166 @@ class EWBEra5(ERA5Distributed):
             )
 
         return target_list
+
+
+class WB2Era5(ERA5Distributed):
+    """Dataset class to roll out forecasts from a plain range of iniatialization times for WB2 evaluation."""
+
+    def __init__(
+        self,
+        init_times,
+        max_lead_hours,
+        pg_rank,
+        pg_size,
+        data_path,
+        constant_masks_path,
+        constant_masks,
+        normalization_dir,
+        dt=6,
+        n_in_timesteps=1,
+        n_out_timesteps=1,
+        dtype=torch.float32,
+        dsync_access=False,
+        time_range=None,
+        transform=None,
+        target_transform=None,
+    ):
+        self.init_times: list[datetime] = [
+            pd.Timestamp(t).to_pydatetime() for t in init_times
+        ]
+        self.max_lead_hours = int(max_lead_hours)
+        if not self.init_times:
+            raise ValueError("WB2Era5 needs at least one initialization time.")
+        if self.max_lead_hours <= 0:
+            raise ValueError(
+                f"max_lead_hours must be positive, got {self.max_lead_hours}."
+            )
+
+        self._check_init_times_available(data_path, dt, n_in_timesteps)
+        self._input_pad = 0
+
+        super().__init__(
+            pg_rank,
+            pg_size,
+            data_path,
+            constant_masks_path,
+            constant_masks,
+            normalization_dir,
+            dt,
+            n_in_timesteps,
+            n_out_timesteps,
+            dtype,
+            dsync_access,
+            time_range,
+            transform,
+            target_transform,
+        )
+
+        self._input_pad = getattr(self, "input_pad_oddrank", 0)
+
+    def _check_init_times_available(
+        self, data_path: str, dt: int, n_in_timesteps: int
+    ) -> None:
+        """Fail fast if any initialization time or its warm-up frame is missing."""
+        try:
+            times = xr.open_dataset(data_path, engine="zarr")["time"].values
+        except Exception:
+            # Let the base class raise its own, more specific error about the path.
+            return
+        available = set(pd.to_datetime(times))
+
+        for init_time in self.init_times:
+            for i in range(n_in_timesteps):
+                needed = init_time - timedelta(hours=dt * i)
+                if pd.Timestamp(needed) not in available:
+                    raise ValueError(
+                        f"Initialization time {init_time} needs the timestep "
+                        f"{needed}, which is not in {data_path}."
+                    )
+
+    def __len__(self) -> int:
+        """Return the number of initialization times to forecast from."""
+        return len(self.init_times)
+
+    def __getitem__(self, idx) -> Tuple[datetime, int, List[torch.Tensor]]:
+        """Return the initialization time, its maximum lead, and the warm-up states."""
+        init_time = self.init_times[idx]
+
+        first_date = init_time - timedelta(hours=self.dt * (self.in_timesteps - 1))
+        samples = []
+        for i in range(self.in_timesteps):
+            dt = timedelta(hours=i * self.dt)
+            sample = (
+                self.zarr_data.sel(time=(first_date + dt))
+                .isel(
+                    feature=slice(self.in_var[0], self.in_var[1]),
+                    latitude=slice(0, self.xlat),
+                    longitude=slice(self.in_out_xlon[0], self.in_out_xlon[1]),
+                )["fields"]
+                .values
+            )
+
+            sample = (
+                sample
+                - self.norm_values["mean"][self.in_var[0] : self.in_var[1]].reshape(
+                    -1, 1, 1
+                )
+            ) / self.norm_values["std"][self.in_var[0] : self.in_var[1]].reshape(
+                -1, 1, 1
+            )
+
+            samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
+
+        return init_time, self.max_lead_hours, samples
+
+    def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
+        """
+        Format an input tensor out of a list of timesteps.
+
+        Parameters
+        ----------
+        sample_list: list[torch.Tensor]
+            The list of timesteps
+
+        Returns
+        -------
+        input: torch.Tensor
+        """
+        input_samples = sample_list[-self.in_timesteps :]
+        batch_dim = input_samples[0].shape[0]
+        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        input_samples.append(cmasks.to(self.dtype))
+        input = torch.cat(input_samples, dim=-3)
+        return self._padsample(input, self._input_pad)
+
+    def list_from_output(
+        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
+    ) -> list[torch.Tensor]:
+        """
+        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
+
+        Parameters
+        ----------
+        output: torch.Tensor
+            Model output.
+        feature_weights: torch.Tensor
+            Outputs need to get masked. This tells us which values.
+        fill: float
+            What to put on the masked values.
+
+        Returns
+        -------
+        outputs: list[torch.Tensors]
+            List of output timesteps.
+        """
+        # Output shape: LSN, LBS, C, lat, lon
+
+        target_list = []
+        n_vars = self.in_var[1] - self.in_var[0]
+        output = torch.where(feature_weights == 0, fill, output)
+        for i in range(self.out_timesteps):
+            target_list.append(
+                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
+            )
+
+        return target_list
