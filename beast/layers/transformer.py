@@ -6,7 +6,6 @@ import torch
 import torch.distributed as dist
 import transformer_engine.pytorch as te
 from jigsaw import attention, hooks  # type: ignore
-from transformer_engine.common.recipe import DelayedScaling, Format
 
 from beast.layers import mlp, nice_norm
 
@@ -440,9 +439,6 @@ class DistributedNICETransformer(torch.nn.Module):
                 hooks.make_grad_sync_hook(spatial_group)
             )
 
-        self.recipe = DelayedScaling(
-            fp8_format=Format.HYBRID, amax_history_len=16, amax_compute_algo="max"
-        )
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """
@@ -455,8 +451,7 @@ class DistributedNICETransformer(torch.nn.Module):
         noise: torch.Tensor
             Noise for the layer norm. Noise should be consistent within the model-parallel group.
         """
-        with te.autocast(enabled=True, recipe=self.recipe):
-            x = self.attention_block(self.layer_norm1(x, noise)) + x
-            x = self.mlp(self.layer_norm2(x, noise)) + x
+        x = self.attention_block(self.layer_norm1(x, noise)) + x
+        x = self.mlp(self.layer_norm2(x, noise)) + x
 
         return x
