@@ -51,7 +51,7 @@ def make_dataset(
 
 
 def test_len_is_the_number_of_init_times(mock_paths):
-    """One item per initialization time, unlike EWBEra5's event x lead product."""
+    """One item per initialization time."""
     init_times = [FIRST_TIME + timedelta(hours=h) for h in (4, 5, 6)]
     assert len(make_dataset(mock_paths, init_times)) == 3
 
