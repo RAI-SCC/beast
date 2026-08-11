@@ -29,15 +29,14 @@ import torch.distributed as dist
 from jigsaw import hooks  # type: ignore[import-not-found]
 from torch import Tensor
 
-from beast.comm import (
-    create_process_mesh_dict,
-    get_process_group,
-    shutdown_comm,
-    wrap_ddp,
-)
+from beast.comm import create_process_mesh_dict, get_process_group, wrap_ddp
 from beast.losses.up_loss import MeanStdPriorMatchingAggregation
 
 # Global problem size, held fixed across every mesh layout below.
+# beast.comm.create_process_mesh_dict builds a 4-D mesh named
+# (DP, SP, JSpatial, JChannel); these index into that layout.
+_DP, _SP, _JSPATIAL, _JCHANNEL = 0, 1, 2, 3
+
 N_ENSEMBLE = 4
 N_FEATURES = 8
 DATASET_SIZE = 1000.0
@@ -148,50 +147,60 @@ def serial_reference(device: torch.device) -> dict[str, Tensor]:
 # and caching lets every parameter be its own test without paying for a mesh
 # rebuild each time. Every rank walks the parametrisation in the same order, so
 # the cache is populated identically everywhere.
-_GRAD_CACHE: dict[tuple[tuple[int, ...], bool], dict[str, Tensor]] = {}
+# Building the mesh is collective and comparatively expensive, while each
+# parameter's check is trivial. Compute every gradient a layout needs in one
+# go and cache it, so 24 tests cost 4 mesh builds rather than 24.
+#
+# NOTE: shutdown_comm() is deliberately NOT called between layouts. It invokes
+# pg.shutdown() on every group in the mesh, and when a mesh dimension spans the
+# whole world (e.g. DP=4 at world size 4) that tears down a communicator the
+# default group still relies on. Every later collective -- including the
+# all_gather_object inside visualize_process_mesh() -- then dies with
+# "NCCL communicator was aborted". Teardown is left to the dist_env fixture in
+# conftest.py, which destroys the process group once at session end.
+_GRAD_CACHE: dict[tuple[int, ...], dict[bool, dict[str, Tensor]]] = {}
 
 
 def _distributed_grads(
     device: torch.device, mesh_dims: list[int], spatial_hook: bool
 ) -> dict[str, Tensor]:
-    """Return post-DDP parameter gradients for one mesh layout."""
-    key = (tuple(mesh_dims), spatial_hook)
+    """Return post-DDP parameter gradients for one mesh layout and hook setting."""
+    key = tuple(mesh_dims)
     if key in _GRAD_CACHE:
-        return _GRAD_CACHE[key]
+        return _GRAD_CACHE[key][spatial_hook]
 
-    try:
-        create_process_mesh_dict(mesh_dims, device_type=device.type)
-        up_group = get_process_group("SP")
-        spatial_group = get_process_group("JSpatial")
+    create_process_mesh_dict(mesh_dims, device_type=device.type)
+    up_group = get_process_group("SP")
+    spatial_group = get_process_group("JSpatial")
+    ddp_group = get_process_group("DDP")
 
-        noise, target = _global_problem(device)
-        n_local = N_ENSEMBLE // mesh_dims[2]
-        width = N_FEATURES // mesh_dims[3]
-        members = slice(up_group.rank() * n_local, (up_group.rank() + 1) * n_local)
-        features = slice(
-            spatial_group.rank() * width, (spatial_group.rank() + 1) * width
-        )
+    noise, target = _global_problem(device)
+    n_local = N_ENSEMBLE // mesh_dims[_SP]
+    width = N_FEATURES // mesh_dims[_JSPATIAL]
+    members = slice(up_group.rank() * n_local, (up_group.rank() + 1) * n_local)
+    features = slice(spatial_group.rank() * width, (spatial_group.rank() + 1) * width)
 
+    # Both hook settings share the mesh; each gets a freshly initialised model.
+    per_hook: dict[bool, dict[str, Tensor]] = {}
+    for hooked in (True, False):
         model = ToyUPModel(N_FEATURES, up_group, device)
-        if spatial_hook:
+        if hooked:
             for parameter in model.parameters():
                 parameter.register_post_accumulate_grad_hook(
                     hooks.make_grad_sync_hook(spatial_group, async_op=False)
                 )
-
         ddp_model = wrap_ddp(
             model,
             device_id=device.index if device.type == "cuda" else None,
-            ddp_group=get_process_group("DDP"),
+            ddp_group=ddp_group,
         )
         ddp_model(noise[members, features], target[features], features).backward()
+        per_hook[hooked] = {
+            n: p.grad.detach().clone() for n, p in model.named_parameters()
+        }
 
-        grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()}
-    finally:
-        shutdown_comm()
-
-    _GRAD_CACHE[key] = grads
-    return grads
+    _GRAD_CACHE[key] = per_hook
+    return per_hook[spatial_hook]
 
 
 def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bool:
@@ -207,7 +216,7 @@ def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bo
     rank computes identically, so they need averaging -- which DDP already
     does. The spatial hook then over-counts them by a factor of JSpatial.
     """
-    n_sp, n_jspatial = mesh_dims[2], mesh_dims[3]
+    n_sp, n_jspatial = mesh_dims[_SP], mesh_dims[_JSPATIAL]
     if param == "theta":
         return not (n_sp == 1 and (spatial_hook or n_jspatial == 1))
     return spatial_hook and n_jspatial > 1
@@ -217,10 +226,10 @@ def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bo
 @pytest.mark.parametrize(
     "mesh_dims",
     [
-        pytest.param([1, 4, 1, 1, 1], id="DP=4"),
-        pytest.param([1, 1, 4, 1, 1], id="SP=4"),
-        pytest.param([1, 1, 2, 2, 1], id="SP=2xJSpatial=2"),
-        pytest.param([1, 1, 1, 4, 1], id="JSpatial=4"),
+        pytest.param([4, 1, 1, 1], id="DP=4"),
+        pytest.param([1, 4, 1, 1], id="SP=4"),
+        pytest.param([1, 2, 2, 1], id="SP=2xJSpatial=2"),
+        pytest.param([1, 1, 4, 1], id="JSpatial=4"),
     ],
 )
 @pytest.mark.parametrize("spatial_hook", [True, False], ids=["hooked", "unhooked"])
