@@ -69,7 +69,7 @@ def get_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-    **kwargs: dict
+    **kwargs: dict,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
@@ -129,7 +129,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
-            **kwargs
+            **kwargs,
         )
     else:
         if dist.get_rank(group=None) == 0:
@@ -154,7 +154,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
-            **kwargs
+            **kwargs,
         )
 
     # if train_subset <=0, the entire dataset will be used for training
@@ -192,6 +192,7 @@ def get_dataloader(
         pin_memory=torch.cuda.is_available(),
         prefetch_factor=config_dict["data"]["prefetch_factor"],
         num_workers=config_dict["data"]["num_workers"],
+        persistent_workers=True,
     )
 
     return dataloader
