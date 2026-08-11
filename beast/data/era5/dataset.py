@@ -122,7 +122,7 @@ class ERA5Distributed(Dataset):
         time_range: Tuple[str, str] | None = None,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
-        rollout: int = 1
+        rollout: int = 1,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -283,7 +283,8 @@ class ERA5Distributed(Dataset):
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
-            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+            self.n_data_items
+            - (self.in_timesteps + self.out_timesteps - 1) * self.dt * self.rollout
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
@@ -344,7 +345,9 @@ class ERA5Distributed(Dataset):
         target_idx = idx + self.in_timesteps * self.dt
 
         # TODO: THIS ONLY WORKS BECAUSE OF THE CHANNEL AND SPATIAL DIMS WE ARE USING. Needs to be generalized later.
-        target_list = self._get_sample_list(target_idx, steps=self.out_timesteps * self.rollout)
+        target_list = self._get_sample_list(
+            target_idx, steps=self.out_timesteps * self.rollout
+        )
         target = torch.cat(target_list, dim=0)
         target = self._padsample(target, self.output_pad_oddrank)
 
@@ -743,7 +746,6 @@ class EWBEra5(ERA5Distributed):
             samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
 
         return event, lead_time, samples
-
 
     def list_from_output(
         self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
