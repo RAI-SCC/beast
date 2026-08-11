@@ -143,41 +143,22 @@ def serial_reference(device: torch.device) -> dict[str, Tensor]:
     return {name: p.grad.detach().clone() for name, p in model.named_parameters()}
 
 
-@pytest.mark.dist(4)
-@pytest.mark.parametrize(
-    "mesh_dims",
-    [
-        pytest.param([1, 4, 1, 1, 1], id="DP=4"),
-        pytest.param([1, 1, 4, 1, 1], id="SP=4", marks=pytest.mark.xfail(
-            strict=True, reason=_KNOWN_DEFECT)),
-        pytest.param([1, 1, 2, 2, 1], id="SP=2xJSpatial=2", marks=pytest.mark.xfail(
-            strict=True, reason=_KNOWN_DEFECT)),
-        pytest.param([1, 1, 1, 4, 1], id="JSpatial=4", marks=pytest.mark.xfail(
-            strict=True, reason=_KNOWN_DEFECT)),
-    ],
-)
-@pytest.mark.parametrize("spatial_hook", [True, False], ids=["hooked", "unhooked"])
-def test_grad_invariant_to_mesh_layout(
-    device: torch.device,
-    serial_reference: dict[str, Tensor],
-    mesh_dims: list[int],
-    spatial_hook: bool,
-) -> None:
-    """dL/dtheta must not depend on how the mesh splits a fixed global problem.
+# The distributed forward/backward is collective and comparatively expensive,
+# while each parameter's check is trivial. Computing once per (layout, hook)
+# and caching lets every parameter be its own test without paying for a mesh
+# rebuild each time. Every rank walks the parametrisation in the same order, so
+# the cache is populated identically everywhere.
+_GRAD_CACHE: dict[tuple[tuple[int, ...], bool], dict[str, Tensor]] = {}
 
-    ``DP=4`` is the control: data-parallel averaging of an identical batch
-    reproduces the serial gradient exactly, so a failure there means the
-    harness itself is wrong rather than the reduction semantics.
 
-    ``spatial_hook`` mirrors the fact that parameters inside jigsaw modules
-    carry ``make_grad_sync_hook`` while others do not. The two classes fail
-    differently, so both are covered: the hook's sum over ``JSpatial`` cancels
-    against DDP's ``1/J`` for the data-fitting path, but leaves the prior
-    matching term over-counted by ``J``.
+def _distributed_grads(
+    device: torch.device, mesh_dims: list[int], spatial_hook: bool
+) -> dict[str, Tensor]:
+    """Return post-DDP parameter gradients for one mesh layout."""
+    key = (tuple(mesh_dims), spatial_hook)
+    if key in _GRAD_CACHE:
+        return _GRAD_CACHE[key]
 
-    The xfail marks are ``strict``, so this test turns red once the reduction is
-    fixed -- that is the signal to delete them.
-    """
     try:
         create_process_mesh_dict(mesh_dims, device_type=device.type)
         up_group = get_process_group("SP")
@@ -205,14 +186,84 @@ def test_grad_invariant_to_mesh_layout(
         )
         ddp_model(noise[members, features], target[features], features).backward()
 
-        failures = [
-            f"{name}: |g|/|ref| = "
-            f"{(p.grad.norm() / serial_reference[name].norm()).item():.6f}"
-            for name, p in model.named_parameters()
-            if not torch.allclose(p.grad, serial_reference[name], atol=TOL, rtol=TOL)
-        ]
-        assert not failures, (
-            f"gradient depends on mesh layout {mesh_dims}: " + "; ".join(failures)
-        )
+        grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()}
     finally:
         shutdown_comm()
+
+    _GRAD_CACHE[key] = grads
+    return grads
+
+
+def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bool:
+    """Whether this (layout, hook, parameter) is broken by the current reduction.
+
+    ``theta`` reaches the loss through the ensemble statistics and so needs its
+    per-rank partials *summed* over both SP and JSpatial. DDP averages, and the
+    jigsaw spatial hook supplies the sum over JSpatial only -- so theta is
+    correct only when SP is trivial and either the hook covers JSpatial or
+    JSpatial is trivial too.
+
+    ``vmean``/``vlogs`` reach the loss only through prior matching, which every
+    rank computes identically, so they need averaging -- which DDP already
+    does. The spatial hook then over-counts them by a factor of JSpatial.
+    """
+    n_sp, n_jspatial = mesh_dims[2], mesh_dims[3]
+    if param == "theta":
+        return not (n_sp == 1 and (spatial_hook or n_jspatial == 1))
+    return spatial_hook and n_jspatial > 1
+
+
+@pytest.mark.dist(4)
+@pytest.mark.parametrize(
+    "mesh_dims",
+    [
+        pytest.param([1, 4, 1, 1, 1], id="DP=4"),
+        pytest.param([1, 1, 4, 1, 1], id="SP=4"),
+        pytest.param([1, 1, 2, 2, 1], id="SP=2xJSpatial=2"),
+        pytest.param([1, 1, 1, 4, 1], id="JSpatial=4"),
+    ],
+)
+@pytest.mark.parametrize("spatial_hook", [True, False], ids=["hooked", "unhooked"])
+@pytest.mark.parametrize("param", ["theta", "vmean", "vlogs"])
+def test_grad_invariant_to_mesh_layout(
+    request: pytest.FixtureRequest,
+    device: torch.device,
+    serial_reference: dict[str, Tensor],
+    mesh_dims: list[int],
+    spatial_hook: bool,
+    param: str,
+) -> None:
+    """dL/dparam must not depend on how the mesh splits a fixed global problem.
+
+    One test per parameter, so a layout that breaks one gradient but not
+    another reports exactly that rather than collapsing to a single failure.
+    ``DP=4`` is the control: data-parallel averaging of an identical batch
+    reproduces the serial gradient, so a failure there means the harness is
+    wrong rather than the reduction semantics.
+
+    Combinations that the current reduction is known to get wrong are marked
+    xfail with ``strict=True``, so fixing the reduction turns them into XPASS
+    and this test goes red -- that is the signal to delete
+    :func:`_is_known_defect` along with the marks.
+    """
+    if _is_known_defect(mesh_dims, spatial_hook, param):
+        request.node.add_marker(
+            pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "known gradient-reduction defect: DDP averages over SP and "
+                    "JSpatial, but the UP loss normalises each rank's "
+                    "contribution by the global ensemble count, so those "
+                    "partials must be summed."
+                ),
+            )
+        )
+
+    grads = _distributed_grads(device, mesh_dims, spatial_hook)
+    actual, expected = grads[param], serial_reference[param]
+    ratio = (actual.norm() / expected.norm()).item()
+
+    assert torch.allclose(actual, expected, atol=TOL, rtol=TOL), (
+        f"d/d{param} depends on mesh layout {mesh_dims} "
+        f"(spatial_hook={spatial_hook}): |g|/|ref| = {ratio:.6f}"
+    )
