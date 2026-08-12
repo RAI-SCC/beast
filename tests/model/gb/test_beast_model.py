@@ -63,7 +63,7 @@ class TestDistBeastlingModel:
         batch_size: int,
         device: torch.device,
     ) -> None:
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]
@@ -123,7 +123,7 @@ class TestDistBeastModel:
         batch_size: int,
         device: torch.device,
     ) -> None:
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         jchannel_pg = process_mesh_dict["JChannel"]
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]

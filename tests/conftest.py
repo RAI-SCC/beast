@@ -8,6 +8,8 @@ import mpi4py.MPI as MPI
 import pytest
 import torch
 import torch.distributed as dist
+
+from beast.comm import shutdown_comm
 from hypothesis import strategies as st
 
 comm = MPI.COMM_WORLD
@@ -54,6 +56,20 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
             pytest.skip(
                 f"Skipping distributed test, only {mpi_size} ranks available, but {ranks if ranks else '> 1'} required"
             )
+
+
+@pytest.fixture(autouse=True)
+def _reset_process_mesh() -> Generator[None, None, None]:
+    """Tear down any process mesh a test created.
+
+    ``beast.comm`` keeps the mesh in module-level state, so a test that builds
+    one leaks it into every test that follows. That made outcomes depend on
+    collection order -- ``test_save_checkpoint`` in particular assumes no mesh
+    exists and only passed while the other distributed tests were erroring out
+    before they could create one.
+    """
+    yield
+    shutdown_comm()
 
 
 @pytest.fixture(scope="session")

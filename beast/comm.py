@@ -26,14 +26,15 @@ def create_process_mesh_dict(
 ) -> dict[str, dist.ProcessGroup]:
     """Create a dictionary of process groups for a logical device mesh.
 
-    The function expects a 5-D process mesh corresponding to the logical
+    The function expects a 4-D process mesh corresponding to the logical
     dimensions (DP, SP, JSpatial, JChannel).
 
     Parameters
     ----------
     mesh_dims : Sequence[int]
-        Sizes for each mesh dimension (length 4 or 5). The product of
-        the sizes must equal the distributed world size.
+        Sizes for each mesh dimension, in the order (DP, SP, JSpatial,
+        JChannel). The product of the sizes must equal the distributed world
+        size.
     device_type : str, optional
         Device type string passed to the device mesh initializer
         (default ``"cuda"``).
@@ -54,10 +55,19 @@ def create_process_mesh_dict(
 
     world_size = dist.get_world_size()
 
+    mesh_dim_names = ["DP", "SP", "JSpatial", "JChannel"]
+
+    # Checked before the product so a stale 5-D layout (which used to carry a
+    # leading Expert dimension) reports the arity rather than failing later
+    # inside init_device_mesh with a mesh_shape/mesh_dim_names mismatch.
+    if len(mesh_dims) != len(mesh_dim_names):
+        raise ValueError(
+            f"mesh_dims must be of length {len(mesh_dim_names)} "
+            f"{tuple(mesh_dim_names)}, got {len(mesh_dims)}: {list(mesh_dims)}."
+        )
+
     if torch.prod(torch.tensor(mesh_dims)).item() != world_size:
         raise ValueError("Product of mesh dimensions must equal world size.")
-
-    mesh_dim_names = ["DP", "SP", "JSpatial", "JChannel"]
 
     global _mesh, _process_group_dict
     _mesh = dist.device_mesh.init_device_mesh(
@@ -158,8 +168,8 @@ def visualize_process_mesh() -> None:
     * ``host``      -- the hostname the rank runs on
     * ``gpu``       -- the local device (GPU) id of the rank
     * ``global``    -- the global rank in the default process group
-    * one column per group (``Expert``, ``DP``, ``SP``, ``JSpatial``,
-      ``JChannel``, ``DTP``, ``DDP``) showing the rank *within* that group.
+    * one column per group (``DP``, ``SP``, ``JSpatial``, ``JChannel``,
+      ``DTP``, ``DDP``) showing the rank *within* that group.
 
     Notes
     -----
@@ -223,10 +233,26 @@ def visualize_process_mesh() -> None:
 
 
 def shutdown_comm() -> None:
-    """Shutdown existing process groups and mesh."""
+    """Destroy the process groups created by :func:`create_process_mesh_dict`.
+
+    Two groups in the dictionary need care:
+
+    * A mesh dimension that spans the whole world (``DP`` at ``[4, 1, 1, 1]``,
+      say) can be backed by the *default* process group. Destroying that takes
+      down every later collective, including the ``all_gather_object`` in
+      :func:`visualize_process_mesh`, which shows up as an aborted NCCL
+      communicator or an outright hang.
+    * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
+      so the same object can appear more than once.
+    """
     global _mesh, _process_group_dict
-    for key, pg in _process_group_dict.items():
-        pg.shutdown()
+
+    destroyed: set[int] = set()
+    for pg in _process_group_dict.values():
+        if pg is dist.group.WORLD or id(pg) in destroyed:
+            continue
+        destroyed.add(id(pg))
+        dist.destroy_process_group(pg)
 
     _process_group_dict = {}
 

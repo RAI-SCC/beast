@@ -93,7 +93,7 @@ class TestNiceTransformer:
 class TestDistributedTransformer:
     @pytest.mark.dist(4)
     def test_distributed_transformer_init(self, device: torch.device) -> None:
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0
@@ -131,7 +131,7 @@ class TestDistributedTransformer:
 class TestDistributedNiceTransformer:
     @pytest.mark.dist(4)
     def test_distributed_nice_transformer_init(self, device: torch.device) -> None:
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0
@@ -158,7 +158,7 @@ class TestDistributedNiceTransformer:
 
     @pytest.mark.dist(4)
     def test_distributed_transformer_forward(self, device: torch.device) -> None:
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
         dropout = 0.0

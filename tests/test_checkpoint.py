@@ -49,7 +49,7 @@ class TestCheckpoint:
         device: torch.device,
     ) -> None:
         """Test to save and load a dummy model. DTP parallelism, should produce two checkpoint files."""
-        create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
@@ -71,7 +71,7 @@ class TestCheckpoint:
     @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("bayesian", [False, True])
-    @pytest.mark.parametrize("mesh_dims", [[1, 4, 1, 1, 1], [1, 1, 1, 2, 2]])
+    @pytest.mark.parametrize("mesh_dims", [[4, 1, 1, 1], [1, 1, 2, 2]])
     def test_save_beast_checkpoint(
         self,
         device: torch.device,

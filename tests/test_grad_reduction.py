@@ -151,13 +151,8 @@ def serial_reference(device: torch.device) -> dict[str, Tensor]:
 # parameter's check is trivial. Compute every gradient a layout needs in one
 # go and cache it, so 24 tests cost 4 mesh builds rather than 24.
 #
-# NOTE: shutdown_comm() is deliberately NOT called between layouts. It invokes
-# pg.shutdown() on every group in the mesh, and when a mesh dimension spans the
-# whole world (e.g. DP=4 at world size 4) that tears down a communicator the
-# default group still relies on. Every later collective -- including the
-# all_gather_object inside visualize_process_mesh() -- then dies with
-# "NCCL communicator was aborted". Teardown is left to the dist_env fixture in
-# conftest.py, which destroys the process group once at session end.
+# Teardown is handled by the autouse _reset_process_mesh fixture in
+# conftest.py, so nothing here shuts the mesh down explicitly.
 _GRAD_CACHE: dict[tuple[int, ...], dict[bool, dict[str, Tensor]]] = {}
 
 
