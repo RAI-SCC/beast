@@ -288,3 +288,101 @@ def test_backward(dummy_module: vi.VIModule, device: torch.device) -> None:
     assert torch.allclose(cast(Tensor, local_samples.grad), expected_grads_std), (
         f"Gradient mismatch for std: {local_samples.grad} vs {expected_grads_std}"
     )
+
+
+@pytest.mark.dist(2)
+@pytest.mark.parametrize("offset", [0.0, 1e2, 1e3])
+def test_aggregation_variance_is_cancellation_free(
+    dummy_module: vi.VIModule, device: torch.device, offset: float
+) -> None:
+    """The aggregated std must stay accurate when the mean dwarfs the spread.
+
+    Regression test for the two-pass variance. The previous one-pass form
+    computed ``E[x^2] - n * mean^2``, whose relative error grows like
+    ``(mean / std)^2`` -- at ``offset=1e3`` in float32 it was wrong by tens of
+    percent, which is indistinguishable from a real change in ensemble spread.
+    The two-pass form accumulates squared deviations about the global mean and
+    stays at the float32 floor for every offset here.
+    """
+    set_all_seeds(42)
+    up_group = dist.group.WORLD
+    world_size = up_group.size() if up_group is not None else 1
+    rank = up_group.rank() if up_group is not None else 0
+
+    # Unit spread on top of a large mean: offset / 1.0 is the cancellation ratio.
+    samples = torch.randn(8, 4, device=device) + offset
+    local_samples = samples[rank::world_size, ...]
+
+    parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)
+    parameter_log_std = cast(nn.Parameter, dummy_module._parameter_log_std)
+
+    _, std, _, _, _ = MeanStdPriorMatchingAggregation.apply(
+        local_samples,
+        up_group,
+        torch.zeros_like(parameter_mean),
+        torch.zeros_like(parameter_log_std),
+        parameter_mean,
+        parameter_log_std,
+        None,
+    )
+
+    # Reference in float64 from the same float32 values, so the only difference
+    # is the accumulation order, not the inputs.
+    expected = samples.double().std(dim=0)
+    relative_error = ((std.double() - expected).abs() / expected).max().item()
+
+    assert relative_error < 1e-4, (
+        f"std lost precision at mean/std = {offset:g}: relative error "
+        f"{relative_error:.3e}. This is the E[x^2] - n*mean^2 cancellation."
+    )
+
+
+@pytest.mark.dist(2)
+def test_backward_prior_matching(
+    dummy_module: vi.VIModule, device: torch.device
+) -> None:
+    """Gradients flowing to the variational parameters through prior matching.
+
+    ``test_backward`` covers the path into ``samples`` via mean and std; this
+    covers the other half, ``grad_var_means`` and ``grad_var_log_stds``. With a
+    unit prior (mean 0, log_std 0) the analytic KL derivatives reduce to
+    ``d/dmean = mean`` and ``d/dlog_std = exp(2 * log_std) - 1``.
+    """
+    up_group = dist.group.WORLD
+    world_size = up_group.size() if up_group is not None else 1
+    rank = up_group.rank() if up_group is not None else 0
+
+    samples = torch.tensor([[0.5], [1.5], [0.75], [1.25]], device=device)
+    local_samples = samples[rank::world_size, ...].requires_grad_(True)
+
+    parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)
+    parameter_log_std = cast(nn.Parameter, dummy_module._parameter_log_std)
+    parameter_mean.grad = None
+    parameter_log_std.grad = None
+
+    _, _, prior_matching, _, _ = MeanStdPriorMatchingAggregation.apply(
+        local_samples,
+        up_group,
+        torch.zeros_like(parameter_mean),
+        torch.zeros_like(parameter_log_std),
+        parameter_mean,
+        parameter_log_std,
+        None,
+    )
+    prior_matching.backward()
+
+    expected_grad_mean = parameter_mean.detach()
+    expected_grad_log_std = torch.expm1(2 * parameter_log_std.detach())
+
+    assert torch.allclose(
+        cast(Tensor, parameter_mean.grad), expected_grad_mean
+    ), (
+        f"Gradient mismatch for variational mean: "
+        f"{parameter_mean.grad} vs {expected_grad_mean}"
+    )
+    assert torch.allclose(
+        cast(Tensor, parameter_log_std.grad), expected_grad_log_std
+    ), (
+        f"Gradient mismatch for variational log_std: "
+        f"{parameter_log_std.grad} vs {expected_grad_log_std}"
+    )
