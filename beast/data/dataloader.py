@@ -128,6 +128,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
+            dsync_access=True,
         )
     else:
         if dist.get_rank(group=None) == 0:
