@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
 
-SUBSAMPLING_FACTOR = 12
+SUBSAMPLING_FACTOR = os.getenv("BEAST_DATASET_HOURLY_SUBSAMPLING", 1)
 
 
 class ERA5Distributed(Dataset):
