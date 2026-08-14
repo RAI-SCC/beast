@@ -20,6 +20,8 @@ from beast.data.era5 import (
 from beast.data.sampler import ResumableDistributedSampler
 from beast.utils import set_dtype
 
+DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
+
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
     """
@@ -129,7 +131,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
-            dsync_access=True,
+            dsync_access=DSYNC_INIT,
             **kwargs,
         )
     else:
