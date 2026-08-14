@@ -14,6 +14,8 @@ from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
 
+SUBSAMPLING_FACTOR = 12
+
 
 class ERA5Distributed(Dataset):
     """
@@ -170,7 +172,11 @@ class ERA5Distributed(Dataset):
                 )
 
             if self.years is not None:
-                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+                train_years = times[
+                    (times >= self.years[0])
+                    & (times < self.years[1])
+                    & (times.hour % SUBSAMPLING_FACTOR == 0)
+                ]
                 self.zarr_data = self.zarr_data.sel(time=train_years)
 
             try:
@@ -284,14 +290,16 @@ class ERA5Distributed(Dataset):
         """Return total number of samples."""
         return int(
             self.n_data_items
-            - (self.in_timesteps + self.out_timesteps - 1) * self.dt * self.rollout
+            - (self.in_timesteps + self.out_timesteps - 1)
+            * (self.dt // SUBSAMPLING_FACTOR)
+            * self.rollout
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
         sample_list = []
         for i in range(steps):
             sample = self.zarr_data.isel(
-                time=(idx + i * self.dt),
+                time=(idx + i * (self.dt // SUBSAMPLING_FACTOR)),
                 feature=range(self.in_var[0], self.in_var[1]),
                 latitude=range(0, self.xlat),
                 longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
@@ -342,7 +350,7 @@ class ERA5Distributed(Dataset):
         input = self._padsample(input, self.input_pad_oddrank)
 
         # Output data
-        target_idx = idx + self.in_timesteps * self.dt
+        target_idx = idx + self.in_timesteps * (self.dt // SUBSAMPLING_FACTOR)
 
         # TODO: THIS ONLY WORKS BECAUSE OF THE CHANNEL AND SPATIAL DIMS WE ARE USING. Needs to be generalized later.
         target_list = self._get_sample_list(
