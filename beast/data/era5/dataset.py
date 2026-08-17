@@ -727,7 +727,7 @@ class EWBEra5(ERA5Distributed):
         # List of timesteps moving forward in time, with length `self.in_timesteps`.
         # Last item is going to be `start_date - lead_time`
         first_date = start_date - timedelta(
-            hours=(lead_time - self.dt * (self.in_timesteps - 1))
+            hours=(lead_time + self.dt * (self.in_timesteps - 1))
         )
         samples = []
         for i in range(self.in_timesteps):
