@@ -717,23 +717,44 @@ class EWBEra5(ERA5Distributed):
         """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
+    def input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
+        """
+        Return the input timestamps of one forecast, oldest first.
+
+        The forecast is initialized at ``start_date - lead_time``: that is the
+        *last* input, preceded by ``in_timesteps - 1`` steps spaced ``dt`` hours
+        apart. Consumers advance their own clock from ``start_date - lead_time``
+        in ``dt`` steps, so the last entry has to land exactly there -- if it
+        does not, every forecast field is labelled with the wrong valid time.
+
+        Parameters
+        ----------
+        start_date: datetime
+            Start of the event being forecast.
+        lead_time: int
+            Lead time in hours. May be negative, which initializes the forecast
+            after the event has started.
+
+        Returns
+        -------
+        list[datetime]
+            The ``in_timesteps`` input timestamps, in ascending order.
+        """
+        first_date = start_date - timedelta(
+            hours=(lead_time + self.dt * (self.in_timesteps - 1))
+        )
+        return [
+            first_date + timedelta(hours=i * self.dt) for i in range(self.in_timesteps)
+        ]
+
     def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor]]:
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
-        start_date = event.start_date
-
-        # Get the first dates
-        # List of timesteps moving forward in time, with length `self.in_timesteps`.
-        # Last item is going to be `start_date - lead_time`
-        first_date = start_date - timedelta(
-            hours=(lead_time + self.dt * (self.in_timesteps - 1))
-        )
         samples = []
-        for i in range(self.in_timesteps):
-            dt = timedelta(hours=i * self.dt)
+        for date in self.input_dates(event.start_date, lead_time):
             sample = (
-                self.zarr_data.sel(time=(first_date + dt))
+                self.zarr_data.sel(time=date)
                 .isel(
                     feature=slice(self.in_var[0], self.in_var[1]),
                     latitude=slice(0, self.xlat),
