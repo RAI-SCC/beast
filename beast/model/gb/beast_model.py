@@ -4,7 +4,8 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import conv, conv_transpose, hooks, linear, roll  # type: ignore
+from jigsaw import hooks, linear, roll  # type: ignore
+from jigsaw.modules.convolution import DistributedConv2D, DistributedConv2DTranspose
 
 from beast.layers import transformer
 
@@ -224,7 +225,7 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding: torch.nn.Module = conv.DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = DistributedConv2D(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -236,12 +237,11 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            parallelism=self._parallelism,  # either 4 or 8 (# GPUs in node)
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
-        self.downsample: torch.nn.Module = conv.DistributedConv2D(
+        self.downsample: torch.nn.Module = DistributedConv2D(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -253,12 +253,11 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
-        self.upsample: torch.nn.Module = conv_transpose.DistributedConvTranspose2D(
+        self.upsample: torch.nn.Module = DistributedConv2DTranspose(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -270,7 +269,6 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            parallelism=self._parallelism,
             bayesian=self.bayesian,
             dtype=self.dtype,
         )
@@ -289,7 +287,7 @@ class Beast(torch.nn.Module):
         )
 
         self.patch_recovery: torch.nn.Module = (
-            conv_transpose.DistributedConvTranspose2D(
+            DistributedConv2DTranspose(
                 self.embed_dim * 2,
                 self.out_channels,  # global values
                 self.kernel_size,
@@ -301,7 +299,6 @@ class Beast(torch.nn.Module):
                 dilation=self.dilation,
                 groups=1,
                 bias=True,
-                parallelism=self._parallelism,
                 bayesian=self.bayesian,
                 dtype=self.dtype,
             )
