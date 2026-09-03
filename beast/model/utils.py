@@ -7,6 +7,7 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
+import transformer_engine.pytorch as te
 from jigsaw import normalization  # type: ignore[import-not-found]
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
@@ -52,6 +53,8 @@ def convert_jigsaw_vi(
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
+    vi.utils.convert.ban_convert(te.DotProductAttention)
+    vi.utils.convert.ban_convert(te.DotProductAttention, ban_mode="submodule")
 
     vi.convert_to_vimodule(
         module,

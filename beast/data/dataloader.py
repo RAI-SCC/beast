@@ -20,6 +20,8 @@ from beast.data.era5 import (
 from beast.data.sampler import ResumableDistributedSampler
 from beast.utils import set_dtype
 
+DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
+
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
     """
@@ -69,7 +71,7 @@ def get_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-    **kwargs: dict
+    **kwargs: dict,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.
@@ -130,7 +132,8 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
-            **kwargs
+            dsync_access=DSYNC_INIT,
+            **kwargs,
         )
     else:
         if dist.get_rank(group=None) == 0:
@@ -155,7 +158,7 @@ def get_dataloader(
             dtype=dtype,
             transform=transform,
             target_transform=target_transform,
-            **kwargs
+            **kwargs,
         )
 
     # if train_subset <=0, the entire dataset will be used for training
