@@ -217,17 +217,20 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
+  
+        # Pass 1: exact global mean. One field, blocking -- we need the result
+        # before we can form deviations.
+        s1 = samples.sum(dim=0) 
+        dist.all_reduce(s1, op=dist.ReduceOp.SUM, group=up_process_group)
+        mean = s1 / total_samples
 
-        local_sum_result = torch.stack(
-            [
-                (samples.sum(dim=0) / total_samples),
-                ((samples**2).sum(dim=0) / (total_samples - 1)),
-            ],
-            dim=0,
-        )
-
+        # Pass 2: sum of squared deviations about the shared mean. Because the
+        # deviations are centred, there is no cancellation between two large
+        # nearly-equal quantities the way there is in E[x^2] - E[x]^2.
+        dev = samples - mean
+        m2 = (dev * dev).sum(dim=0)
         handle = dist.all_reduce(
-            local_sum_result,
+            m2,
             op=dist.ReduceOp.SUM,
             group=up_process_group,
             async_op=True,
@@ -238,13 +241,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         )
 
         handle.wait()
-        mean = local_sum_result[0, ...]
-        var = local_sum_result[1, ...]
-
-        var = var - (mean**2) * (total_samples / (total_samples - 1))
-        var = torch.abs(var) + 1e-10
-
-        std = torch.sqrt(var)
+        var = m2 / (total_samples - 1)
+        std = torch.sqrt(var.clamp_min(1e-10))
 
         if feature_weights is not None:
             replace_val = feature_weights == 0.0

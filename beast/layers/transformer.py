@@ -1,12 +1,15 @@
 """Definition of Transformer layers."""
 
 import itertools
+import os
 
 import torch
 import torch.distributed as dist
 from jigsaw import attention, hooks  # type: ignore
 
 from beast.layers import mlp, nice_norm
+
+USE_TE_DPA = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
 
 
 class TransformerBlock(torch.nn.Module):
@@ -395,6 +398,7 @@ class DistributedNICETransformer(torch.nn.Module):
             channel_group,
             bayesian,
             qk_norm=qk_norm,
+            transformer_engine=USE_TE_DPA,
             dtype=dtype,
         ).to(device)
         self.layer_norm1 = nice_norm.DistributedNICENorm(

@@ -48,6 +48,16 @@ pip install -e .[dev]
 
 ## Usage
 
+### Configuration
+
+#### ENV VARIABLES
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| BEAST_DL_DSYNC_INIT | 0 | If set to 1, initializes the datasets using wave synchronization for safer data access at large scales. If set to 0, initializes the datasets normaly. |
+| BEAST_DS_HOURLY_SUBSAMPLING | 1 | The dataset will only consider entries that match `hour % subsampling_factor` for training/evaluating |
+| BEAST_USE_TE_DPA | 0 | If set to 1, uses the transformer engine `DotProductAttention` module for the attention layers. Otherwise it will use flash attention. |
+
 ## Acknowledgments
 
 ## Cite this
