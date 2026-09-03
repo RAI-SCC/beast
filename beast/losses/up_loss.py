@@ -103,14 +103,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
-        # flat_lp = log_prob.flatten()
-
-        # worst_idx = torch.topk(-flat_lp, 20).indices  # 20 worst (most negative) elements
-        # if dist.get_rank() == 0:
-        #     for idx in worst_idx:
-        #         print(f"idx={idx.item()}, log_prob={flat_lp[idx].item():.3e}, "
-        #             f"mean={mean.flatten()[idx].item():.3e}, std={std.flatten()[idx].item():.3e}, "
-        #             f"target={target.flatten()[idx].item():.3e}")
+        
         return cast(Tensor, data_fit)
 
     def split_forward(
