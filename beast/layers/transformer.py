@@ -398,7 +398,7 @@ class DistributedNICETransformer(torch.nn.Module):
             channel_group,
             bayesian,
             qk_norm=qk_norm,
-            transformer_engine=USE_TE_DPA,
+            attn_backend='te' if USE_TE_DPA else 'sdpa',
             dtype=dtype,
         ).to(device)
         self.layer_norm1 = nice_norm.DistributedNICENorm(
