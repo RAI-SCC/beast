@@ -109,6 +109,8 @@ def get_dataloader(
         years = config_dict["data"]["train_time_range"]
     elif mode == "validation":
         years = config_dict["data"]["valid_time_range"]
+    elif mode == "finetuning":
+        years = config_dict["data"]["finetune_time_range"]
     else:
         years = None
 
@@ -176,6 +178,7 @@ def get_dataloader(
     ):
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
+    # TODO: Add finetune option
 
     sampler = ResumableDistributedSampler(
         dataset,
