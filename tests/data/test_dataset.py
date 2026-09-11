@@ -1,4 +1,6 @@
 import os
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import List
 
 import numpy as np
@@ -9,7 +11,7 @@ import xarray as xr
 from pytest import TempPathFactory
 
 import beast.data.transforms as trf
-from beast.data.era5 import ERA5Distributed, ERA5Dummy
+from beast.data.era5 import ERA5Distributed, ERA5Dummy, EWBEra5
 
 
 def generate_mock_zarr_data(
@@ -587,3 +589,50 @@ class TestDataset:
 
         assert list(x_3.shape) == [n_vars // 2, 20, 20, 2]
         assert list(target_3.shape) == [n_features // 2, 20, 20]
+
+
+class TestEWBEra5:
+    """Tests for the ExtremeWeatherBench forecast dataset."""
+
+    @pytest.mark.parametrize("lead_time", [-24, 0, 6, 12, 24, 48])
+    @pytest.mark.parametrize("dt", [6, 12])
+    @pytest.mark.parametrize("in_timesteps", [1, 2, 3])
+    def test_ewb_input_dates(self, in_timesteps: int, dt: int, lead_time: int) -> None:
+        """The last input must land exactly on the initialization time.
+
+        Consumers start their rollout clock at ``start_date - lead_time`` and
+        step forward by ``dt``. If the last input does not sit on that time, the
+        whole forecast is shifted and every field is stored under the wrong
+        valid time, while still looking self-consistent.
+        """
+        dataset = SimpleNamespace(dt=dt, in_timesteps=in_timesteps)
+        start_date = datetime(2022, 1, 10, 0)
+
+        dates = EWBEra5.input_dates(dataset, start_date, lead_time)
+
+        assert len(dates) == in_timesteps
+        # The forecast is initialized at start_date - lead_time.
+        assert dates[-1] == start_date - timedelta(hours=lead_time)
+        # Inputs run forward in time, dt apart.
+        assert dates == sorted(dates)
+        assert all(
+            later - earlier == timedelta(hours=dt)
+            for earlier, later in zip(dates, dates[1:])
+        )
+
+    def test_ewb_input_dates_single_timestep(self) -> None:
+        """With one input there is no history, so it is the initialization time."""
+        dataset = SimpleNamespace(dt=12, in_timesteps=1)
+        start_date = datetime(2022, 1, 10, 0)
+
+        assert EWBEra5.input_dates(dataset, start_date, 48) == [datetime(2022, 1, 8, 0)]
+
+    def test_ewb_input_dates_spans_history(self) -> None:
+        """Multiple inputs reach back before the initialization time, never past it."""
+        dataset = SimpleNamespace(dt=12, in_timesteps=2)
+        start_date = datetime(2022, 1, 10, 0)
+
+        assert EWBEra5.input_dates(dataset, start_date, 48) == [
+            datetime(2022, 1, 7, 12),
+            datetime(2022, 1, 8, 0),
+        ]

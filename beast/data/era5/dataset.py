@@ -14,6 +14,8 @@ from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
 
+SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
+
 
 class ERA5Distributed(Dataset):
     """
@@ -122,6 +124,7 @@ class ERA5Distributed(Dataset):
         time_range: Tuple[str, str] | None = None,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
+        rollout: int = 1,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
@@ -134,6 +137,7 @@ class ERA5Distributed(Dataset):
         self.datapath = data_path
         self.years = time_range
         self.mask_path = constant_masks_path
+        self.rollout = rollout
         mask_list = constant_masks
 
         self.norm_values: dict[str, np.array] = {}
@@ -168,7 +172,11 @@ class ERA5Distributed(Dataset):
                 )
 
             if self.years is not None:
-                train_years = times[(times >= self.years[0]) & (times < self.years[1])]
+                train_years = times[
+                    (times >= self.years[0])
+                    & (times < self.years[1])
+                    & (times.hour % SUBSAMPLING_FACTOR == 0)
+                ]
                 self.zarr_data = self.zarr_data.sel(time=train_years)
 
             try:
@@ -281,14 +289,17 @@ class ERA5Distributed(Dataset):
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
-            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+            self.n_data_items
+            - (self.in_timesteps + self.out_timesteps - 1)
+            * (self.dt // SUBSAMPLING_FACTOR)
+            * self.rollout
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
         sample_list = []
         for i in range(steps):
             sample = self.zarr_data.isel(
-                time=(idx + i * self.dt),
+                time=(idx + i * (self.dt // SUBSAMPLING_FACTOR)),
                 feature=range(self.in_var[0], self.in_var[1]),
                 latitude=range(0, self.xlat),
                 longitude=range(self.in_out_xlon[0], self.in_out_xlon[1]),
@@ -339,8 +350,12 @@ class ERA5Distributed(Dataset):
         input = self._padsample(input, self.input_pad_oddrank)
 
         # Output data
-        target_idx = idx + self.in_timesteps * self.dt
-        target_list = self._get_sample_list(target_idx, steps=self.out_timesteps)
+        target_idx = idx + self.in_timesteps * (self.dt // SUBSAMPLING_FACTOR)
+
+        # TODO: THIS ONLY WORKS BECAUSE OF THE CHANNEL AND SPATIAL DIMS WE ARE USING. Needs to be generalized later.
+        target_list = self._get_sample_list(
+            target_idx, steps=self.out_timesteps * self.rollout
+        )
         target = torch.cat(target_list, dim=0)
         target = self._padsample(target, self.output_pad_oddrank)
 
@@ -428,6 +443,26 @@ class ERA5Distributed(Dataset):
 
         masks = np.stack(data, axis=0)
         return masks
+
+    def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
+        """
+        Format an input tensor out of a list of timesteps. Applies masks and padding. The last n timesteps in the list are used, based on the dataset argument `in_timesteps`.
+
+        Parameters
+        ----------
+        sample_list: list[torch.Tensor]
+            The list of timesteps
+
+        Returns
+        -------
+        input: torch.Tensor
+        """
+        input_samples = sample_list[-self.in_timesteps :]
+        batch_dim = input_samples[0].shape[0]
+        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        input_samples.append(cmasks.to(self.dtype))
+        input = torch.cat(input_samples, dim=-3)
+        return self._padsample(input, self.input_pad_oddrank)
 
 
 class ERA5Dummy(Dataset):
@@ -682,23 +717,44 @@ class EWBEra5(ERA5Distributed):
         """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
+    def input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
+        """
+        Return the input timestamps of one forecast, oldest first.
+
+        The forecast is initialized at ``start_date - lead_time``: that is the
+        *last* input, preceded by ``in_timesteps - 1`` steps spaced ``dt`` hours
+        apart. Consumers advance their own clock from ``start_date - lead_time``
+        in ``dt`` steps, so the last entry has to land exactly there -- if it
+        does not, every forecast field is labelled with the wrong valid time.
+
+        Parameters
+        ----------
+        start_date: datetime
+            Start of the event being forecast.
+        lead_time: int
+            Lead time in hours. May be negative, which initializes the forecast
+            after the event has started.
+
+        Returns
+        -------
+        list[datetime]
+            The ``in_timesteps`` input timestamps, in ascending order.
+        """
+        first_date = start_date - timedelta(
+            hours=(lead_time + self.dt * (self.in_timesteps - 1))
+        )
+        return [
+            first_date + timedelta(hours=i * self.dt) for i in range(self.in_timesteps)
+        ]
+
     def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor]]:
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
-        start_date = event.start_date
-
-        # Get the first dates
-        # List of timesteps moving forward in time, with length `self.in_timesteps`.
-        # Last item is going to be `start_date - lead_time`
-        first_date = start_date - timedelta(
-            hours=(lead_time - self.dt * (self.in_timesteps - 1))
-        )
         samples = []
-        for i in range(self.in_timesteps):
-            dt = timedelta(hours=i * self.dt)
+        for date in self.input_dates(event.start_date, lead_time):
             sample = (
-                self.zarr_data.sel(time=(first_date + dt))
+                self.zarr_data.sel(time=date)
                 .isel(
                     feature=slice(self.in_var[0], self.in_var[1]),
                     latitude=slice(0, self.xlat),
@@ -719,26 +775,6 @@ class EWBEra5(ERA5Distributed):
             samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
 
         return event, lead_time, samples
-
-    def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
-        """
-        Format an input tensor out of a list of timesteps. Applies masks and padding. The last n timesteps in the list are used, based on the dataset argument `in_timesteps`.
-
-        Parameters
-        ----------
-        sample_list: list[torch.Tensor]
-            The list of timesteps
-
-        Returns
-        -------
-        input: torch.Tensor
-        """
-        input_samples = sample_list[-self.in_timesteps :]
-        batch_dim = input_samples[0].shape[0]
-        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
-        input_samples.append(cmasks.to(self.dtype))
-        input = torch.cat(input_samples, dim=-3)
-        return self._padsample(input, self.input_pad_oddrank)
 
     def list_from_output(
         self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
