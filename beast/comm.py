@@ -14,6 +14,7 @@ from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
 _mesh: dist.device_mesh.DeviceMesh
@@ -228,3 +229,44 @@ def shutdown_comm() -> None:
         pg.shutdown()
 
     _process_group_dict = {}
+
+
+def wrap_ddp(
+    model: torch.nn.Module,
+    device_id: int | None,
+    ddp_group: dist.ProcessGroup,
+    reduction_size_mb: int = 100,
+) -> DistributedDataParallel:
+    """Wrap a model in DistributedDataParallel over the given process group.
+
+    Note that DDP *averages* gradients over ``ddp_group``. Whether that is the
+    correct reduction depends on which mesh axes the group spans, so this
+    belongs next to :func:`create_process_mesh_dict`, which decides that.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to wrap.
+    device_id : int | None
+        CUDA device index the model lives on, or None for CPU.
+    ddp_group : dist.ProcessGroup
+        Process group to synchronize gradients over.
+    reduction_size_mb : int, default: 100
+        Gradient bucket size in MiB, applied both to the first bucket and to
+        all subsequent ones.
+
+    Returns
+    -------
+    DistributedDataParallel
+        The wrapped model.
+    """
+    dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
+    return DistributedDataParallel(
+        model,
+        device_ids=[device_id] if device_id is not None else None,
+        output_device=device_id,
+        process_group=ddp_group,
+        gradient_as_bucket_view=True,
+        static_graph=True,
+        bucket_cap_mb=reduction_size_mb,
+    )
