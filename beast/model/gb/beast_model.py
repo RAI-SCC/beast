@@ -119,7 +119,7 @@ class Beast(torch.nn.Module):
         self.window_size_inner = window_size_inner
         self.n_full_blocks = n_full_blocks
         self.noise_dim = noise_dim
-        self.dropout = dropout
+        self.dropout = dropout if not bayesian else 0.0
         self.device = device
         self.channel_group = channel_group
         self.spatial_group = spatial_group
