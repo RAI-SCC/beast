@@ -76,7 +76,18 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         self.use_fmod = use_fmod
 
-    def data_fitting(self, mean: Tensor, std: Tensor, target: Tensor) -> Tensor:
+        # The base class allows dataset_size to be None and resolved per call;
+        # this subclass requires it up front, so re-bind it under a non-optional
+        # name that the data-fitting term can use without a None check.
+        self._dataset_size: int = dataset_size
+
+    def data_fitting(
+        self,
+        mean: Tensor,
+        std: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
+    ) -> Tensor:
         """
         Calculate the data fitting loss part.
 
@@ -91,12 +102,16 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             The standard deviation of the predictive distribution.
         target : Tensor
             The target values.
+        dataset_size : Optional[int], default: None
+            Overrides the dataset size given at construction, matching the
+            base class's per-call override. ``None`` uses the constructor value.
 
         Returns
         -------
         Tensor
             The calculated data fitting loss.
         """
+        n_data = self._dataset_size if dataset_size is None else dataset_size
         log_prob = self.predictive_distribution.log_prob_from_parameters(
             target, (mean, std)
         ).mean(dim=0)
@@ -104,12 +119,15 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         if self.use_fmod:
             log_prob = torch.fmod(log_prob, 1.0)
 
-        data_fit = -self.dataset_size * log_prob.sum()
+        data_fit = -n_data * log_prob.sum()
 
         return cast(Tensor, data_fit)
 
     def split_forward(
-        self, model_output: Tensor, target: Tensor
+        self,
+        model_output: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
     ) -> tuple[Tensor, Tensor]:
         """
         Calculate the data fitting and prior matching losses in a communication-overlapped fashion.
@@ -120,6 +138,9 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             The output from the Bayesian model.
         target : Tensor
             The ground truth targets.
+        dataset_size : Optional[int], default: None
+            Overrides the dataset size given at construction. ``None`` uses the
+            constructor value.
 
         Returns
         -------
@@ -143,15 +164,23 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             self.sync_group_size,
         )
 
-        data_fit = self.data_fitting(mean, std, expert_target)
+        data_fit = self.data_fitting(mean, std, expert_target, dataset_size)
 
         if self._track and self.log is not None:
-            self.log["data_fitting"].append(data_fit.item())
-            self.log["prior_matching"].append(prior_matching.item())
+            # torch_blue annotates self.log as Dict[str, List[Tensor]] but appends
+            # the result of .item() to it, i.e. a float. Mirroring the base class's
+            # behaviour means mirroring its annotation mismatch.
+            self.log["data_fitting"].append(data_fit.item())  # type: ignore[arg-type]
+            self.log["prior_matching"].append(prior_matching.item())  # type: ignore[arg-type]
 
         return data_fit, prior_matching
 
-    def forward(self, model_output: Tensor, target: Tensor) -> Tensor:
+    def forward(
+        self,
+        model_output: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
+    ) -> Tensor:
         """
         Compute the total loss.
 
@@ -161,13 +190,19 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             The output from the model.
         target : Tensor
             The ground truth targets.
+        dataset_size : Optional[int], default: None
+            Overrides the dataset size given at construction. Present to match
+            :meth:`AnalyticalKullbackLeiblerLoss.forward`; ``None`` uses the
+            constructor value.
 
         Returns
         -------
         Tensor
             The combined KL loss consisting of the data fitting and prior matching terms.
         """
-        data_fit, prior_matching = self.split_forward(model_output, target)
+        data_fit, prior_matching = self.split_forward(
+            model_output, target, dataset_size
+        )
 
         return data_fit + cast(float, self.heat) * prior_matching
 

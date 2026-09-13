@@ -8,6 +8,8 @@ misspelled key is silently ignored.
 This file is the only complete record of which keys the library reads. **If you add
 a `config_dict[...]` lookup, add it here in the same change.**
 
+The ways this bites in practice are collected in [pitfalls.md](pitfalls.md).
+
 ## Sections
 
 The supported code path reads two sections, `data` and `training`. A third section,
@@ -32,7 +34,7 @@ Read by `get_dataloader` in `beast/data/dataloader.py`.
 | `n_out_timesteps` | `int` | Number of target timesteps, concatenated along the channel dimension. |
 | `train_subset` | `int` | Cap the training set to this many samples. `<= 0` means use all. |
 | `valid_subset` | `int` | Cap the validation set to this many samples. `<= 0` means use all. |
-| `num_workers` | `int` | `DataLoader` worker processes. Note `persistent_workers=True` is hard-coded, so `0` is not a valid value. |
+| `num_workers` | `int` | `DataLoader` worker processes. Must be `> 0`: `persistent_workers=True` is hard-coded, and PyTorch rejects the combination with `ValueError: persistent_workers option needs num_workers > 0`. |
 | `prefetch_factor` | `int` | Batches prefetched per worker. |
 | `n_variables` | `int` | Channel count. **Only read on the dummy-dataset path**, to shape the random tensors. |
 | `xlat` | `int` | Latitude grid points. **Dummy path only.** |

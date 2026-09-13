@@ -227,26 +227,43 @@ The boolean ones are read as `os.getenv(...) in ["True", "1"]`, so `true`,
 
 ## Gotchas
 
-- **`get_model` mutates nothing but copies shallowly.** It `.copy()`s the config
-  dict from `CONFIGS` before applying kwargs; nested mutable values are shared.
-- **`Beast.__init__` is keyword-only.** All arguments after `*` — positional calls fail.
-- **Dropout applies to the deterministic path only,** not the Bayesian one. This was
-  a deliberate fix (commit `dfaaaea`); do not "restore" dropout in the Bayesian branch.
-- **`get_dataloader` silently falls back to a dummy dataset** of random numbers when
-  `data["data_path"]` does not exist. It warns on rank 0 only. If results look like
-  noise, check that warning first.
-- **`shutdown_comm()` deliberately skips `dist.group.WORLD`** and de-duplicates by
-  object identity, because a mesh dimension spanning the whole world may *be* the
-  default group and `DTP`/`DDP` are flattened views that can alias a dimension
-  group. Destroying the world group would take down every later collective. Read
-  its docstring before changing it.
-- Metrics in `beast/evaluation/` are latitude-weighted. Comparing them against an
-  unweighted reference implementation will show a systematic discrepancy that is
-  not a bug.
+**[docs/pitfalls.md](docs/pitfalls.md) is the complete list — read it before
+debugging anything surprising.** Because this code is distributed and
+probabilistic, most mistakes here produce plausible numbers or a hang rather than
+an exception, and a good share of "failures" are actually environment problems.
+
+The ones you are most likely to hit:
+
+- **`get_dataloader` silently falls back to random data** when
+  `data["data_path"]` does not exist, warning on rank 0 only. Training completes
+  having learned nothing. Check for `not found. Running dummy dataset` first.
+- **Hypothesis + collectives = a hang, not a failure.** Wrap the strategy in
+  `dist_st` so every rank draws the same value.
+- **`mpirun -n 4 pytest` needs `--device cpu`** unless the machine has ≥4 GPUs;
+  otherwise every test errors with a NCCL `DistBackendError`.
+- **`No space left on device` in a test report is disk exhaustion**, not a real
+  failure. Check `df -h /tmp`.
+- **Passing pre-commit does not mean passing CI.** The pre-commit mypy hook sets
+  `pass_filenames`, so it only checks files in your commit; CI checks the whole
+  package. Run bare `mypy` before pushing.
+- **`get_model` copies the config shallowly.** Nested mutables — the `heads` list —
+  are shared with the module-level registry. Pass replacements, never mutate.
+- **`Beast.__init__` is keyword-only** and `device` has no default.
+- **Dropout applies to the deterministic path only,** not the Bayesian one. A
+  deliberate fix (commit `dfaaaea`); do not "restore" it in the Bayesian branch.
+- **Swapping `dtp_rank` and `dp_rank`** in `get_dataloader` trains on the wrong
+  data at full speed without erroring.
+- **`shutdown_comm()` deliberately skips `dist.group.WORLD`**, because a mesh
+  dimension spanning the world may *be* the default group and `DTP`/`DDP` are
+  flattened views that can alias one. Read its docstring before changing it.
+- Metrics in `beast/evaluation/` are latitude-weighted; an unweighted reference
+  will disagree systematically, and that is correct.
 
 ## Pull requests
 
 - Branch off `main`. Never commit to `main` directly.
-- `pre-commit run --all-files` must pass before you open a PR.
+- `pre-commit run --all-files` must pass — and separately, bare `mypy`, which CI
+  runs over the whole package where the hook does not.
 - Public API changes should touch `docs/architecture.md` in the same PR.
 - New `config_dict` keys should touch `docs/configuration.md` in the same PR.
+- A new way to fail quietly belongs in `docs/pitfalls.md` in the same PR.

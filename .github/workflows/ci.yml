@@ -32,12 +32,9 @@ jobs:
   typecheck:
     name: Type check
     runs-on: ubuntu-latest
-    # Non-blocking for now: `mypy` over the whole package reports 22 pre-existing
-    # errors (14 of them in beast/data/era5/dataset.py). They have stayed invisible
-    # because the pre-commit hook passes filenames, so it only ever checks the
-    # files in a given commit. Fix them, then drop this line -- see
-    # docs/publishing-checklist.md.
-    continue-on-error: true
+    # Blocking. Note this checks the whole package, which the pre-commit hook does
+    # not -- it sets pass_filenames, so it only ever sees the files in a commit.
+    # A change can therefore pass pre-commit and fail here.
     steps:
       - uses: actions/checkout@v4
         with:

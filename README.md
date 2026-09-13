@@ -35,6 +35,7 @@ intended for development and testing.
 |----------|----------|
 | [docs/architecture.md](docs/architecture.md) | Module map, process mesh, how the pieces fit together |
 | [docs/configuration.md](docs/configuration.md) | Every configuration key and environment variable |
+| [docs/pitfalls.md](docs/pitfalls.md) | What fails quietly, and how to tell a real failure from an environment one |
 | [TESTING.md](TESTING.md) | Running the test suite, GPU and distributed markers |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup and pull-request expectations |
 | [AGENTS.md](AGENTS.md) | Orientation for AI coding agents |

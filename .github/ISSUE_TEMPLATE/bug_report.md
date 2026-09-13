@@ -41,8 +41,15 @@ usually the most useful thing you can attach.
 
 ## Checked already
 
+Please skim [docs/pitfalls.md](../../docs/pitfalls.md) first — it catalogues the
+ways BEAST fails quietly, and several common "bugs" turn out to be environment
+problems.
+
 - [ ] The rank-0 log does not contain `not found. Running dummy dataset`
       (BEAST silently trains on random data when `data_path` is missing).
-- [ ] `df -h` shows free space on `TMPDIR` — the test suite needs ~8 GB, and
-      exhausting it produces `OSError: [Errno 28] No space left on device`
-      failures that are not real bugs.
+- [ ] `df -h` shows free space on `TMPDIR` — exhausting it produces
+      `OSError: [Errno 28] No space left on device` failures that are not real bugs.
+- [ ] If this is a NCCL error under `mpirun`, the machine has at least as many
+      GPUs as ranks, or the run used `--device cpu`.
+- [ ] If the suite hangs rather than failing, no Hypothesis strategy feeding a
+      collective is missing its `dist_st` wrapper.

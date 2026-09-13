@@ -1,7 +1,6 @@
 """Beast (Bayesian Exascale Atmospheric Swim Transformer) model definition."""
 
-import warnings
-from typing import Sequence
+from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
@@ -102,7 +101,7 @@ class Beast(torch.nn.Module):
         spatial_group: dist.ProcessGroup | None = None,
         dtp_group: dist.ProcessGroup | None = None,
         up_group: dist.ProcessGroup | None = None,
-        **kwargs: dict,
+        **kwargs: Any,
     ) -> None:
         super().__init__()
 

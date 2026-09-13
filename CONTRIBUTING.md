@@ -59,6 +59,11 @@ pre-commit run --all-files
 The pre-commit configuration runs the **full pytest suite** as a local hook, so
 commits take a couple of minutes. That is deliberate — please do not disable it.
 
+**Run bare `mypy` before you push, separately from pre-commit.** The pre-commit
+mypy hook sets `pass_filenames: true`, so it only type-checks the files in your
+commit. CI runs `mypy` over the whole `beast` package. A change can therefore pass
+pre-commit and still fail CI.
+
 ## Conventions
 
 - **Type annotations are required** on functions in `beast/`
@@ -103,6 +108,25 @@ A single-rank pass proves very little about sharded behaviour.
    - new environment variables → both of the above and [AGENTS.md](AGENTS.md)
 5. Describe what you changed and how you verified it. If you could not run the
    distributed or GPU tests, say so explicitly.
+
+## Before you debug something surprising
+
+Read [docs/pitfalls.md](docs/pitfalls.md). BEAST is distributed and probabilistic,
+so a mistake usually produces plausible-looking numbers or a silent hang rather
+than an exception, and several common "failures" are environment problems rather
+than bugs. The list covers setup, testing, configuration, distributed execution
+and the model API.
+
+The three that catch people most often:
+
+- A missing `data_path` makes `get_dataloader` train on random noise, warning on
+  rank 0 only.
+- A Hypothesis strategy feeding a collective makes the suite *hang*, with no
+  traceback, unless it is wrapped in `dist_st`.
+- `mpirun -n 4 pytest` without `--device cpu` fails with NCCL errors on any
+  machine with fewer than four GPUs.
+
+If you find a new way to fail quietly, add it to that file in the same PR.
 
 ## Reporting bugs
 

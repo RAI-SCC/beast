@@ -17,6 +17,9 @@ Tracking what remains before making this repository public (target: November 202
 - [x] **Lint and format clean.** `ruff check .` and `ruff format --check .` both
       pass as of `5ccf6da`; the three errors and six unformatted files recorded
       here previously were fixed on `main`.
+- [x] **`mypy` clean.** All 22 pre-existing errors fixed; the CI `typecheck` job
+      is blocking. One documented `# type: ignore[override]` remains, on
+      `EWBEra5.__getitem__` — see the follow-up below.
 - [x] **Test-suite disk usage reduced to a CI-viable level.** 8.1 GB → 490 MB for
       a single-rank run (2.1 GB for 4 ranks), and 68 s → 25 s. Roughly 5x came
       from the smaller model fixtures on `main` (`tests/small_models.py`); the rest
@@ -53,23 +56,14 @@ Tracking what remains before making this repository public (target: November 202
 
 ## Technical, before release
 
-- [ ] **Fix the 22 pre-existing mypy errors.** `mypy` over the whole `beast`
-      package fails today. The CI `typecheck` job is marked
-      `continue-on-error: true` so it reports without blocking; remove that line
-      once these are fixed.
-
-      | File | Errors | Theme |
-      |------|--------|-------|
-      | `beast/data/era5/dataset.py` | 14 | `np.array` used as a type annotation (should be `np.ndarray`), `torch.cat` given a Tensor instead of a sequence, `EWBEra5.__getitem__` returning a different shape of tuple than `ERA5Distributed.__getitem__` |
-      | `beast/losses/up_loss.py` | 4 | `forward` signature incompatible with `AnalyticalKullbackLeiblerLoss`, list element types |
-      | `beast/evaluation/plot.py` | 2 | `ndarray` assigned to a `Tensor`-typed variable |
-      | `beast/data/dataloader.py` | 2 | `**kwargs` typed `dict[str, dict]` but forwarded to `int`/`float` parameters |
-
-      These have stayed invisible because the pre-commit hook sets
-      `pass_filenames: true`, so it only ever type-checks the files touched by a
-      given commit — never the package as a whole. Worth fixing before release:
-      the `__getitem__` override in particular is a genuine Liskov violation that
-      will bite anyone who writes code against the `ERA5Distributed` interface.
+- [ ] **Model `EWBEra5` with composition rather than inheritance.** It subclasses
+      `ERA5Distributed` to reuse the sharding and normalization setup, but its
+      `__getitem__` returns `(event, lead_time, inputs)` where the parent returns
+      an `(input, target)` training pair. The two are not interchangeable, so the
+      override carries a documented `# type: ignore[override]`. Extracting the
+      shared loading logic into a helper that both hold would remove the
+      suppression and the trap. Low urgency, but it is the one place where the
+      type checker is being told to look away.
 
 - [ ] **Validate the CI workflow on GitHub.** The commands it runs are all verified
       locally (lint, format, mypy, single-rank pytest, 4-rank pytest), but the

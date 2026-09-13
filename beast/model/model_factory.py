@@ -1,11 +1,13 @@
 """Factory for creating model instances based on configuration."""
 
+from typing import Any
+
 import torch
 
 from beast.model.model_configs import CONFIGS
 
 
-def get_model(model_id: str, **kwargs: dict) -> torch.nn.Module:
+def get_model(model_id: str, **kwargs: Any) -> torch.nn.Module:
     """
     Create a model based on a string id and a configuration dictionary. The string id can be used to specify a particular model architecture, while the configuration dictionary can contain hyperparameters and other settings for the model.
 

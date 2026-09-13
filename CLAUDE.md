@@ -13,6 +13,7 @@ A 30-second summary, so you know what you are looking at before you open it:
   across a 4-D process mesh** (`jigsaw`). Tensors inside modules are local shards.
 - `libs/jigsaw` is a git submodule and a hard import dependency. Run
   `git submodule update --init --recursive` before anything else.
-- `pytest` needs ~8 GB of scratch; run it as `TMPDIR=/var/tmp pytest` or you will
-  get spurious `No space left on device` failures.
+- `mpirun -n 4 pytest` needs `--device cpu` unless the machine has ≥4 GPUs.
 - `beast/model/test_models/` holds experimental architectures, not model tests.
+- Most mistakes here surface as plausible numbers or a hang, not an exception —
+  [docs/pitfalls.md](docs/pitfalls.md) is the catalogue.

@@ -3,7 +3,7 @@
 import dataclasses as dc
 import os
 from datetime import datetime, timedelta
-from typing import Callable, List, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -298,7 +298,7 @@ class ERA5Distributed(Dataset):
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
-        sample_list = []
+        sample_list: list[torch.Tensor] = []
         for i in range(steps):
             sample = self.zarr_data.isel(
                 time=(idx + i * (self.dt // SUBSAMPLING_FACTOR)),
@@ -423,7 +423,7 @@ class ERA5Distributed(Dataset):
 
     def _load_constant_mask_2d(
         self, folder_path: str, mask_list: List[str]
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Load the constant masks applied in the patch embedding layer.
 
@@ -676,8 +676,8 @@ class EWBEra5(ERA5Distributed):
 
     def __init__(
         self,
-        event_list: list[Event],
-        lead_times: list[int],
+        event_list: Sequence["Event"],
+        lead_times: Sequence[int],
         pg_rank: int,
         pg_size: int,
         data_path: str,
@@ -692,7 +692,7 @@ class EWBEra5(ERA5Distributed):
         time_range: Tuple[str, str] | None = None,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
-    ):
+    ) -> None:
         # Setup event list
         self.event_lead_list: list[tuple[Event, int]] = [
             (event, lead_time) for event in event_list for lead_time in lead_times
@@ -749,7 +749,9 @@ class EWBEra5(ERA5Distributed):
             first_date + timedelta(hours=i * self.dt) for i in range(self.in_timesteps)
         ]
 
-    def __getitem__(self, idx: int) -> tuple[Event, int, list[torch.Tensor]]:  # type:ignore[override]
+    def __getitem__(  # type: ignore[override]
+        self, idx: int
+    ) -> tuple[Event, int, list[torch.Tensor]]:
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
