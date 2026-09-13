@@ -178,3 +178,16 @@ uv.lock
 .vscode/
 __pycache__/
 .idea
+
+# AI coding agents
+# Claude Code stores worktrees and local settings here. AGENTS.md and CLAUDE.md
+# live at the repository root and are tracked; this directory is machine-local.
+# Use .claude/* rather than .claude/ so the negation below can take effect --
+# git does not descend into a directory ignored as a whole.
+.claude/*
+!.claude/settings.json
+
+# Other agent tooling
+.aider*
+.cursor/
+.windsurf/

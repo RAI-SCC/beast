@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(mypy:*)",
+      "Bash(pre-commit run:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git submodule status:*)",
+      "Bash(df:*)",
+      "Bash(du:*)"
+    ],
+    "deny": [
+      "Read(./.venv/**)"
+    ]
+  },
+  "env": {
+    "TMPDIR": "/var/tmp"
+  }
+}

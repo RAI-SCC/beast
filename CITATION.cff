@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+title: "BEAST: Bayesian Exascale Atmospheric Swin Transformer"
+message: "If you use this software, please cite it using these metadata."
+type: software
+license: MIT
+repository-code: "https://github.com/RAI-SCC/beast"
+abstract: >-
+  BEAST is a distributed, probabilistic weather-prediction model built on
+  PyTorch. It predicts future atmospheric states from ERA5 reanalysis data
+  using a Bayesian Swin-style transformer sharded across a four-dimensional
+  process mesh, enabling training at exascale.
+keywords:
+  - weather prediction
+  - machine learning
+  - Bayesian deep learning
+  - transformer
+  - distributed training
+  - exascale
+  - ERA5
+version: 0.0.1
+authors:
+  # Ordered by commit count at time of writing. Review and reorder to reflect
+  # intended authorship before the first public release.
+  - family-names: Heyen
+    given-names: Lars
+    affiliation: Karlsruhe Institute of Technology
+  - family-names: To
+    given-names: Deifilia
+  - family-names: "Gutiérrez Hermosillo Muriedas"
+    given-names: "Juan Pedro"
+    affiliation: Karlsruhe Institute of Technology
+  - family-names: Debus
+    given-names: Charlotte
+    affiliation: Karlsruhe Institute of Technology
+  - family-names: Phipps
+    given-names: Kaleb
+    affiliation: Karlsruhe Institute of Technology
+  - family-names: Weyrauch
+    given-names: Arvid
+    affiliation: Karlsruhe Institute of Technology
+  - family-names: Taubert
+    given-names: Oskar
+    affiliation: CSC – IT Center for Science
+  - family-names: Kurth
+    given-names: Thorsten
+    affiliation: NVIDIA
+  - family-names: Moisala
+    given-names: Anni
+    affiliation: CSC – IT Center for Science
+  - family-names: Götz
+    given-names: Markus
+    affiliation: Karlsruhe Institute of Technology
