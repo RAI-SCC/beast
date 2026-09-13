@@ -76,14 +76,11 @@ pre-commit install
 
 ## Commands
 
-> **Before your first `pytest`, read the disk-space warning below.** A single run
-> writes ~8 GB to `TMPDIR`, which fails outright on a tmpfs-backed `/tmp`.
-
 | Task | Command |
 |------|---------|
-| Run tests (single rank) | `TMPDIR=/var/tmp pytest` |
+| Run tests (single rank) | `pytest` |
 | Run tests on GPU | `pytest --device cuda` |
-| Run distributed tests | `mpirun -n 4 pytest` |
+| Run distributed tests | `mpirun -n 4 pytest --device cpu` |
 | Lint | `ruff check .` |
 | Format | `ruff format .` |
 | Type check | `mypy` |
@@ -110,29 +107,42 @@ a local hook, so commits are slow — this is intentional, do not disable it.
 
 ## Testing
 
-### The suite needs ~8 GB of scratch space
+### Scratch space
 
-`tests/data/test_dataset.py` and `tests/evaluation/` build real zarr stores as
-fixtures. One full run writes **about 8 GB** into `TMPDIR`, and pytest keeps the
-last three runs, so repeated runs accumulate to ~24 GB.
+`tests/data/test_dataset.py` builds real zarr stores as fixtures. A single-rank
+run writes **about 490 MB** into `TMPDIR`; a 4-rank `mpirun` writes about 2.1 GB,
+since each rank gets its own directory. Pytest keeps the last three runs.
 
-Many Linux distributions mount `/tmp` as a tmpfs sized at half of RAM. On such a
-machine a plain `pytest` fills `/tmp` partway through and produces around ten
-failures that all read `OSError: [Errno 28] No space left on device` — most of them
-in `tests/data/test_dataset.py`. **These are not real test failures.** Point
-`TMPDIR` at disk-backed storage and they disappear:
+That fits a tmpfs `/tmp` on most machines, but pytest retaining three runs plus a
+multi-rank run can still fill a small one. If a test report shows
+`OSError: [Errno 28] No space left on device`, that is disk exhaustion rather than
+a real failure — check `df -h /tmp`, clear stale fixtures with
+`rm -rf "${TMPDIR:-/tmp}"/pytest-of-*`, or point `TMPDIR` at disk-backed storage:
 
 ```console
 TMPDIR=/var/tmp pytest
 ```
 
-Verified on 2026-09-13: with a disk-backed `TMPDIR` the suite is **155 passed,
-73 skipped, 0 failed** in about 70 s on CPU. The 73 skips are the GPU and
-multi-rank tests, which need `--device cuda` and `mpirun` respectively.
+The zarr stores are cached across tests by the session-scoped `cached_mock_zarr`
+fixture, keyed on `(n_time, n_features, n_lat, n_lon)`. `generate_mock_zarr_data`
+reseeds numpy per timestep, so stores with equal parameters are byte-identical and
+sharing them is safe. **Use that fixture rather than calling
+`generate_mock_zarr_data` directly** — a direct call reintroduces a private copy.
 
-If you see `No space left on device` in a test report, check `df -h /tmp` before
-investigating anything else, and clear stale fixtures with
-`rm -rf "${TMPDIR:-/tmp}"/pytest-of-*`.
+### Verified numbers
+
+Measured on 2026-09-13 on CPU:
+
+| Invocation | Result | Time | Scratch |
+|------------|--------|------|---------|
+| `pytest` | 155 passed, 81 skipped | ~25 s | 490 MB |
+| `mpirun -n 4 pytest --device cpu` | 182 passed, 45 skipped, 9 xfailed | ~46 s | 2.1 GB |
+
+The skips in the single-rank run are the GPU and multi-rank tests.
+
+Note that `mpirun -n 4 pytest` without `--device cpu` fails with a NCCL error on a
+machine with fewer than 4 GPUs: `conftest.py` selects CUDA whenever it is
+available and assigns `rank % device_count`. Pass `--device cpu` to force gloo.
 
 ### The rest
 
@@ -151,12 +161,22 @@ Read `TESTING.md` for the full story. The essentials:
 - `dist_st` wraps a Hypothesis strategy so all ranks draw the *same* value. Any
   Hypothesis test whose data feeds a collective must use it, otherwise ranks
   disagree on shapes and the test hangs instead of failing.
-- Use the `BEASTLING` configuration for tests. The production configurations
-  (`BEAST-JUPITER-*`, `BEAST-LUMI-*`) will not fit on a single test device.
+- `_reset_process_mesh` is an autouse fixture that calls `shutdown_comm()` after
+  every test. `beast.comm` holds the mesh in module-level state, so without it a
+  test that builds a mesh leaks it into every test that follows and outcomes
+  depend on collection order. Do not build a mesh and leave it up.
+- Use `tests/small_models.py` for model tests: `small_beast_config(**overrides)`
+  returns the `BEASTLING` config shrunk to 378 K parameters (from 14 M) while
+  keeping the block structure, attention and patch embedding. Its module docstring
+  records the divisibility constraints the window sizes must satisfy — read it
+  before changing any of those numbers. Import it as `from small_models import ...`
+  (`tests/` is the pytest rootdir and already on `sys.path`).
+- Use `cached_mock_zarr` rather than calling `generate_mock_zarr_data` directly,
+  so stores are shared instead of duplicated per parametrisation.
 
 **When adding a test that touches distributed code, run it under MPI at least once**
-(`mpirun -n 4 pytest tests/path/test_x.py`). A test that passes on one rank proves
-very little about sharded code.
+(`mpirun -n 4 pytest --device cpu tests/path/test_x.py`). A test that passes on one
+rank proves very little about sharded code.
 
 ## Working with the process mesh
 
@@ -173,8 +193,13 @@ very little about sharded code.
 
 Two rules that are easy to get wrong:
 
-1. `create_process_mesh_dict` must be called before `get_process_group`, and the
-   product of the mesh dimensions must equal the world size.
+1. `create_process_mesh_dict` must be called before `get_process_group`. It takes
+   **exactly four** dimensions, in the order `(DP, SP, JSpatial, JChannel)`, and
+   their product must equal the world size. The mesh used to carry a leading
+   `Expert` dimension; that was removed, and the arity is now checked explicitly so
+   a stale 5-D layout reports the mismatch instead of failing deeper inside
+   `init_device_mesh`. Note `beast/layers/expert.py` is unaffected — the mixture-of-
+   experts *layers* still exist, it is only the mesh axis that is gone.
 2. **DDP averages gradients over its group.** Whether averaging is the correct
    reduction depends on which mesh axes the group spans. This is why `wrap_ddp`
    lives in `comm.py` next to the mesh definition rather than in a training script.
@@ -210,7 +235,11 @@ The boolean ones are read as `os.getenv(...) in ["True", "1"]`, so `true`,
 - **`get_dataloader` silently falls back to a dummy dataset** of random numbers when
   `data["data_path"]` does not exist. It warns on rank 0 only. If results look like
   noise, check that warning first.
-- `shutdown_comm()` clears the group dict but leaves the module-level `_mesh` bound.
+- **`shutdown_comm()` deliberately skips `dist.group.WORLD`** and de-duplicates by
+  object identity, because a mesh dimension spanning the whole world may *be* the
+  default group and `DTP`/`DDP` are flattened views that can alias a dimension
+  group. Destroying the world group would take down every later collective. Read
+  its docstring before changing it.
 - Metrics in `beast/evaluation/` are latitude-weighted. Comparing them against an
   unweighted reference implementation will show a systematic discrepancy that is
   not a bug.

@@ -29,24 +29,21 @@ Python 3.12 or newer is required.
 ## Running the tests
 
 ```console
-TMPDIR=/var/tmp pytest
+pytest                                # 155 passed, 81 skipped, ~25 s
+pytest --device cuda                  # include GPU tests
+mpirun -n 4 pytest --device cpu       # include 4-rank distributed tests
 ```
 
-**Set `TMPDIR` to disk-backed storage.** The suite writes roughly 8 GB of zarr
-fixtures per run, and pytest retains the last three runs. On a distribution that
-mounts `/tmp` as a tmpfs, a plain `pytest` exhausts it partway through and
-reports around ten failures that all read `OSError: [Errno 28] No space left on
-device`. Those are not real failures. See [TESTING.md](TESTING.md).
+The skips in a single-rank run are the GPU and multi-rank tests.
 
-Other useful invocations:
+Pass `--device cpu` to `mpirun` unless the machine has at least as many GPUs as
+ranks — otherwise every test errors with a NCCL `DistBackendError`.
 
-```console
-TMPDIR=/var/tmp pytest --device cuda        # include GPU tests
-TMPDIR=/var/tmp mpirun -n 4 pytest          # include 4-rank distributed tests
-```
-
-On CPU with a single rank, expect 155 passed and 73 skipped; the skips are the
-GPU and multi-rank tests.
+A run writes about 490 MB of zarr fixtures to `TMPDIR` (2.1 GB for 4 ranks), and
+pytest retains the last three runs. If you hit `OSError: [Errno 28] No space left
+on device`, that is disk exhaustion rather than a real failure; clear it with
+`rm -rf "${TMPDIR:-/tmp}"/pytest-of-*` or set `TMPDIR=/var/tmp`. See
+[TESTING.md](TESTING.md).
 
 ## Code quality
 
@@ -84,8 +81,13 @@ commits take a couple of minutes. That is deliberate — please do not disable i
 - Wrap Hypothesis strategies in `dist_st` when the drawn value feeds a collective,
   so all ranks draw the same value. Without it, ranks disagree on shapes and the
   test hangs rather than failing.
-- Use the `BEASTLING` configuration in tests. The production configurations will
-  not fit on a single test device.
+- Use `small_beast_config()` from `tests/small_models.py` for model tests; the
+  production configurations will not fit on a single test device.
+- Use the `cached_mock_zarr` fixture rather than calling `generate_mock_zarr_data`
+  directly, so zarr stores are shared between tests instead of duplicated.
+- An autouse `_reset_process_mesh` fixture tears down any mesh a test creates.
+  `beast.comm` keeps the mesh in module-level state, so leaving one up makes later
+  tests depend on collection order.
 
 **If your change touches distributed code, run the suite under MPI at least once.**
 A single-rank pass proves very little about sharded behaviour.

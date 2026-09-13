@@ -179,14 +179,13 @@ exact strings `True` and `1` enable them.
 ## Testing
 
 ```console
-TMPDIR=/var/tmp pytest
+pytest                             # 155 passed, 81 skipped, ~25 s
+pytest --device cuda               # include GPU tests
+mpirun -n 4 pytest --device cpu    # include 4-rank distributed tests
 ```
 
-Set `TMPDIR` to disk-backed storage: the suite writes about 8 GB of zarr fixtures
-per run. On a distribution that mounts `/tmp` as a tmpfs, a plain `pytest` fills it
-and reports spurious `No space left on device` failures.
-
-See [TESTING.md](TESTING.md) for GPU and distributed test markers.
+See [TESTING.md](TESTING.md) for the GPU and distributed test markers, the
+fixtures that keep ranks in agreement, and what a run costs in scratch space.
 
 ## Contributing
 

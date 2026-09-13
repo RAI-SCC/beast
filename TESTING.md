@@ -7,32 +7,51 @@
 - coverage
 - mpi4py
 
-## Disk space: set `TMPDIR` before you start
+## What a run costs
 
-`tests/data/test_dataset.py` and the evaluation tests build real zarr stores as
-fixtures. **One full run writes about 8 GB into `TMPDIR`**, and pytest keeps the
-last three runs, so repeated runs accumulate to roughly 24 GB.
+Measured on CPU, 2026-09-13:
 
-Many Linux distributions mount `/tmp` as a tmpfs sized at half of RAM. On such a
-machine a plain `pytest` fills `/tmp` partway through and reports around ten
-failures that all read `OSError: [Errno 28] No space left on device`, most of them
-in `tests/data/test_dataset.py`. **These are not real test failures.** Point
-`TMPDIR` at disk-backed storage:
+| Invocation | Result | Time | Scratch in `TMPDIR` |
+|------------|--------|------|---------------------|
+| `pytest` | 155 passed, 81 skipped | ~25 s | 490 MB |
+| `mpirun -n 4 pytest --device cpu` | 182 passed, 45 skipped, 9 xfailed | ~46 s | 2.1 GB |
+
+`tests/data/test_dataset.py` builds real zarr stores as fixtures, which is where
+the scratch space goes. The 4-rank figure is higher because each rank gets its own
+temporary directory.
+
+Pytest retains the last three runs, so scratch accumulates. If a report shows
+`OSError: [Errno 28] No space left on device`, that is disk exhaustion rather than
+a real failure. Check `df -h /tmp`, then either clear stale fixtures:
+
+```console
+λ rm -rf "${TMPDIR:-/tmp}"/pytest-of-*
+```
+
+or point `TMPDIR` at disk-backed storage, which is worth doing on any machine that
+mounts `/tmp` as a tmpfs:
 
 ```console
 λ TMPDIR=/var/tmp pytest
 ```
 
-With a disk-backed `TMPDIR`, a single-rank CPU run is **155 passed, 73 skipped**
-in about 70 seconds. The 73 skips are the GPU and multi-rank tests, which require
-`--device cuda` and `mpirun` respectively.
+### Reuse the zarr fixtures
 
-If a test report shows `No space left on device`, check `df -h /tmp` before
-investigating anything else, and clear stale fixtures with:
+`generate_mock_zarr_data` reseeds numpy per timestep, so a store is fully
+determined by `(n_time, n_features, n_lat, n_lon)`. The session-scoped
+`cached_mock_zarr` fixture exploits that: it builds each distinct shape once and
+hands the same path to every test that asks for it.
 
-```console
-λ rm -rf "${TMPDIR:-/tmp}"/pytest-of-*
+```python
+def test_something(self, cached_mock_zarr, tmp_path_factory):
+    zarr_path = cached_mock_zarr(48, 8, 120, 240)
 ```
+
+**Use the fixture rather than calling `generate_mock_zarr_data` directly.** A
+direct call writes a private copy; before the fixture existed, twenty-two
+byte-identical copies accounted for roughly a gigabyte per run. Masks and
+normalization files are tiny and still go to each test's own directory, so
+nothing shared is ever written to.
 
 ## Structure
 
@@ -85,8 +104,13 @@ def test_dist_marker_with_ranks(self) -> None:
 To parallelize the tests, start pytest with mpi.
 
 ```console
-mpirun -n 4 pytest
+λ mpirun -n 4 pytest --device cpu
 ```
+
+Pass `--device cpu` unless the machine has at least as many GPUs as ranks. The
+`device` fixture selects CUDA whenever it is available and assigns
+`rank % device_count`, so `mpirun -n 4` on a single-GPU machine puts four ranks on
+one device and every test errors out with a NCCL `DistBackendError`.
 
 ### Fixtures for distributed tests
 
@@ -118,15 +142,31 @@ Without it, ranks draw different values, disagree on tensor shapes, and the test
 
 ### Small models
 
-Use the `BEASTLING` configuration in tests:
+Use `tests/small_models.py` for model tests:
 
 ```python
-model = get_model("BEASTLING", device=device)
+from small_models import SMALL_BEAST_OVERRIDES, small_beast_config
+
+# Build the model directly from a full config dict...
+config = small_beast_config(bayesian=True)
+model = Beast(**config, device=device)
+
+# ...or splat the overrides into the factory.
+model = get_model("BEASTLING", **SMALL_BEAST_OVERRIDES, bayesian=True, device=device)
 ```
 
-It is small (14M parameters), deterministic, and runs on a 120×240 grid. The
-production configurations (`BEAST-JUPITER-*`, `BEAST-LUMI-*`) will not fit on a
-single test device.
+Note the import is `from small_models import ...`, not `from tests.small_models`:
+`tests/` is the pytest rootdir and is already on `sys.path`.
+
+`small_beast_config` shrinks `BEASTLING` from 14 M parameters to 378 K while
+keeping the block structure, attention and patch embedding intact — enough for the
+shape, checkpoint and parameter-sharing assertions the tests actually make.
+
+The window sizes are not arbitrary: `Beast._build_model` asserts divisibility
+relations between the grid, the spatial group size, the kernel size and both
+window extents. The module docstring spells them out. Read it before changing any
+of those numbers, or the model will fail to build on some mesh layouts and not
+others.
 
 ### Note on the session process group
 

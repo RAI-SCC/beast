@@ -14,6 +14,15 @@ Tracking what remains before making this repository public (target: November 202
 - [x] `TESTING.md` — expanded with disk requirements and distributed fixtures
 - [x] `.github/workflows/ci.yml` — lint, type check, tests, build
 - [x] Issue and pull-request templates
+- [x] **Lint and format clean.** `ruff check .` and `ruff format --check .` both
+      pass as of `5ccf6da`; the three errors and six unformatted files recorded
+      here previously were fixed on `main`.
+- [x] **Test-suite disk usage reduced to a CI-viable level.** 8.1 GB → 490 MB for
+      a single-rank run (2.1 GB for 4 ranks), and 68 s → 25 s. Roughly 5x came
+      from the smaller model fixtures on `main` (`tests/small_models.py`); the rest
+      from the session-scoped `cached_mock_zarr` fixture, which stopped twenty-two
+      byte-identical zarr stores being rebuilt per parametrisation, and from
+      dropping the feature count of the one full-resolution generator test.
 
 ## Needs a human decision
 
@@ -44,37 +53,28 @@ Tracking what remains before making this repository public (target: November 202
 
 ## Technical, before release
 
-- [ ] **Fix the pre-existing lint and format failures on `main`.** The new CI
-      workflow's `lint` job fails today, before any of the other jobs matter. As of
-      commit `da65c3a`, `ruff check .` reports three errors:
+- [ ] **Fix the 22 pre-existing mypy errors.** `mypy` over the whole `beast`
+      package fails today. The CI `typecheck` job is marked
+      `continue-on-error: true` so it reports without blocking; remove that line
+      once these are fixed.
 
-      | File | Rule | Issue |
-      |------|------|-------|
-      | `beast/model/utils.py:3` | `F401` | `ast.Mod` imported but unused |
-      | `beast/model/utils.py:3` | `I001` | Import block un-sorted |
-      | `beast/data/dataloader.py:65` | `D417` | `get_dataloader` docstring missing `**kwargs` |
+      | File | Errors | Theme |
+      |------|--------|-------|
+      | `beast/data/era5/dataset.py` | 14 | `np.array` used as a type annotation (should be `np.ndarray`), `torch.cat` given a Tensor instead of a sequence, `EWBEra5.__getitem__` returning a different shape of tuple than `ERA5Distributed.__getitem__` |
+      | `beast/losses/up_loss.py` | 4 | `forward` signature incompatible with `AnalyticalKullbackLeiblerLoss`, list element types |
+      | `beast/evaluation/plot.py` | 2 | `ndarray` assigned to a `Tensor`-typed variable |
+      | `beast/data/dataloader.py` | 2 | `**kwargs` typed `dict[str, dict]` but forwarded to `int`/`float` parameters |
 
-      and `ruff format --check .` wants to reformat six files:
-      `beast/data/dataloader.py`, `beast/data/era5/__init__.py`,
-      `beast/layers/transformer.py`, `beast/losses/up_loss.py`,
-      `beast/model/gb/beast_model.py`, `beast/model/utils.py`.
+      These have stayed invisible because the pre-commit hook sets
+      `pass_filenames: true`, so it only ever type-checks the files touched by a
+      given commit — never the package as a whole. Worth fixing before release:
+      the `__getitem__` override in particular is a genuine Liskov violation that
+      will bite anyone who writes code against the `ERA5Distributed` interface.
 
-      `ruff check --fix . && ruff format .` resolves everything except the `D417`,
-      which needs a `**kwargs` entry in the docstring. This was deliberately *not*
-      done as part of the documentation work, because reformatting six source files
-      would conflict with the branches currently in flight. Land it on `main` once
-      those have merged, ideally as a single formatting-only commit that can be
-      added to `.git-blame-ignore-revs`.
-
-- [ ] **Validate the CI workflow.** It has never run — it was written against the
-      repository's documented commands but not executed. The distributed job is
-      marked `continue-on-error: true` for that reason; remove that once it is
-      green. Expect disk space to be the first thing that breaks (see below).
-- [ ] **Reduce test-suite disk usage.** A single run writes ~8 GB of zarr fixtures
-      to `TMPDIR`, and pytest retains three runs. This is the single biggest
-      obstacle to CI on a standard GitHub-hosted runner (~14 GB free), and it makes
-      a first-time contributor's `pytest` fail confusingly on any machine with a
-      tmpfs `/tmp`. Smaller fixtures or session-scoped reuse would fix both.
+- [ ] **Validate the CI workflow on GitHub.** The commands it runs are all verified
+      locally (lint, format, mypy, single-rank pytest, 4-rank pytest), but the
+      workflow itself has never executed on a runner. Expect the usual first-run
+      friction: action versions, the OpenMPI install, and submodule checkout.
 - [ ] **Consider validating `config_dict`.** There is no schema and no validation;
       a typo in a key is silently ignored, and `set_dtype` silently falls back to
       float32 on an unrecognised string. A dataclass or TypedDict would turn a

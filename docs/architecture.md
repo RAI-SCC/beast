@@ -97,7 +97,11 @@ and silently substitutes `ERA5Dummy`. Training proceeds happily on random noise.
 
 Owns the distributed topology. `create_process_mesh_dict(mesh_dims)` builds a
 4-D `DeviceMesh` and caches the resulting process groups in a module-level dict,
-retrieved by name with `get_process_group`.
+retrieved by name with `get_process_group`. It validates the arity explicitly —
+the mesh used to carry a leading `Expert` dimension, and a stale 5-D layout now
+reports the mismatch rather than failing deeper inside `init_device_mesh`. The
+mixture-of-experts *layers* in `beast/layers/expert.py` are unaffected; only the
+mesh axis was removed.
 
 | Group | Axis | Meaning |
 |-------|------|---------|
@@ -124,7 +128,15 @@ used to avoid stampeding a shared filesystem at large scale — the same concern
 behind `BEAST_DL_DSYNC_INIT`.
 
 `visualize_process_mesh()` prints a rank-by-group table from rank 0. It is a
-collective call: every rank must reach it or the job deadlocks.
+collective call: every rank must reach it or the job deadlocks. Note
+`create_process_mesh_dict` calls it unconditionally, so building a mesh is itself
+a collective operation that prints.
+
+`shutdown_comm()` destroys the groups and drops the mesh. It skips
+`dist.group.WORLD` and de-duplicates by object identity, because a dimension
+spanning the whole world may *be* the default group, and `DTP`/`DDP` are flattened
+views that can alias a dimension group. Destroying the world group would break
+every later collective.
 
 ### `beast/checkpoint.py`
 
