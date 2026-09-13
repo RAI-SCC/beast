@@ -1,6 +1,9 @@
+from collections.abc import Iterator
+
 import pytest
 import torch
 import torch.distributed as dist
+from small_models import small_beast_config
 from torch_blue.vi import convert_to_vimodule
 
 from beast.comm import create_process_mesh_dict
@@ -19,8 +22,7 @@ class TestBeastlingModel:
     def test_beastling(
         self, n_timesteps: int, bayesian: bool, batch_size: int, device: torch.device
     ) -> None:
-        small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
-        small_config["bayesian"] = bayesian
+        small_config = small_beast_config(bayesian=bayesian)
         small_config["in_channels"] = small_config["in_channels"] * n_timesteps
         model = Beast(**small_config, dropout=0 if bayesian else 1e-1, device=device)
 
@@ -70,8 +72,7 @@ class TestDistBeastlingModel:
         jspatial_pg = process_mesh_dict["JSpatial"]
         dtp_pg = process_mesh_dict["DTP"]
 
-        small_config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
-        small_config["bayesian"] = bayesian
+        small_config = small_beast_config(bayesian=bayesian)
         small_config["in_channels"] = small_config["in_channels"] * n_timesteps
         model = Beast(
             **small_config,
@@ -173,15 +174,13 @@ class TestDistBeastModel:
 
 def _gather_across(
     model: torch.nn.Module, group: dist.ProcessGroup
-) -> dict[str, list[torch.Tensor]]:
-    """Gather every parameter of ``model`` across ``group``, keyed by name."""
-    gathered: dict[str, list[torch.Tensor]] = {}
+) -> Iterator[tuple[str, list[torch.Tensor]]]:
+    """Yield each parameter of ``model`` gathered across ``group``, with its name."""
     for name, parameter in model.named_parameters():
         local = parameter.detach().contiguous()
         buffers = [torch.empty_like(local) for _ in range(group.size())]
         dist.all_gather(buffers, local, group=group)
-        gathered[name] = buffers
-    return gathered
+        yield name, buffers
 
 
 @pytest.mark.gpu
@@ -220,9 +219,7 @@ class TestBeastlingInit:
         # the ranks happened to draw the same random numbers.
         set_all_seeds(1000 + dist.get_rank())
 
-        config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
-        config["qk_norm"] = qk_norm
-        config["bayesian"] = bayesian
+        config = small_beast_config(qk_norm=qk_norm, bayesian=bayesian)
         model = Beast(
             **config,
             dropout=0 if bayesian else 1e-1,
@@ -237,7 +234,7 @@ class TestBeastlingInit:
         # --- JSpatial: everything replicated -------------------------------
         not_replicated = [
             name
-            for name, shards in _gather_across(model, jspatial_pg).items()
+            for name, shards in _gather_across(model, jspatial_pg)
             if not all(torch.equal(shards[0], shard) for shard in shards[1:])
         ]
         assert not not_replicated, (
@@ -247,7 +244,7 @@ class TestBeastlingInit:
 
         # --- JChannel: randomly initialised parameters are sharded ----------
         not_sharded = []
-        for name, shards in _gather_across(model, jchannel_pg).items():
+        for name, shards in _gather_across(model, jchannel_pg):
             # A constant tensor is the same on every rank whether it is sharded
             # or not, so it cannot distinguish the two.
             if shards[0].numel() == 0 or shards[0].unique().numel() == 1:

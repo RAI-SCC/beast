@@ -3,6 +3,7 @@ import pathlib
 import pytest
 import torch
 import torch.distributed as dist
+from small_models import SMALL_BEAST_OVERRIDES, small_beast_config
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from beast.checkpoint import (
@@ -12,7 +13,6 @@ from beast.checkpoint import (
 )
 from beast.comm import create_process_mesh_dict, get_process_group
 from beast.model import convert_jigsaw_vi, get_model
-from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.utils import set_all_seeds
 
 
@@ -86,9 +86,10 @@ class TestCheckpoint:
         dtp_group = get_process_group("DTP")
         ddp_group = get_process_group("DDP")
 
-        config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
+        config = small_beast_config()
         model = get_model(
             "BEASTLING",
+            **SMALL_BEAST_OVERRIDES,
             dropout=0 if bayesian else 1e-1,
             bayesian=bayesian,
             device=device,

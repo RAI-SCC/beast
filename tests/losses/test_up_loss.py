@@ -374,9 +374,7 @@ def test_backward_prior_matching(
     expected_grad_mean = parameter_mean.detach()
     expected_grad_log_std = torch.expm1(2 * parameter_log_std.detach())
 
-    assert torch.allclose(
-        cast(Tensor, parameter_mean.grad), expected_grad_mean
-    ), (
+    assert torch.allclose(cast(Tensor, parameter_mean.grad), expected_grad_mean), (
         f"Gradient mismatch for variational mean: "
         f"{parameter_mean.grad} vs {expected_grad_mean}"
     )

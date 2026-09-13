@@ -17,7 +17,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
-_mesh: dist.device_mesh.DeviceMesh
+_mesh: dist.device_mesh.DeviceMesh | None = None
 
 
 def create_process_mesh_dict(
@@ -235,15 +235,19 @@ def visualize_process_mesh() -> None:
 def shutdown_comm() -> None:
     """Destroy the process groups created by :func:`create_process_mesh_dict`.
 
-    Two groups in the dictionary need care:
+    The default (``WORLD``) group is left intact, so the caller can keep using
+    plain collectives and build a fresh mesh afterwards.
 
-    * A mesh dimension that spans the whole world (``DP`` at ``[4, 1, 1, 1]``,
-      say) can be backed by the *default* process group. Destroying that takes
-      down every later collective, including the ``all_gather_object`` in
-      :func:`visualize_process_mesh`, which shows up as an aborted NCCL
-      communicator or an outright hang.
+    Two cases are guarded defensively, because whether they occur depends on the
+    torch version and the backend rather than on anything here:
+
+    * A mesh dimension may be *backed by* the default process group when it
+      spans the whole world. Destroying that would take down every later
+      collective, including the ``all_gather_object`` in
+      :func:`visualize_process_mesh`. On torch 2.14 ``init_device_mesh`` hands
+      out a distinct group per dimension, so the skip is a no-op there.
     * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
-      so the same object can appear more than once.
+      so the same object can appear under more than one key.
     """
     global _mesh, _process_group_dict
 
@@ -255,6 +259,9 @@ def shutdown_comm() -> None:
         dist.destroy_process_group(pg)
 
     _process_group_dict = {}
+    # The mesh references the groups just destroyed; dropping it stops a stale
+    # DeviceMesh from outliving them.
+    _mesh = None
 
 
 def wrap_ddp(
@@ -285,14 +292,32 @@ def wrap_ddp(
     -------
     DistributedDataParallel
         The wrapped model.
+
+    Notes
+    -----
+    The wrap is built with ``gradient_as_bucket_view=True`` and
+    ``static_graph=True``. The latter is a promise about the model: the autograd
+    graph must not change between iterations, and no parameter may be unused in
+    some steps but used in others. A model taking data-dependent branches will
+    mis-reduce under it.
+
+    ``bucket_cap_mb`` only sizes the buckets after the first. torch exposes no
+    public setter for the first one, so the private
+    ``dist._DEFAULT_FIRST_BUCKET_BYTES`` is patched for the duration of the
+    constructor and restored afterwards. Leaving it patched would resize the
+    first bucket of every other DDP instance built later in the same process.
     """
+    previous_first_bucket_bytes = dist._DEFAULT_FIRST_BUCKET_BYTES  # type: ignore[attr-defined]
     dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
-    return DistributedDataParallel(
-        model,
-        device_ids=[device_id] if device_id is not None else None,
-        output_device=device_id,
-        process_group=ddp_group,
-        gradient_as_bucket_view=True,
-        static_graph=True,
-        bucket_cap_mb=reduction_size_mb,
-    )
+    try:
+        return DistributedDataParallel(
+            model,
+            device_ids=[device_id] if device_id is not None else None,
+            output_device=device_id,
+            process_group=ddp_group,
+            gradient_as_bucket_view=True,
+            static_graph=True,
+            bucket_cap_mb=reduction_size_mb,
+        )
+    finally:
+        dist._DEFAULT_FIRST_BUCKET_BYTES = previous_first_bucket_bytes  # type: ignore[attr-defined]

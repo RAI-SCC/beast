@@ -1,20 +1,20 @@
 """Utility functions for beast models."""
 
-from ast import Mod
 import types
 
 import jigsaw.hooks as hooks  # type: ignore[import-not-found]
-from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
 import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
 from jigsaw import normalization  # type: ignore[import-not-found]
+from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 
 if JIGSAW_TE_AVAILABLE:
     import transformer_engine.pytorch as te
+
 
 @torch.no_grad()
 def convert_jigsaw_vi(

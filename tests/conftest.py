@@ -8,9 +8,9 @@ import mpi4py.MPI as MPI
 import pytest
 import torch
 import torch.distributed as dist
+from hypothesis import strategies as st
 
 from beast.comm import shutdown_comm
-from hypothesis import strategies as st
 
 comm = MPI.COMM_WORLD
 mpi_size = comm.Get_size()

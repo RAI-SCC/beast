@@ -32,11 +32,12 @@ from torch import Tensor
 from beast.comm import create_process_mesh_dict, get_process_group, wrap_ddp
 from beast.losses.up_loss import MeanStdPriorMatchingAggregation
 
-# Global problem size, held fixed across every mesh layout below.
 # beast.comm.create_process_mesh_dict builds a 4-D mesh named
-# (DP, SP, JSpatial, JChannel); these index into that layout.
-_DP, _SP, _JSPATIAL, _JCHANNEL = 0, 1, 2, 3
+# (DP, SP, JSpatial, JChannel); these index into that layout. Only the two axes
+# the reduction actually depends on are named.
+_SP, _JSPATIAL = 1, 2
 
+# Global problem size, held fixed across every mesh layout below.
 N_ENSEMBLE = 4
 N_FEATURES = 8
 DATASET_SIZE = 1000.0
@@ -45,8 +46,8 @@ TOL = 1e-10
 _KNOWN_DEFECT = (
     "known gradient-reduction defect: DDP averages over SP and JSpatial, but "
     "the UP loss normalises each rank's contribution by the *global* ensemble "
-    "count, so those partials must be summed. Remove this mark once the "
-    "reduction is fixed."
+    "count, so those partials must be summed. Remove _is_known_defect and the "
+    "marks it applies once the reduction is fixed."
 )
 
 
@@ -142,14 +143,12 @@ def serial_reference(device: torch.device) -> dict[str, Tensor]:
     return {name: p.grad.detach().clone() for name, p in model.named_parameters()}
 
 
-# The distributed forward/backward is collective and comparatively expensive,
-# while each parameter's check is trivial. Computing once per (layout, hook)
-# and caching lets every parameter be its own test without paying for a mesh
-# rebuild each time. Every rank walks the parametrisation in the same order, so
-# the cache is populated identically everywhere.
-# Building the mesh is collective and comparatively expensive, while each
-# parameter's check is trivial. Compute every gradient a layout needs in one
-# go and cache it, so 24 tests cost 4 mesh builds rather than 24.
+# Building the mesh and running the distributed backward is collective and
+# comparatively expensive, while each parameter's check is trivial. Computing
+# both hook settings for a layout in one go and caching them lets every
+# parameter be its own test while 24 tests cost 4 mesh builds rather than 24.
+# Every rank walks the parametrisation in the same order, so the cache is
+# populated identically everywhere.
 #
 # Teardown is handled by the autouse _reset_process_mesh fixture in
 # conftest.py, so nothing here shuts the mesh down explicitly.
@@ -251,17 +250,7 @@ def test_grad_invariant_to_mesh_layout(
     :func:`_is_known_defect` along with the marks.
     """
     if _is_known_defect(mesh_dims, spatial_hook, param):
-        request.node.add_marker(
-            pytest.mark.xfail(
-                strict=True,
-                reason=(
-                    "known gradient-reduction defect: DDP averages over SP and "
-                    "JSpatial, but the UP loss normalises each rank's "
-                    "contribution by the global ensemble count, so those "
-                    "partials must be summed."
-                ),
-            )
-        )
+        request.node.add_marker(pytest.mark.xfail(strict=True, reason=_KNOWN_DEFECT))
 
     grads = _distributed_grads(device, mesh_dims, spatial_hook)
     actual, expected = grads[param], serial_reference[param]

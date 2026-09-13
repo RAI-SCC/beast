@@ -50,6 +50,8 @@ class TestProcessorMesh:
                     1,
                 ]
             )  # Assuming world size is not 32
+        with pytest.raises(ValueError, match="mesh_dims must be of length 4"):
+            create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
         shutdown_comm()
 
