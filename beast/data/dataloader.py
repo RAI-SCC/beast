@@ -178,7 +178,13 @@ def get_dataloader(
     ):
         subset_indices = torch.arange(config_dict["data"]["valid_subset"])
         dataset = Subset(dataset, subset_indices.tolist())
-    # TODO: Add finetune option
+    elif (
+        mode == "finetuning"
+        and config_dict["data"]["fine_subset"] > 0
+        and (config_dict["data"]["fine_subset"] < len(dataset))
+    ):
+        subset_indices = torch.arange(config_dict["data"]["fine_subset"])
+        dataset = Subset(dataset, subset_indices.tolist())
 
     sampler = ResumableDistributedSampler(
         dataset,
