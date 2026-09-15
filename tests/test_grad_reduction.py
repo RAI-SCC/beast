@@ -23,6 +23,8 @@ a set of integer reduction factors, not floating point accuracy. A loose atol
 would let a factor of two hide behind "close enough" at small rank counts.
 """
 
+from typing import cast
+
 import pytest
 import torch
 import torch.distributed as dist
@@ -115,7 +117,7 @@ class ToyUPModel(torch.nn.Module):
             None,
         )
         log_prob = torch.distributions.Normal(mean, std).log_prob(target)
-        return -DATASET_SIZE * log_prob.sum() + prior_matching
+        return cast(Tensor, -DATASET_SIZE * log_prob.sum() + prior_matching)
 
 
 def _global_problem(device: torch.device) -> tuple[Tensor, Tensor]:
@@ -140,7 +142,10 @@ def serial_reference(device: torch.device) -> dict[str, Tensor]:
     noise, target = _global_problem(device)
     model = ToyUPModel(N_FEATURES, solo_groups[dist.get_rank()], device)
     model(noise, target, slice(None)).backward()
-    return {name: p.grad.detach().clone() for name, p in model.named_parameters()}
+    return {
+        name: cast(Tensor, p.grad).detach().clone()
+        for name, p in model.named_parameters()
+    }
 
 
 # Building the mesh and running the distributed backward is collective and
@@ -190,7 +195,8 @@ def _distributed_grads(
         )
         ddp_model(noise[members, features], target[features], features).backward()
         per_hook[hooked] = {
-            n: p.grad.detach().clone() for n, p in model.named_parameters()
+            n: cast(Tensor, p.grad).detach().clone()
+            for n, p in model.named_parameters()
         }
 
     _GRAD_CACHE[key] = per_hook
@@ -210,9 +216,9 @@ def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bo
     rank computes identically, so they need averaging -- which DDP already
     does. The spatial hook then over-counts them by a factor of JSpatial.
     """
-    n_sp, n_jspatial = mesh_dims[_SP], mesh_dims[_JSPATIAL]
+    n_jspatial = mesh_dims[_JSPATIAL]
     if param == "theta":
-        return not (n_sp == 1 and (spatial_hook or n_jspatial == 1))
+        return not (spatial_hook or n_jspatial == 1)
     return spatial_hook and n_jspatial > 1
 
 

@@ -356,7 +356,15 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_var_means = grad_pm * mse_part_half
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
-        return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
+        return (
+            (grad_samples * up_process_group.size()),
+            None,
+            None,
+            None,
+            grad_var_means,
+            grad_var_log_stds,
+            None,
+        )
 
 
 @torch.compile
