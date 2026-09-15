@@ -103,7 +103,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
-        
+
         return cast(Tensor, data_fit)
 
     def split_forward(
@@ -217,10 +217,10 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
-  
+
         # Pass 1: exact global mean. One field, blocking -- we need the result
         # before we can form deviations.
-        s1 = samples.sum(dim=0) 
+        s1 = samples.sum(dim=0)
         dist.all_reduce(s1, op=dist.ReduceOp.SUM, group=up_process_group)
         mean = s1 / total_samples
 
@@ -359,7 +359,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         return grad_samples, None, None, None, grad_var_means, grad_var_log_stds, None
 
 
-@torch.compile 
+@torch.compile
 def gaussian_prior_matching(
     prior_means: Tensor,
     prior_log_stds: Tensor,
@@ -395,7 +395,7 @@ def gaussian_prior_matching(
     )
     variance_ratio = variational_variance / prior_variance
     variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
-        
+
     mse_part_half = (variational_means - prior_means) / prior_variance
     mse_part = (variational_means - prior_means) * mse_part_half
 

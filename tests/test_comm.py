@@ -13,7 +13,7 @@ class TestProcessorMesh:
     @pytest.mark.dist()
     @given(
         dist_st(
-            st.lists(st.integers(min_value=1, max_value=4), min_size=5, max_size=5)
+            st.lists(st.integers(min_value=1, max_value=4), min_size=4, max_size=4)
         ),
     )
     def test_process_group_unmatched_mesh_dims(self, mesh_dims: list[int]) -> None:
@@ -31,13 +31,13 @@ class TestProcessorMesh:
     def test_create_process_mesh_incorrect_lenght(self) -> None:
         """Test that creating a process mesh with incorrect dimensions raises an error."""
 
-        with pytest.raises(ValueError, match="mesh_dims must be of length 4 or 5."):
+        with pytest.raises(ValueError, match="mesh_dims must be of length 4"):
             create_process_mesh_dict(mesh_dims=[4])  # Assuming world size is not 32
-        with pytest.raises(ValueError, match="mesh_dims must be of length 4 or 5."):
+        with pytest.raises(ValueError, match="mesh_dims must be of length 4"):
             create_process_mesh_dict(
                 mesh_dims=[2, 2, 1]
             )  # Assuming world size is not 32
-        with pytest.raises(ValueError, match="mesh_dims must be of length 4 or 5."):
+        with pytest.raises(ValueError, match="mesh_dims must be of length 4"):
             create_process_mesh_dict(
                 mesh_dims=[
                     1,
@@ -50,6 +50,8 @@ class TestProcessorMesh:
                     1,
                 ]
             )  # Assuming world size is not 32
+        with pytest.raises(ValueError, match="mesh_dims must be of length 4"):
+            create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
 
         shutdown_comm()
 
@@ -57,9 +59,9 @@ class TestProcessorMesh:
     @pytest.mark.parametrize(
         "mesh_dims",
         [
-            [1, 1, 1, 2, 2],
-            [1, 2, 2, 1, 1],
-            [2, 1, 2, 1, 1],
+            [1, 1, 2, 2],
+            [2, 2, 1, 1],
+            [2, 1, 2, 1],
         ],
     )
     def test_create_process_mesh_dict(self, mesh_dims: list[int]) -> None:
@@ -67,7 +69,7 @@ class TestProcessorMesh:
 
         process_mesh_dict = create_process_mesh_dict(mesh_dims=mesh_dims)
         assert isinstance(process_mesh_dict, dict)
-        expected_keys = {"Expert", "DP", "SP", "JSpatial", "JChannel", "DTP", "DDP"}
+        expected_keys = {"DP", "SP", "JSpatial", "JChannel", "DTP", "DDP"}
         assert set(process_mesh_dict.keys()) == expected_keys
 
         get_process_group("DP")

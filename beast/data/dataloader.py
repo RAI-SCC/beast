@@ -97,6 +97,8 @@ def get_dataloader(
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    **kwargs:
+        Additional options that can be forwarded to the Dataset object.
 
     Returns
     -------
@@ -196,7 +198,7 @@ def get_dataloader(
         pin_memory=torch.cuda.is_available(),
         prefetch_factor=config_dict["data"]["prefetch_factor"],
         num_workers=config_dict["data"]["num_workers"],
-        persistent_workers=True
+        persistent_workers=True,
     )
 
     return dataloader

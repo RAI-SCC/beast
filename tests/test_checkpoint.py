@@ -3,6 +3,7 @@ import pathlib
 import pytest
 import torch
 import torch.distributed as dist
+from small_models import SMALL_BEAST_OVERRIDES, small_beast_config
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from beast.checkpoint import (
@@ -12,7 +13,6 @@ from beast.checkpoint import (
 )
 from beast.comm import create_process_mesh_dict, get_process_group
 from beast.model import convert_jigsaw_vi, get_model
-from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
 from beast.utils import set_all_seeds
 
 
@@ -49,7 +49,7 @@ class TestCheckpoint:
         device: torch.device,
     ) -> None:
         """Test to save and load a dummy model. DTP parallelism, should produce two checkpoint files."""
-        create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
         loss_value = torch.tensor([1.2], device=device)
@@ -71,7 +71,7 @@ class TestCheckpoint:
     @pytest.mark.gpu
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("bayesian", [False, True])
-    @pytest.mark.parametrize("mesh_dims", [[1, 4, 1, 1, 1], [1, 1, 1, 2, 2]])
+    @pytest.mark.parametrize("mesh_dims", [[4, 1, 1, 1], [1, 1, 2, 2]])
     def test_save_beast_checkpoint(
         self,
         device: torch.device,
@@ -86,9 +86,10 @@ class TestCheckpoint:
         dtp_group = get_process_group("DTP")
         ddp_group = get_process_group("DDP")
 
-        config = BEAST_CONFIGURATIONS["BEASTLING"]["config"].copy()
+        config = small_beast_config()
         model = get_model(
             "BEASTLING",
+            **SMALL_BEAST_OVERRIDES,
             dropout=0 if bayesian else 1e-1,
             bayesian=bayesian,
             device=device,

@@ -286,22 +286,20 @@ class Beast(torch.nn.Module):
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = (
-            DistributedConv2DTranspose(
-                self.embed_dim * 2,
-                self.out_channels,  # global values
-                self.kernel_size,
-                self.device,
-                self.spatial_group,
-                self.channel_group,
-                stride=self.stride,
-                padding=self.padding,
-                dilation=self.dilation,
-                groups=1,
-                bias=True,
-                bayesian=self.bayesian,
-                dtype=self.dtype,
-            )
+        self.patch_recovery: torch.nn.Module = DistributedConv2DTranspose(
+            self.embed_dim * 2,
+            self.out_channels,  # global values
+            self.kernel_size,
+            self.device,
+            self.spatial_group,
+            self.channel_group,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=1,
+            bias=True,
+            bayesian=self.bayesian,
+            dtype=self.dtype,
         )
 
         # Transformer blocks
