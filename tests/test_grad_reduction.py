@@ -88,7 +88,13 @@ class ToyUPModel(torch.nn.Module):
         self.vmean = parameter(0.1)
         self.vlogs = parameter(0.1)
 
-    def forward(self, noise: Tensor, target: Tensor, features: slice) -> Tensor:
+    def forward(
+        self,
+        noise: Tensor,
+        target: Tensor,
+        features: slice,
+        weight_synchronization_factor: int = 1,
+    ) -> Tensor:
         """Return the total loss for this rank's ensemble members and domain shard.
 
         Parameters
@@ -100,6 +106,8 @@ class ToyUPModel(torch.nn.Module):
             Shape ``(n_local_features,)``. Identical across the ensemble axis.
         features : slice
             This rank's shard of the global feature dimension.
+        weight_synchronization_factor: int, default: 1
+            The size of the JSpatial group if the corresponding gradient hooks are enabled, one otherwise
 
         Returns
         -------
@@ -115,6 +123,7 @@ class ToyUPModel(torch.nn.Module):
             self.vmean,
             self.vlogs,
             None,
+            weight_synchronization_factor,
         )
         log_prob = torch.distributions.Normal(mean, std).log_prob(target)
         return cast(Tensor, -DATASET_SIZE * log_prob.sum() + prior_matching)
@@ -193,7 +202,12 @@ def _distributed_grads(
             device_id=device.index if device.type == "cuda" else None,
             ddp_group=ddp_group,
         )
-        ddp_model(noise[members, features], target[features], features).backward()
+        ddp_model(
+            noise[members, features],
+            target[features],
+            features,
+            weight_synchronization_factor=(spatial_group.size() if hooked else 1),
+        ).backward()
         per_hook[hooked] = {
             n: cast(Tensor, p.grad).detach().clone()
             for n, p in model.named_parameters()
@@ -219,7 +233,7 @@ def _is_known_defect(mesh_dims: list[int], spatial_hook: bool, param: str) -> bo
     n_jspatial = mesh_dims[_JSPATIAL]
     if param == "theta":
         return not (spatial_hook or n_jspatial == 1)
-    return spatial_hook and n_jspatial > 1
+    return False
 
 
 @pytest.mark.dist(4)
