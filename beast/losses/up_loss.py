@@ -22,7 +22,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     up_group : dist.ProcessGroup, default: None
         Process group for Uncertainty Parallelism aggregation. If None, defaults to dist.group.WORLD.
     feature_weights : Tensor, default: None
-        Weights for the loss calculation if there are multiple experts.
+        Weights for the loss calculation.
     heat : float, default: 1.0
         Heat / cold posterior parameter for the KL loss.
     track : bool, default: False
