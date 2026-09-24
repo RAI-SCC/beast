@@ -271,6 +271,8 @@ class ERA5Distributed(Dataset):
             self.in_var = (0, self.n_variables)
             self.in_masks = (0, self.n_masks)
             self.in_out_xlon = (0, self.xlon)
+            self.input_pad_oddrank = 0
+            self.output_pad_oddrank = 0
 
         self.transform = transform
         if target_transform is None:
@@ -295,7 +297,7 @@ class ERA5Distributed(Dataset):
             * self.rollout
         )
 
-    def _get_sample_list(self, idx: int, steps: int) -> torch.Tensor:
+    def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
         sample_list = []
         for i in range(steps):
             sample = self.zarr_data.isel(
@@ -674,22 +676,22 @@ class EWBEra5(ERA5Distributed):
 
     def __init__(
         self,
-        event_list,
-        lead_times,
-        pg_rank,
-        pg_size,
-        data_path,
-        constant_masks_path,
-        constant_masks,
-        normalization_dir,
-        dt=6,
-        n_in_timesteps=1,
-        n_out_timesteps=1,
-        dtype=torch.float32,
-        dsync_access=False,
-        time_range=None,
-        transform=None,
-        target_transform=None,
+        event_list: list[Event],
+        lead_times: list[int],
+        pg_rank: int,
+        pg_size: int,
+        data_path: str,
+        constant_masks_path: str,
+        constant_masks: List[str],
+        normalization_dir: str,
+        dt: int = 6,
+        n_in_timesteps: int = 1,
+        n_out_timesteps: int = 1,
+        dtype: torch.dtype = torch.float32,
+        dsync_access: bool = False,
+        time_range: Tuple[str, str] | None = None,
+        transform: Callable | None = None,
+        target_transform: Callable | None = None,
     ):
         # Setup event list
         self.event_lead_list: list[tuple[Event, int]] = [
@@ -747,7 +749,7 @@ class EWBEra5(ERA5Distributed):
             first_date + timedelta(hours=i * self.dt) for i in range(self.in_timesteps)
         ]
 
-    def __getitem__(self, idx) -> tuple[Event, int, list[torch.Tensor]]:
+    def __getitem__(self, idx: int) -> tuple[Event, int, list[torch.Tensor]]:  # type:ignore[override]
         """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
         event, lead_time = self.event_lead_list[idx]
 
