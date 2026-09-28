@@ -97,6 +97,8 @@ def get_dataloader(
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    **kwargs:
+        Additional options that can be forwarded to the Dataset object.
 
     Returns
     -------
@@ -119,6 +121,7 @@ def get_dataloader(
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
+        # print(f'kwargs {kwargs}')
         dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,

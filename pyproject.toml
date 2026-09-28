@@ -20,7 +20,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     "h5py>=3.16.0",
-    "torch-blue @ git+https://github.com/RAI-SCC/torch_blue@stable-beast",
+    "torch-blue @ git+https://github.com/RAI-SCC/torch_blue",
     "torch",
     "torchvision",
     "xarray>=2026.4.0",

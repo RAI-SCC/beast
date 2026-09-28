@@ -116,7 +116,7 @@ test_array = [
 
 class TestDataset:
     @pytest.mark.parametrize(
-        "n_time, n_features, n_lat, n_lon", [(24, 84, 721, 1440), (24, 84, 120, 240)]
+        "n_time, n_features, n_lat, n_lon", [(2, 84, 721, 1440), (2, 84, 120, 240)]
     )
     def test_mock_dataset(
         self,
@@ -130,7 +130,7 @@ class TestDataset:
         zarr_path = tmp_path_factory.mktemp("data") / "test_data.zarr"
         generate_mock_zarr_data(zarr_path, n_time, n_features, n_lat, n_lon)
         zarr_data = xr.open_dataset(zarr_path, engine="zarr")
-        assert zarr_data.dims["latitude"] == n_lat
+        assert zarr_data.sizes["latitude"] == n_lat
 
     @pytest.mark.parametrize("n_masks, n_lat, n_lon", [(3, 721, 1440), (3, 120, 240)])
     def test_generate_masks(

@@ -103,14 +103,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             log_prob = torch.fmod(log_prob, 1.0)
 
         data_fit = -self.dataset_size * log_prob.sum()
-        # flat_lp = log_prob.flatten()
 
-        # worst_idx = torch.topk(-flat_lp, 20).indices  # 20 worst (most negative) elements
-        # if dist.get_rank() == 0:
-        #     for idx in worst_idx:
-        #         print(f"idx={idx.item()}, log_prob={flat_lp[idx].item():.3e}, "
-        #             f"mean={mean.flatten()[idx].item():.3e}, std={std.flatten()[idx].item():.3e}, "
-        #             f"target={target.flatten()[idx].item():.3e}")
         return cast(Tensor, data_fit)
 
     def split_forward(
@@ -224,10 +217,10 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
-  
+
         # Pass 1: exact global mean. One field, blocking -- we need the result
         # before we can form deviations.
-        s1 = samples.sum(dim=0) 
+        s1 = samples.sum(dim=0)
         dist.all_reduce(s1, op=dist.ReduceOp.SUM, group=up_process_group)
         mean = s1 / total_samples
 
@@ -401,11 +394,7 @@ def gaussian_prior_matching(
         torch.tensor(2, device=variational_means.device) * prior_log_stds
     )
     variance_ratio = variational_variance / prior_variance
-    # vr_min, vr_max = variance_ratio.argmin().item(), variance_ratio.argmax().item()
-    # if vr_min < 1e-6 or vr_max > 1e6:
-    #     print(f'R[{dist.get_rank()}] Min variance ratio: {vr_min} Max variance ratio: {vr_max}')
-    # variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
-    # variance_ratio = variance_ratio / 100000000000000
+    variance_ratio = torch.clamp(variance_ratio, min=1e-6, max=1e6)
 
     mse_part_half = (variational_means - prior_means) / prior_variance
     mse_part = (variational_means - prior_means) * mse_part_half

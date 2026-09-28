@@ -13,7 +13,7 @@ class TestDistributedMLPNice:
     @pytest.mark.dist(4)
     def test_distributed_mlp_nice_init(self, device: torch.device) -> None:
         local_rank = dist.get_rank()
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
@@ -63,7 +63,7 @@ class TestDistributedMLPNice:
     @pytest.mark.dist(4)
     def test_distributed_mlp_nice_sync(self, device: torch.device) -> None:
         local_rank = dist.get_rank()
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
@@ -130,7 +130,7 @@ class TestDistributedMLPSync:
     @pytest.mark.dist(4)
     def test_distributed_mlp_sync_init(self, device: torch.device) -> None:
         local_rank = dist.get_rank()
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
@@ -181,7 +181,7 @@ class TestDistributedMLPSync:
     @pytest.mark.dist(4)
     def test_distributed_mlp_sync(self, device: torch.device) -> None:
         local_rank = dist.get_rank()
-        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 1, 2, 2])
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         spatial_group, channel_group, model_group = (
             process_mesh_dict["JSpatial"],
             process_mesh_dict["JChannel"],
