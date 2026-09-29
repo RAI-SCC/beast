@@ -1,4 +1,4 @@
-"""Official BEAST configurations for the get_model factory function."""
+"""Named BEAST configurations for :func:`~beast.model.get_model`."""
 
 from typing import Any
 

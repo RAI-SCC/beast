@@ -1,4 +1,4 @@
-"""Contains metrics that are evaluated inside the validation loop, but require special handling, such as in-loop communication."""
+"""Metrics evaluated in the validation loop that need special handling, such as communication."""
 
 from typing import Optional
 
@@ -15,26 +15,30 @@ def crps(
     sample_dim: int = 0,
     batch_dim: int = 1,
 ) -> Tensor:
-    """
-    Calculate the Continuous Ranked Probability Score (CRPS) for the given predictions and targets.
+    """Compute the continuous ranked probability score (CRPS) of an ensemble.
+
+    With an uncertainty-parallel group, the ensemble is spread over its ranks and
+    the pairwise sample differences are computed by passing the samples around
+    the ranks in a ring.
 
     Parameters
     ----------
     prediction : Tensor
-        The predicted ensemble on the local device.
+        Local part of the predicted ensemble.
     target : Tensor
-        The true values.
-    up_group : Optional[ProcessGroup], default=None
-        The process group for uncertainty parallelization. If None, the calculation is done locally without.
-    sample_dim : int, default=0
-        The dimension along which the ensemble samples are located.
-    batch_dim : int, default=1
-        The dimension along which the batch is located.
+        True values, without a sample dimension.
+    up_group : ProcessGroup, optional
+        Uncertainty-parallel process group. If None or of size 1, only the local
+        ensemble is used.
+    sample_dim : int, default: 0
+        Dimension of ``prediction`` holding the ensemble samples.
+    batch_dim : int, default: 1
+        Dimension of ``prediction`` holding the batch, averaged over.
 
     Returns
     -------
     Tensor
-        The calculated CRPS synchronized across UP processes.
+        The CRPS, averaged over the batch and identical on all UP ranks.
     """
     if up_group is None or up_group.size() == 1:
         return _calculate_crps_locally(prediction, target, sample_dim, batch_dim)
@@ -109,24 +113,23 @@ def crps(
 def _calculate_crps_locally(
     prediction: Tensor, target: Tensor, sample_dim: int = 0, batch_dim: int = 1
 ) -> Tensor:
-    """
-    Calculate the CRPS without parallelization of the samples.
+    """Compute the CRPS of an ensemble held entirely on this rank.
 
     Parameters
     ----------
     prediction : Tensor
         The predicted ensemble.
     target : Tensor
-        The true values.
-    sample_dim : int, default=0
-        The dimension along which the ensemble samples are located.
-    batch_dim : int, default=1
-        The dimension along which the batch is located.
+        True values, without a sample dimension.
+    sample_dim : int, default: 0
+        Dimension of ``prediction`` holding the ensemble samples.
+    batch_dim : int, default: 1
+        Dimension of ``prediction`` holding the batch, averaged over.
 
     Returns
     -------
     Tensor
-        The calculated CRPS.
+        The CRPS, averaged over the batch.
     """
     crps = torch.mean(
         torch.abs(prediction - target.unsqueeze(dim=sample_dim)), dim=sample_dim

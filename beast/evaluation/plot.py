@@ -1,4 +1,4 @@
-"""Plotting functionality."""
+"""Plots for evaluating predictions."""
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -11,24 +11,23 @@ def pred_target_bias_plot(
     target: Tensor,
     label: str,
 ) -> Figure:
-    """
-    Core plotting function.
+    """Plot a prediction, its target and the bias ``target - prediction``.
 
-    Plot prediction, target, and bias.
+    Prediction and target share a color scale; the bias uses a symmetric one.
 
     Parameters
     ----------
-    prediction: Tensor
-        Prediction to plot.
-    target: Tensor
-        Target to plot.
-    label: str
-        Plot label.
+    prediction : Tensor
+        2-D prediction to plot.
+    target : Tensor
+        2-D target, of the shape of ``prediction``.
+    label : str
+        Appended to the title of each panel.
 
     Returns
     -------
     Figure
-        A plot as Figure object.
+        Figure with the three panels side by side.
     """
     # Bind to new names rather than rebinding the Tensor parameters: matplotlib
     # needs arrays, but the signature promises Tensors.

@@ -1,4 +1,4 @@
-"""Util functions for the evaluation."""
+"""Variable selection, naming and latitude weighting for the evaluation."""
 
 from typing import Any, Sequence
 
@@ -25,45 +25,39 @@ def _resolve_variables(
     eval_pressure_variables: list[str] | None,
     eval_pressure_levels: list | None,
 ) -> tuple[list[str], list[str], list, list[str], list[str], list]:
-    """
-    Resolve variable and level lists from explicit arguments or a config dict.
+    """Resolve the variable and level lists from arguments or the configuration.
+
+    Explicit arguments take precedence. Missing ``all_*`` lists are read from the
+    ``data`` section of ``config`` and missing ``eval_*`` lists from its
+    ``evaluation`` section, defaulting to the corresponding ``all_*`` list.
 
     Parameters
     ----------
-    config: dict[str, Any] | None
-        The configuration dictionary used as a fallback when explicit arguments are not provided.
-    all_surface_variables: list[str] | None
-        All surface variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_variables: list[str] | None
-        All pressure variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_levels: list | None
-        All pressure levels present in the data. Falls back to ``config`` if ``None``.
-    eval_surface_variables: list[str] | None
-        Surface variables to use for evaluation. Defaults to all surface variables if ``None``.
-    eval_pressure_variables: list[str] | None
-        Pressure variables to use for evaluation. Defaults to all pressure variables if ``None``.
-    eval_pressure_levels: list | None
-        Pressure levels to use for evaluation. Defaults to all pressure levels if ``None``.
+    config : dict[str, Any] or None
+        Configuration used as a fallback.
+    all_surface_variables : list[str] or None
+        All surface variables in the data.
+    all_pressure_variables : list[str] or None
+        All pressure-level variables in the data.
+    all_pressure_levels : list or None
+        All pressure levels in the data.
+    eval_surface_variables : list[str] or None
+        Surface variables to evaluate.
+    eval_pressure_variables : list[str] or None
+        Pressure-level variables to evaluate.
+    eval_pressure_levels : list or None
+        Pressure levels to evaluate.
 
     Returns
     -------
-    list[str]
-        All surface variables available.
-    list[str]
-        All pressure variables available.
-    list[str]
-        All pressure levels available.
-    list[str]
-        Evaluation surface variables to be considered.
-    list[str]
-        Evaluation pressure variables to be considered.
-    list[str]
-        Evaluation pressure levels to be considered.
+    tuple
+        The three ``all_*`` lists followed by the three ``eval_*`` lists, in
+        the order of the arguments.
 
     Raises
     ------
     KeyError
-        If a required list is not provided directly and cannot be found in the configuration.
+        If an ``all_*`` list is neither given nor found in ``config``.
     """
     data_config: dict | None = config.get(DATA_KEY) if config is not None else None
     eval_config: dict | None = (
@@ -141,50 +135,48 @@ def select_variables(
     eval_pressure_levels: list | None = None,
     dim: int = -3,
 ) -> torch.Tensor | Sequence[torch.Tensor]:
-    """
-    Select variables required for the evaluation.
+    """Select the evaluation variables from the channels of ``t``.
 
-    This function slices either a single tensor or a sequence of tensors to only return a subset of variables required
-    for the evaluation.
+    Channels are ordered surface variables first, then pressure-level variables
+    by level. With a sharded channel dimension, only the variables held by
+    ``channel_rank`` are selected.
 
     Parameters
     ----------
-    t: torch.Tensor | Sequence[torch.Tensor]
-        A single tensor or sequence of tensors from which certain variables should be selected.
-    config: dict[str, Any] | None, optional
-        The configuration dictionary used as a fallback when explicit variable/level arguments are not provided.
-    channel_rank: int
-        The rank of the channel group.
-    channel_group_size: int
-        The size of the channel group.
-    all_surface_variables: list[str] | None, optional
-        All surface variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_variables: list[str] | None, optional
-        All pressure variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_levels: list | None, optional
-        All pressure levels present in the data. Falls back to ``config`` if ``None``.
-    eval_surface_variables: list[str] | None, optional
-        Surface variables to select for evaluation. Defaults to all surface variables if ``None``.
-    eval_pressure_variables: list[str] | None, optional
-        Pressure variables to select for evaluation. Defaults to all pressure variables if ``None``.
-    eval_pressure_levels: list | None, optional
-        Pressure levels to select for evaluation. Defaults to all pressure levels if ``None``.
-    dim: int, optional
-        The dimension along which to index into the tensor(s). Defaults to ``-3``, which corresponds to the channel
-        dimension for both non-Bayesian tensors of shape ``(batch, channels, ...)`` and Bayesian tensors of shape
-        ``(batch, samples, channels, ...)``.
+    t : torch.Tensor or Sequence[torch.Tensor]
+        Tensor, or sequence of tensors, to select from.
+    config : dict[str, Any], optional
+        Configuration used as a fallback, see :func:`_resolve_variables`.
+    channel_rank : int
+        Rank in the channel group.
+    channel_group_size : int
+        Size of the channel group.
+    all_surface_variables : list[str], optional
+        All surface variables in the data.
+    all_pressure_variables : list[str], optional
+        All pressure-level variables in the data.
+    all_pressure_levels : list, optional
+        All pressure levels in the data.
+    eval_surface_variables : list[str], optional
+        Surface variables to select.
+    eval_pressure_variables : list[str], optional
+        Pressure-level variables to select.
+    eval_pressure_levels : list, optional
+        Pressure levels to select.
+    dim : int, default: -3
+        Channel dimension. The default fits both ``(batch, channels, ...)`` and
+        Bayesian ``(batch, samples, channels, ...)`` tensors.
 
     Returns
     -------
-    torch.Tensor | Sequence[torch.Tensor]
-        A single tensor or a sequence of tensors which only contain the selected variables.
+    torch.Tensor or Sequence[torch.Tensor]
+        The selected channels, as a tensor for a tensor input and as a list
+        otherwise.
 
     Raises
     ------
     KeyError
-        If a required variable/level list is not provided directly and cannot be found in ``config``.
-    AssertionError
-        If ``t`` is not a ``torch.Tensor`` or ``Sequence``.
+        If an ``all_*`` list is neither given nor found in ``config``.
     """
     (
         all_surface_variables,
@@ -261,35 +253,37 @@ def make_variable_names(
     eval_pressure_variables: list[str] | None = None,
     eval_pressure_levels: list | None = None,
 ) -> list[str]:
-    """
-    Build a list of human-readable variable name strings for the evaluation variables. Used for plotting.
+    """Build the names of the evaluation variables, for plotting.
+
+    Surface variables keep their name and pressure-level variables are named
+    ``{variable}_{level}``, in the channel order of :func:`select_variables`.
 
     Parameters
     ----------
-    config: dict[str, Any] | None, optional
-        The configuration dictionary used as a fallback when explicit variable/level arguments are not provided.
-    all_surface_variables: list[str] | None, optional
-        All surface variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_variables: list[str] | None, optional
-        All pressure variables present in the data. Falls back to ``config`` if ``None``.
-    all_pressure_levels: list | None, optional
-        All pressure levels present in the data. Falls back to ``config`` if ``None``.
-    eval_surface_variables: list[str] | None, optional
-        Surface variables to include. Defaults to all surface variables if ``None``.
-    eval_pressure_variables: list[str] | None, optional
-        Pressure variables to include. Defaults to all pressure variables if ``None``.
-    eval_pressure_levels: list | None, optional
-        Pressure levels to include. Defaults to all pressure levels if ``None``.
+    config : dict[str, Any], optional
+        Configuration used as a fallback, see :func:`_resolve_variables`.
+    all_surface_variables : list[str], optional
+        All surface variables in the data.
+    all_pressure_variables : list[str], optional
+        All pressure-level variables in the data.
+    all_pressure_levels : list, optional
+        All pressure levels in the data.
+    eval_surface_variables : list[str], optional
+        Surface variables to include.
+    eval_pressure_variables : list[str], optional
+        Pressure-level variables to include.
+    eval_pressure_levels : list, optional
+        Pressure levels to include.
 
     Returns
     -------
     list[str]
-        Ordered list of variable name strings corresponding to the selected evaluation variables.
+        The variable names.
 
     Raises
     ------
     KeyError
-        If a required variable/level list is not provided directly and cannot be found in ``config``.
+        If an ``all_*`` list is neither given nor found in ``config``.
     """
     (
         all_surface_variables,
@@ -328,22 +322,21 @@ def make_variable_names(
 def latitude_weighted_average(
     data: torch.Tensor, lat_dim: int = -2, lon_dim: int = -1
 ) -> torch.Tensor:
-    """
-    Compute the latitude-weighted average of the input data.
+    """Average over latitude and longitude with cosine-latitude weights.
 
     Parameters
     ----------
-    data: torch.Tensor
-        The input data tensor with a latitude dimension.
-    lat_dim: int, optional
-        The dimension corresponding to latitude. Defaults to -2.
-    lon_dim: int, optional
-        The dimension corresponding to longitude. Defaults to -1.
+    data : torch.Tensor
+        Data with latitude and longitude dimensions.
+    lat_dim : int, default: -2
+        Latitude dimension.
+    lon_dim : int, default: -1
+        Longitude dimension.
 
     Returns
     -------
     torch.Tensor
-        The latitude-weighted average of the input data.
+        The weighted average, without the latitude and longitude dimensions.
     """
     # Compute latitude weights based on the cosine of the latitude values.
     latitudes = torch.linspace(

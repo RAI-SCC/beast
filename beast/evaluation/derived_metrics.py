@@ -1,4 +1,4 @@
-"""Contains the calculation of metrics that are not calculated within the validation loop, but instead derived from other metrics."""
+"""Metrics derived from other metrics, rather than computed in the validation loop."""
 
 from typing import Dict
 
@@ -7,23 +7,22 @@ from torch import Tensor
 
 
 def rmse(metric_dict: Dict[str, Tensor]) -> Tensor:
-    """
-    Calculate the Root Mean Squared Error (RMSE) from the Mean Squared Error (MSE) provided in the metric_dict.
+    """Compute the root mean squared error from the mean squared error.
 
     Parameters
     ----------
     metric_dict : Dict[str, Tensor]
-        A dictionary containing the MSE value under the key 'mse'.
+        Metrics, containing ``"mse"``.
 
     Returns
     -------
     Tensor
-        The calculated RMSE.
+        The RMSE.
 
     Raises
     ------
     KeyError
-        If the required metric 'mse' for 'rmse' calculation is not found in metric_dict.
+        If ``"mse"`` is missing from ``metric_dict``.
     """
     try:
         rmse = torch.sqrt(metric_dict["mse"])
@@ -35,23 +34,22 @@ def rmse(metric_dict: Dict[str, Tensor]) -> Tensor:
 
 
 def spread_skill_ratio(metric_dict: Dict[str, Tensor]) -> Tensor:
-    """
-    Calculate the spread-skill ratio (SSR) from the Mean Squared Error (MSE) and the total variance provided in the metric_dict.
+    """Compute the spread-skill ratio, ``sqrt(variance) / sqrt(mse)``.
 
     Parameters
     ----------
     metric_dict : Dict[str, Tensor]
-        A dictionary containing the MSE value under the key 'mse' and the total variance under the key 'variance'.
+        Metrics, containing ``"mse"`` and ``"variance"``.
 
     Returns
     -------
     Tensor
-        The calculated SSR.
+        The spread-skill ratio.
 
     Raises
     ------
     KeyError
-        If either of the required metrics 'mse' or 'variance' for 'spread-skill ratio' calculation are not found in metric_dict.
+        If ``"mse"`` or ``"variance"`` is missing from ``metric_dict``.
     """
     try:
         ssr = torch.sqrt(metric_dict["variance"]) / torch.sqrt(metric_dict["mse"])

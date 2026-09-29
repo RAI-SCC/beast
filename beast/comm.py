@@ -1,9 +1,8 @@
-"""Utilities for distributed communication and process mesh management in beast.
+"""Process mesh and process group management for distributed execution.
 
-This module provides helpers to create and manage process meshes and
-process groups for distributed training. It supports a fallback
-CustomDeviceMesh implementation when the native torch.device_mesh
-functionality is not available or suitable.
+The 4-D mesh is built on :func:`torch.distributed.device_mesh.init_device_mesh`
+and its groups are kept in module-level state, retrievable by name through
+:func:`get_process_group`.
 """
 
 import os
@@ -24,31 +23,30 @@ def create_process_mesh_dict(
     mesh_dims: Sequence[int],
     device_type: str = "cuda",
 ) -> dict[str, dist.ProcessGroup]:
-    """Create a dictionary of process groups for a logical device mesh.
-
-    The function expects a 4-D process mesh corresponding to the logical
-    dimensions (DP, SP, JSpatial, JChannel).
+    """Create the 4-D process mesh and its named process groups.
 
     Parameters
     ----------
     mesh_dims : Sequence[int]
-        Sizes for each mesh dimension, in the order (DP, SP, JSpatial,
-        JChannel). The product of the sizes must equal the distributed world
-        size.
-    device_type : str, optional
-        Device type string passed to the device mesh initializer
-        (default ``"cuda"``).
+        Sizes of the mesh dimensions in the order (DP, SP, JSpatial, JChannel).
+        Their product must equal the distributed world size.
+    device_type : str, default: "cuda"
+        Device type passed to ``init_device_mesh``.
 
     Returns
     -------
     dict[str, dist.ProcessGroup]
-        Mapping from logical names to :class:`torch.distributed.ProcessGroup`.
+        Groups keyed ``DP``, ``SP``, ``JSpatial`` and ``JChannel``, plus the
+        combined groups ``DTP`` (JSpatial x JChannel) and ``DDP`` (DP x SP x
+        JSpatial).
 
-    Notes
-    -----
-    The returned dictionary contains groups for the following keys:
-    ``DP``, ``SP``, ``JSpatial``, ``JChannel``, plus combined
-    groups ``DTP`` and ``DDP`` used for different parallelism strategies.
+    Raises
+    ------
+    RuntimeError
+        If the default process group is not initialized.
+    ValueError
+        If ``mesh_dims`` does not have four entries or its product differs from
+        the world size.
     """
     if not dist.is_initialized():
         raise RuntimeError("Distributed process group is not initialized.")
@@ -93,22 +91,22 @@ def create_process_mesh_dict(
 
 
 def get_process_group(name: str) -> dist.ProcessGroup:
-    """Return a previously created process group by name.
+    """Return a process group created by :func:`create_process_mesh_dict`.
 
     Parameters
     ----------
     name : str
-        Key name of the process group to retrieve.
+        Group name, e.g. ``"DP"`` or ``"DDP"``.
 
     Returns
     -------
-    torch.distributed.ProcessGroup
+    dist.ProcessGroup
         The requested process group.
 
     Raises
     ------
     ValueError
-        If no process group exists for the provided name.
+        If no group with that name exists.
     """
     if name not in _process_group_dict:
         raise ValueError(f"Process group '{name}' not found.")
@@ -116,21 +114,22 @@ def get_process_group(name: str) -> dist.ProcessGroup:
 
 
 def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
-    """Execute a function across distributed ranks in waves to reduce contention.
+    """Run ``func`` on all ranks, ``wave_size`` ranks at a time.
+
+    Staggering the calls reduces contention on shared resources such as the
+    filesystem. This is a collective call: every rank must reach it.
 
     Parameters
     ----------
     func : Callable
-        The function to execute on each rank. Should contain the logic that
-        needs to be executed in a distributed manner.
-    wave_size : int, optional
-        The number of ranks to execute the function in each wave (default is 128).
+        Zero-argument callable to run on each rank.
+    wave_size : int, default: 128
+        Number of ranks that run ``func`` concurrently.
 
     Returns
     -------
     Any
-        The result of the function execution on the current rank, or None if
-        the rank is not part of the current wave.
+        The return value of ``func`` on this rank.
     """
     world_size = dist.get_world_size(group=None)
     num_groups = (world_size + wave_size - 1) // wave_size
@@ -156,20 +155,15 @@ def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
 
 
 def visualize_process_mesh() -> None:
-    """Print a visual representation of the generated process mesh.
+    """Print a table of every rank's host, GPU and rank within each group.
 
-    Each rank gathers its identity (hostname, local GPU id and global rank)
-    together with its rank within every logical/combined process group. The
-    information is collected on rank 0 and printed as a table so the user can
-    see how ranks are distributed across the mesh and its groups.
+    The table has one row per global rank with the columns ``host``, ``gpu``,
+    ``global`` and one column per process group. Rank 0 prints it.
 
-    The output contains, for every global rank:
-
-    * ``host``      -- the hostname the rank runs on
-    * ``gpu``       -- the local device (GPU) id of the rank
-    * ``global``    -- the global rank in the default process group
-    * one column per group (``DP``, ``SP``, ``JSpatial``, ``JChannel``,
-      ``DTP``, ``DDP``) showing the rank *within* that group.
+    Raises
+    ------
+    RuntimeError
+        If the default process group is not initialized or no mesh exists yet.
 
     Notes
     -----
@@ -272,21 +266,20 @@ def wrap_ddp(
 ) -> DistributedDataParallel:
     """Wrap a model in DistributedDataParallel over the given process group.
 
-    Note that DDP *averages* gradients over ``ddp_group``. Whether that is the
-    correct reduction depends on which mesh axes the group spans, so this
-    belongs next to :func:`create_process_mesh_dict`, which decides that.
+    DDP *averages* gradients over ``ddp_group``. Whether that is the correct
+    reduction depends on which mesh axes the group spans, so this belongs next
+    to :func:`create_process_mesh_dict`, which decides that.
 
     Parameters
     ----------
     model : torch.nn.Module
         Model to wrap.
-    device_id : int | None
+    device_id : int or None
         CUDA device index the model lives on, or None for CPU.
     ddp_group : dist.ProcessGroup
         Process group to synchronize gradients over.
     reduction_size_mb : int, default: 100
-        Gradient bucket size in MiB, applied both to the first bucket and to
-        all subsequent ones.
+        Gradient bucket size in MiB, for the first bucket and all later ones.
 
     Returns
     -------

@@ -1,8 +1,4 @@
-"""Expert layers for distributed model parallelism.
-
-This module provides expert weighting and expert layers for distributed
-training with expert parallelism.
-"""
+"""Mixture-of-experts layers for expert-parallel training."""
 
 import math
 from typing import Any
@@ -13,7 +9,7 @@ from torch.nn import init
 
 
 class JLR(torch.autograd.Function):
-    """Autograd function for batched joint latent representation mixing distributed across n processes."""
+    """Autograd function mixing the experts' latent representations, distributed over the expert group."""
 
     @staticmethod
     def forward(  # noqa: N806
@@ -24,27 +20,31 @@ class JLR(torch.autograd.Function):
         bayesian: bool,
         device: torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute joint latent representation mixing across experts.
+        """Mix the expert inputs with the expert weights.
+
+        Each expert's input is averaged over the spatial group, gathered over
+        the expert group and weighted by ``w``.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor of shape (batch, channels, xlat, xlon).
+            Input of shape ``(batch, channels, xlat, xlon)``.
         w : torch.Tensor
-            Expert weights tensor.
+            Expert weights.
         ep_group : dist.ProcessGroup
-            Process group for expert parallelism.
+            Expert-parallel process group.
         sp_group : dist.ProcessGroup
-            Process group for spatial parallelism.
+            Spatial process group.
         bayesian : bool
-            Whether using Bayesian variant.
+            Whether ``w`` carries a leading sample dimension.
         device : torch.device
-            Computation device.
+            Device for the gathered buffers.
 
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            Joint latent representation and expert data.
+            The mixed representation and the gathered expert inputs, which are
+            not differentiable.
         """
         num_experts = ep_group.size()
         B, channels, xlat, xlon = x.shape  # noqa: N806
@@ -94,16 +94,16 @@ class JLR(torch.autograd.Function):
     def setup_context(
         ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Any, ...]
     ) -> None:
-        """Set up backward context for JLR autograd function.
+        """Save the gathered expert inputs for the backward pass.
 
         Parameters
         ----------
         ctx : FunctionCtx
             Autograd context.
         inputs : tuple[Any, ...]
-            Input tensors (x, w, ep_group, sp_group).
+            Arguments of :meth:`forward`, unused.
         outputs : tuple[Any, ...]
-            Output tensors (jlr, expert_x).
+            Outputs of :meth:`forward`, ``(jlr, expert_x)``.
         """
         _, expert_x = outputs
         ctx.mark_non_differentiable(expert_x)
@@ -113,21 +113,21 @@ class JLR(torch.autograd.Function):
     def backward(
         ctx: Any, grad_jlr: torch.Tensor, grad_expert_x: torch.Tensor | None
     ) -> tuple[None, torch.Tensor, None, None, None, None]:
-        """Compute gradients for JLR backward pass.
+        """Compute the gradient with respect to the expert weights.
 
         Parameters
         ----------
         ctx : FunctionCtx
             Autograd context with saved tensors.
         grad_jlr : torch.Tensor
-            Gradient w.r.t. jlr output.
-        grad_expert_x : torch.Tensor | None
-            Gradient w.r.t. expert_x output (unused).
+            Gradient with respect to the mixed representation.
+        grad_expert_x : torch.Tensor or None
+            Gradient with respect to the gathered expert inputs, unused.
 
         Returns
         -------
         tuple[None, torch.Tensor, None, None, None, None]
-            Gradients for each input (only w gradient is non-None).
+            One gradient per input of :meth:`forward`, non-None only for ``w``.
         """
         expert_x = ctx.saved_tensors[0]
         # expert_x is of shape (1, num_experts, batch, channel, xlat * xlon)
@@ -161,7 +161,7 @@ class JLR(torch.autograd.Function):
         bayesian: bool,
         device: torch.device,
     ) -> tuple[Any, int]:
-        """Vector map over batch dimension.
+        """Vmap rule: average ``x`` over the mapped dimension, then apply :meth:`forward`.
 
         Parameters
         ----------
@@ -170,22 +170,22 @@ class JLR(torch.autograd.Function):
         in_dims : Any
             Input dimensions specification.
         x : torch.Tensor
-            Input tensor.
+            Input with the mapped dimension first.
         w : torch.Tensor
             Expert weights.
         ep_group : dist.ProcessGroup
-            Expert parallelism group.
+            Expert-parallel process group.
         sp_group : dist.ProcessGroup
-            Spatial parallelism group.
+            Spatial process group.
         bayesian : bool
-            Bayesian flag.
+            Whether ``w`` carries a leading sample dimension.
         device : torch.device
-            Computation device.
+            Device for the gathered buffers.
 
         Returns
         -------
         tuple[Any, int]
-            Vmapped output and output dimension.
+            The outputs of :meth:`forward` and the mapped output dimension, 0.
         """
         lr = x.clone().detach()
         local_mean = lr.mean(dim=0)
@@ -196,22 +196,22 @@ class JLR(torch.autograd.Function):
 
 
 class ExpertWeightingLayer(torch.nn.Module):
-    """Layer that applies expert-based weighting to input tensors.
+    """Residual layer adding a learned mixture of the experts' inputs.
 
     Parameters
     ----------
     shape : tuple[int, ...]
-        Shape of expert weights tensor.
+        Shape of the expert weights, ``(experts, batch, channels, 1)``.
     ep_group : dist.ProcessGroup
-        Process group for expert parallelism.
+        Expert-parallel process group.
     sp_group : dist.ProcessGroup
-        Process group for spatial parallelism.
-    bayesian : bool, optional
-        Whether to use Bayesian variant, by default True.
-    device : torch.device | None, optional
-        Device to place tensors on, by default None.
-    dtype : torch.dtype, optional
-        Data type of parameters, by default torch.float32.
+        Spatial process group.
+    bayesian : bool, default: True
+        Whether the weights carry a leading sample dimension.
+    device : torch.device, optional
+        Device to place parameters on.
+    dtype : torch.dtype, default: torch.float32
+        Data type of the weights.
     """
 
     def __init__(
@@ -240,17 +240,18 @@ class ExpertWeightingLayer(torch.nn.Module):
         self.get_jlr = JLR.apply
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: N806
-        """Apply expert weighting to input.
+        """Return ``x`` plus the weighted mixture of the experts' inputs.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor of shape (batch, channel, xlat, xlon).
+            Input of shape ``(batch, channel, xlat, xlon)``.
 
         Returns
         -------
         torch.Tensor
-            Weighted output tensor.
+            Output with the shape of ``x``, or with a leading sample dimension
+            if Bayesian.
         """
         # x is of shape (batch, channel, xlat, xlon)
         jlr: torch.Tensor = self.get_jlr(
@@ -261,18 +262,17 @@ class ExpertWeightingLayer(torch.nn.Module):
 
 
 class Expert(torch.nn.Module):
-    """Expert module for distributed model parallelism.
+    """Wrap a model as one expert, with per-variable loss weights by expert rank.
 
     Parameters
     ----------
     model : torch.nn.Module
-        Base model to wrap with expert parallelism.
+        Model to wrap. Needs ``channel_group`` and ``out_channels`` attributes.
     ep_group : dist.ProcessGroup
-        Process group for expert parallelism.
+        Expert-parallel process group.
     """
 
     def __init__(self, model: torch.nn.Module, ep_group: dist.ProcessGroup) -> None:
-
         super().__init__()
         self.model = model
         self.expert_group = ep_group
@@ -282,12 +282,16 @@ class Expert(torch.nn.Module):
         self.loss_weights = self.make_loss_weights()
 
     def make_loss_weights(self) -> torch.Tensor:
-        """Create loss weights tensor for this expert.
+        """Create the loss weights of this expert.
+
+        The weights are hard-coded to the 84-variable layout. Expert rank 1
+        covers the surface variables, 2 the winds, 3 the thermodynamic
+        variables and any other rank all variables.
 
         Returns
         -------
         torch.Tensor
-            Loss weights for this expert.
+            Weights over the local variables.
         """
         num_loc_variables = self.num_variables // self.channel_group.size()
         self.weights = torch.zeros(
@@ -326,17 +330,17 @@ class Expert(torch.nn.Module):
         return self.weights
 
     def get_loss_weights(self) -> torch.Tensor:
-        """Get loss weights for this expert.
+        """Return the loss weights of this expert.
 
         Returns
         -------
         torch.Tensor
-            Loss weights tensor.
+            Weights over the local variables.
         """
         return self.loss_weights
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: N806
-        """Forward pass through expert model.
+        """Apply the wrapped model.
 
         Parameters
         ----------
@@ -346,6 +350,6 @@ class Expert(torch.nn.Module):
         Returns
         -------
         torch.Tensor
-            Output from expert model.
+            Output of the wrapped model.
         """
         return self.model(x)  # type: ignore

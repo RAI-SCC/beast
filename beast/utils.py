@@ -1,4 +1,4 @@
-"""Utils module."""
+"""Seeding, dtype parsing and latitude weighting helpers."""
 
 import os
 import random
@@ -8,7 +8,13 @@ import torch
 
 
 def set_all_seeds(seed_value: int) -> None:
-    """Set random seeds."""
+    """Seed Python, PyTorch (CPU and all GPUs) and ``PYTHONHASHSEED``.
+
+    Parameters
+    ----------
+    seed_value : int
+        Seed applied to every generator.
+    """
     random.seed(seed_value)  # Python random module
     torch.manual_seed(seed_value)  # pytorch random number generator for CPU
     torch.cuda.manual_seed(seed_value)  # pytorch random number generator for all GPUs
@@ -19,8 +25,7 @@ def set_all_seeds(seed_value: int) -> None:
 
 
 def set_dtype(dtype: str) -> torch.dtype:
-    """
-    Set datatype from config file.
+    """Convert a dtype name from a config file to a :class:`torch.dtype`.
 
     Parameters
     ----------
@@ -53,20 +58,19 @@ def set_dtype(dtype: str) -> torch.dtype:
 
 @torch.no_grad()
 def get_spatial_weights(n_lat: int, device: torch.device) -> torch.Tensor:
-    """
-    Calculate spatial weights based on latitude for loss weighting.
+    """Compute cosine-latitude weights for loss weighting.
 
     Parameters
     ----------
-    n_lat: int
-        Number of latitude elements
+    n_lat : int
+        Number of latitude points, running from 90°N to 90°S.
     device : torch.device
-        Device to place the resulting weights tensor on.
+        Device to place the weights on.
 
     Returns
     -------
     torch.Tensor
-        A tensor of shape (1, 1, n_lat, 1) containing the spatial weights normalized by the cosine of the latitude.
+        Float32 weights of shape ``(1, 1, n_lat, 1)``, normalized to a mean of 1.
     """
     latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
     cossum = np.sum(np.cos(latitude))

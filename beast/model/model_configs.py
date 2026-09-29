@@ -1,7 +1,4 @@
-"""Model configuration management.
-
-This module aggregates model configurations from various model implementations.
-"""
+"""Registry of model configurations available to :func:`~beast.model.get_model`."""
 
 from typing import Any
 

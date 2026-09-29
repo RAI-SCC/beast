@@ -1,4 +1,4 @@
-"""Custom GB Dataloaders and Dataloader factory."""
+"""Timing data loader and a config-driven dataloader factory."""
 
 import os
 import time
@@ -24,24 +24,19 @@ DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
 
 
 class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
-    """
-    Custom Data Loader Iter, that tracks the start and stop time of the ``__next__`` functionality.
-
-    Inherits from PyTorchs ``_MultiProcessingDataLoaderIter``
-    """
+    """Multiprocessing loader iterator that times each ``__next__`` call."""
 
     def __next__(self) -> tuple[Any, float, float]:
-        """
-        Get the next item of the Iterator.
+        """Fetch the next batch together with the fetch timestamps.
 
         Returns
         -------
-        *data : torch.Tensor
-            The next data item
+        *data
+            The batch items, unpacked.
         start : float
-            The time stamp before fetching the next data item in ns
-        stop : float
-            The time stamp after fetching the next data item in ns
+            ``perf_counter_ns`` timestamp before the fetch.
+        end : float
+            ``perf_counter_ns`` timestamp after the fetch.
         """
         start = time.perf_counter_ns()
 
@@ -52,11 +47,7 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
 
 
 class GBDataLoader(DataLoader):
-    """
-    Custom Data Loader, that tracks the start and stop time of the ``__next__`` functionality.
-
-    Calls GBDataLoaderIter.
-    """
+    """Data loader whose iterator, :class:`GBDataLoaderIter`, times each batch fetch."""
 
     def _get_iterator(self) -> _BaseDataLoaderIter:
         return GBDataLoaderIter(self)
@@ -73,37 +64,40 @@ def get_dataloader(
     target_transform: Callable | None = None,
     **kwargs: Any,
 ) -> GBDataLoader:
-    """
-    Create a GBDataLoader instance from config specifications.
+    """Create a :class:`GBDataLoader` from a configuration dictionary.
 
-    If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
-    If no valid path is given (i.e. if the path doesn't exist), it will create a dummy dataset for the time range specified in the config file, filled with random numbers.
+    If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
+    from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
+    dataset of random numbers is used for the configured time range. In
+    ``"train"`` and ``"validation"`` mode the dataset is cut to the first
+    ``train_subset`` or ``valid_subset`` samples if that value is positive.
 
     Parameters
     ----------
-    config_dict : Dict
-        The configuration dictionary, that contains information on the dataset, i.e. the path to all relevant files, specifications of the time frame to be used, etc.
+    config_dict : dict[str, Any]
+        Configuration with the sections ``data`` and ``training``, see
+        ``docs/configuration.md``.
     dtp_rank : int
-        The rank in the domain-tensor-parallel process group, that shares a model and a data item
+        Rank in the domain-tensor-parallel group, which shares a data item.
     dtp_size : int
-        The size of the domain-tensor-parallel process group, that shares a model and a data item
+        Size of the domain-tensor-parallel group.
     dp_rank : int
-        The rank in the data-parallel process group, that shares a model and a data item
+        Rank in the data-parallel group.
     dp_size : int
-        The size of the data-parallel process group (torch.DistributedDataParallel)
-    mode : str
-        The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    **kwargs:
-        Additional options that can be forwarded to the Dataset object.
+        Size of the data-parallel group.
+    mode : {"train", "validation"}, default: "train"
+        Selects the time range and subset size.
+    transform : Callable, optional
+        Transformation applied to the input data.
+    target_transform : Callable, optional
+        Transformation applied to the target data. Defaults to ``transform``.
+    **kwargs
+        Passed on to the dataset.
 
     Returns
     -------
-    dataloader : GBDataLoader
-        The dataloader instance
+    GBDataLoader
+        The dataloader, sampling with a :class:`ResumableDistributedSampler`.
     """
     data_path = config_dict["data"]["data_path"]
 

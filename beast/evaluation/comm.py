@@ -15,28 +15,26 @@ def gather_along_dimension(
     dim: int = -1,
     variable_size: bool = False,
 ) -> Tensor:
-    """
-    Gather and stack tensors along a specified dimension across a process group.
+    """Concatenate the tensors of all ranks in a process group along a dimension.
 
     Parameters
     ----------
     x : Tensor
-        The input tensor to be gathered.
-    group : ProcessGroup | None, default=None
-        The process group to perform the gather operation within.
-        If None or contains only one process, the input tensor is returned as-is.
-    dim : int, default=-1
-        The dimension along which to gather and concatenate the tensors.
-    variable_size : bool, default=False
-        If True, enables handling of tensors that may have different sizes
-        along the specified dimension by padding them to the global
-        maximum size before gathering.
+        Local tensor to gather.
+    group : ProcessGroup, optional
+        Process group to gather over. If None or of size 1, ``x`` is returned
+        unchanged.
+    dim : int, default: -1
+        Dimension to concatenate along.
+    variable_size : bool, default: False
+        Whether the size of ``x`` along ``dim`` may differ between ranks. Sizes
+        are then exchanged and the tensors padded to the maximum before
+        gathering, at extra communication cost.
 
     Returns
     -------
     Tensor
-        A tensor containing the concatenated results from all processes in
-        the group along the specified dimension.
+        The concatenation of the tensors of all ranks, in rank order.
     """
     if group is None or group.size() == 1:
         return x

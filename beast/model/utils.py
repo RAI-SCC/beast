@@ -28,28 +28,37 @@ def convert_jigsaw_vi(
     prior_initialization: bool = False,
     return_log_probs: bool = True,
 ) -> None:
-    """Convert a PyTorch module to a VI module using torch_blue, with custom handling for Jigsaw's specific layers and normalization.
+    """Convert a module to a torch_blue VI module in place, Jigsaw-aware.
+
+    Normalization layers and Transformer Engine attention are excluded from the
+    conversion. The fan-in of ``AVIDistributedXWT`` and ``AVIConvTranspose2d``
+    layers is scaled by the channel-parallel size, and every variational
+    parameter gets a gradient-sync hook over ``spatial_pg`` and is broadcast
+    from its rank 0.
+
+    The remaining options are passed through to
+    :func:`torch_blue.vi.convert_to_vimodule`.
 
     Parameters
     ----------
     module : torch.nn.Module
-        The PyTorch module to convert.
+        Module to convert.
     channel_pg : dist.ProcessGroup
-        The process group for channel parallelism.
+        Channel-parallel process group.
     spatial_pg : dist.ProcessGroup
-        The process group for spatial parallelism.
-    variational_distribution : torch_blue.vi.distributions.Distribution, optional
-        The variational distribution to use for the VI conversion, by default vidist.Normal(std=0.15)
-    prior : torch_blue.vi.distributions.Distribution, optional
-        The prior distribution to use for the VI conversion, by default vidist.Normal()
-    rescale_prior : bool, optional
-        Whether to rescale the prior based on the number of processes, by default False
-    kaiming_initialization : bool, optional
-        Whether to use Kaiming initialization for the variational parameters, by default True
-    prior_initialization : bool, optional
-        Whether to initialize the variational parameters based on the prior, by default False
-    return_log_probs : bool, optional
-        Whether the converted module should return log probabilities, by default True
+        Spatial-parallel process group.
+    variational_distribution : torch_blue.vi.distributions.Distribution, default: Normal(std=0.15)
+        Variational distribution of the converted weights.
+    prior : torch_blue.vi.distributions.Distribution, default: Normal()
+        Prior distribution of the converted weights.
+    rescale_prior : bool, default: False
+        Whether to rescale the prior.
+    kaiming_initialization : bool, default: True
+        Whether to use Kaiming initialization for the variational parameters.
+    prior_initialization : bool, default: False
+        Whether to initialize the variational parameters from the prior.
+    return_log_probs : bool, default: True
+        Whether the converted module returns log probabilities.
     """
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
@@ -76,6 +85,7 @@ def convert_jigsaw_vi(
     def new_cf_channel(
         self: torch.nn.Module, variable_shapes: dict[str, torch.Size] | None = None
     ) -> int:
+        """Return the fan-in of the layer scaled by the channel-parallel size."""
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
@@ -101,22 +111,22 @@ def convert_jigsaw_vi(
 def count_model_parameters(
     model: torch.nn.Module, parallelism: int, bayesian: bool
 ) -> int:
-    """
-    Count the number of parameters in a model, taking into account parallelism and whether the model is Bayesian.
+    """Count model parameters, scaled by parallelism and doubled if Bayesian.
 
     Parameters
     ----------
     model : torch.nn.Module
-        The model for which to count parameters.
+        Model to count. With ``parallelism > 1`` only submodules that provide
+        ``get_parameter_count()`` contribute.
     parallelism : int
         The degree of parallelism.
     bayesian : bool
-        Whether the model is Bayesian (which would double the parameter count).
+        Whether to count each parameter twice (mean and spread).
 
     Returns
     -------
     int
-        The total number of parameters in the model, adjusted for parallelism and Bayesian nature.
+        Total parameter count.
     """
     if parallelism == 1:
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)

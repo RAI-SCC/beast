@@ -1,4 +1,4 @@
-"""Definition of Transformer layers."""
+"""Transformer blocks: plain, NICE-normalized and their distributed variants."""
 
 import itertools
 import os
@@ -23,22 +23,28 @@ if USE_TE_DPA and not JIGSAW_TE_AVAILABLE:
 
 
 class TransformerBlock(torch.nn.Module):
-    """Transformer block with windowed attention.
+    """Pre-norm transformer block with windowed attention.
 
     Parameters
     ----------
+    in_dim : int
+        Input dimension.
     embed_dim : int
-        Embedding dimension.
-    output_dim : int
+        Embedding dimension of the attention.
+    out_dim : int
         Output dimension.
     heads : int
         Number of attention heads.
-    dropout : float
-        Dropout rate.
-    device : torch.device | None, optional
-        Device to place tensors on, by default None.
-    dtype : torch.dtype, optional
-        Data type of parameters, by default torch.float32.
+    noise_dim : int, default: 32
+        Unused.
+    dropout : float, default: 0.0
+        Attention dropout probability.
+    device : torch.device, optional
+        Device to place parameters on.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    dtype : torch.dtype, default: torch.float32
+        Stored on the module but not applied to the parameters.
     """
 
     def __init__(
@@ -53,28 +59,6 @@ class TransformerBlock(torch.nn.Module):
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        """
-        Initialize Transformer.
-
-        in_dim: int
-            Input dimension of the data.
-        embed_dim: int
-            Embedding dimension of attention.
-        out_dim: int
-            Output dimension of attention.
-        heads: int
-            Number of global heads in attention.
-        dropout: float
-            Dropout fraction.
-        device: torch.device
-            Device that the computations are occuring on.
-        bayesian: bool
-            Flag for whether the model is Bayesian.
-        qk_norm: bool
-            Flag for whether to use qk norms in the attention blocks.
-        dtype: torch.dtype
-            Data type of the model and input data.
-        """
         super().__init__()
         self.in_dim = in_dim
         self.embed_dim = embed_dim
@@ -103,14 +87,12 @@ class TransformerBlock(torch.nn.Module):
         self.mlp = mlp.MLP(self.out_dim, self.out_dim, self.out_dim, device=self.device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through transformer block.
+        """Apply attention and the MLP, each with a residual connection.
 
         Parameters
         ----------
         x : torch.Tensor
             Input tensor.
-        noise : torch.Tensor
-            Noise tensor for NICE normalization.
 
         Returns
         -------
@@ -128,20 +110,24 @@ class NiceTransformer(torch.nn.Module):
 
     Parameters
     ----------
+    in_dim : int
+        Input dimension.
     embed_dim : int
-        Embedding dimension.
-    output_dim : int
+        Embedding dimension of the attention.
+    out_dim : int
         Output dimension.
     heads : int
         Number of attention heads.
-    noise_dim : int
-        Noise dimension for NICE normalization.
-    dropout : float
-        Dropout rate.
-    device : torch.device | None, optional
-        Device to place tensors on, by default None.
-    dtype : torch.dtype, optional
-        Data type of parameters, by default torch.float32.
+    noise_dim : int, default: 32
+        Size of the noise vector for NICE normalization.
+    dropout : float, default: 0.0
+        Attention dropout probability.
+    device : torch.device, optional
+        Device to place parameters on.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    dtype : torch.dtype, default: torch.float32
+        Stored on the module but not applied to the parameters.
     """
 
     def __init__(
@@ -156,30 +142,6 @@ class NiceTransformer(torch.nn.Module):
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        """
-        Initialize DistributedNICETransformer.
-
-        in_dim: int
-            Input dimension of the data.
-        embed_dim: int
-            Embedding dimension of attention.
-        out_dim: int
-            Output dimension of attention.
-        heads: int
-            Number of global heads in attention.
-        noise_dim: int
-            Global dimension for the noise.
-        dropout: float
-            Dropout fraction.
-        device: torch.device
-            Device that the computations are occuring on.
-        bayesian: bool
-            Flag for whether the model is Bayesian.
-        qk_norm: bool
-            Flag for whether to use qk norms in the attention blocks.
-        dtype: torch.dtype
-            Data type of the model and input data.
-        """
         super().__init__()
         self.in_dim = in_dim
         self.embed_dim = embed_dim
@@ -212,14 +174,14 @@ class NiceTransformer(torch.nn.Module):
         self.MLP = mlp.MLP(self.out_dim, self.out_dim, self.out_dim, device=self.device)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """Forward pass through transformer block.
+        """Apply attention and the MLP, each with a residual connection.
 
         Parameters
         ----------
         x : torch.Tensor
             Input tensor.
         noise : torch.Tensor
-            Noise tensor for NICE normalization.
+            Noise for the NICE normalization.
 
         Returns
         -------
@@ -233,11 +195,39 @@ class NiceTransformer(torch.nn.Module):
 
 
 class DistributedTransformer(torch.nn.Module):
-    """
-    Windowed Transformer across multiple processes.
+    """Windowed transformer block sharded across processes.
 
-    The spatial domain is split across domain-parallel instances,
-    and the channel domain retains domain and tensor parallel approaches.
+    The spatial domain is split across the spatial group and the channels are
+    split across the channel group.
+
+    Parameters
+    ----------
+    in_dim : int
+        Global input dimension.
+    embed_dim : int
+        Global embedding dimension of the attention.
+    out_dim : int
+        Global output dimension.
+    heads : int
+        Global number of attention heads.
+    dropout : float
+        Dropout probability.
+    local_rank : int
+        Rank within the model group.
+    device : torch.device
+        Device to place parameters on.
+    model_group : dist.ProcessGroup
+        Process group the model is sharded over (spatial x channel).
+    spatial_group : dist.ProcessGroup
+        Spatial (domain-parallel) process group.
+    channel_group : dist.ProcessGroup
+        Channel (tensor-parallel) process group.
+    bayesian : bool
+        Whether the layers are Bayesian.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    dtype : torch.dtype, default: torch.float32
+        Data type passed to the attention.
     """
 
     def __init__(
@@ -256,36 +246,6 @@ class DistributedTransformer(torch.nn.Module):
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
-        """
-        Initialize DistributedNICETransformer.
-
-        in_dim: int
-            Input dimension of the data.
-        embed_dim: int
-            Embedding dimension of attention.
-        out_dim: int
-            Output dimension of attention.
-        heads: int
-            Number of global heads in attention.
-        dropout: float
-            Dropout fraction.
-        local_rank: int
-            Rank of the DTP group.
-        device: torch.device
-            Device that the computations are occuring on.
-        model_group: dist.ProcessGroup
-            DTP process group.
-        spatial_group: dist.ProcessGroup
-            Domain-parallel process group.
-        channel_group: dist.ProcessGroup
-            Domain- and tensor-parallel process group.
-        bayesian: bool
-            Flag for whether the model is Bayesian.
-        qk_norm: bool
-            Flag for whether to use qk norms in the attention blocks.
-        dtype: torch.dtype
-            Data type of the model and input data.
-        """
         super().__init__()
 
         self.attention_block = attention.DistributedAttention(
@@ -333,19 +293,60 @@ class DistributedTransformer(torch.nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of distributed windowed transformer."""
+        """Apply attention and the MLP, each with a residual connection.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Local input shard.
+
+        Returns
+        -------
+        torch.Tensor
+            Local output shard.
+        """
         x = self.attention_block(self.layer_norm1(x)) + x
         x = self.mlp(self.layer_norm2(x)) + x
         return x
 
 
 class DistributedNICETransformer(torch.nn.Module):
-    """
-    Module for Distributed NICE Transformer.
+    """Windowed transformer block with NICE normalization, sharded across processes.
 
-    The spatial domain is split across domain-parallel instances,
-    and the channel domain retains domain and tensor parallel approaches.
-    Noise is replicated across all dtp processes.
+    The spatial domain is split across the spatial group and the channels are
+    split across the channel group. The noise is replicated across the model
+    group.
+
+    Parameters
+    ----------
+    in_dim : int
+        Global input dimension.
+    embed_dim : int
+        Global embedding dimension of the attention.
+    out_dim : int
+        Global output dimension.
+    heads : int
+        Global number of attention heads.
+    noise_dim : int
+        Global size of the noise vector.
+    dropout : float
+        Dropout probability.
+    local_rank : int
+        Rank within the model group.
+    device : torch.device
+        Device to place parameters on.
+    model_group : dist.ProcessGroup
+        Unused; the channel group is used in its place.
+    spatial_group : dist.ProcessGroup
+        Spatial (domain-parallel) process group.
+    channel_group : dist.ProcessGroup
+        Channel (tensor-parallel) process group.
+    bayesian : bool
+        Whether the layers are Bayesian.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    dtype : torch.dtype, default: torch.float32
+        Data type passed to the attention.
     """
 
     def __init__(
@@ -365,36 +366,6 @@ class DistributedNICETransformer(torch.nn.Module):
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
-        """
-        Initialize DistributedNICETransformer.
-
-        in_dim: int
-            Input dimension of the data.
-        embed_dim: int
-            Embedding dimension of attention.
-        out_dim: int
-            Output dimension of attention.
-        heads: int
-            Number of global heads in attention.
-        noise_dim: int
-            Global dimension for the noise.
-        dropout: float
-            Dropout fraction.
-        local_rank: int
-            Rank of the DTP group.
-        device: torch.device
-            Device that the computations are occuring on.
-        spatial_group: dist.ProcessGroup
-            Domain-parallel process group.
-        channel_group: dist.ProcessGroup
-            Domain- and tensor-parallel process group.
-        bayesian: bool
-            Flag for whether the model is Bayesian.
-        qk_norm: bool
-            Flag for whether to use qk norms in the attention blocks.
-        dtype: torch.dtype
-            Data type of the model and input data.
-        """
         super().__init__()
         self.attention_block = attention.DistributedAttention(
             in_dim,
@@ -452,15 +423,19 @@ class DistributedNICETransformer(torch.nn.Module):
             )
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """
-        Perform forward pass for DistribuedNICEWindowedTransformer.
+        """Apply attention and the MLP, each with a residual connection.
 
-        inputs
-        ------
-        x: torch.Tensor
-            Input data.
-        noise: torch.Tensor
-            Noise for the layer norm. Noise should be consistent within the model-parallel group.
+        Parameters
+        ----------
+        x : torch.Tensor
+            Local input shard.
+        noise : torch.Tensor
+            Noise for the NICE normalization, identical across the model group.
+
+        Returns
+        -------
+        torch.Tensor
+            Local output shard.
         """
         x = self.attention_block(self.layer_norm1(x, noise)) + x
         x = self.mlp(self.layer_norm2(x, noise)) + x

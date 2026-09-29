@@ -1,4 +1,4 @@
-"""Beast (Bayesian Exascale Atmospheric Swim Transformer) model definition."""
+"""The BEAST (Bayesian Exascale Atmospheric Swin Transformer) model."""
 
 from typing import Any, Sequence
 
@@ -11,56 +11,72 @@ from beast.layers import transformer
 
 
 class Beast(torch.nn.Module):
-    """Base class for the BEAST model.
+    """Bayesian Exascale Atmospheric Swin Transformer.
 
-    Bayesian Exascale Atmospheric Swim Transformer.
+    The input is patch-embedded, passed through windowed transformer blocks at
+    full resolution, downsampled by 2 for a second set of blocks, upsampled and
+    passed through a third set, and finally recovered to the output channels
+    from the concatenation with the patch embedding. Each set alternates plain
+    and shifted windows.
+
+    The model is sharded across the spatial and channel groups if ``dtp_group``
+    spans more than one process. Its inputs and outputs are then local shards.
 
     Parameters
     ----------
     height : int
-        Height of the input data.
+        Global height of the input, in grid points.
     width : int
-        Width of the input data.
+        Global width of the input, in grid points.
     in_channels : int
         Number of input channels.
     out_channels : int
         Number of output channels.
     embed_dim : int
-        Embedding dimension for the model.
-    heads : int
-        Number of attention heads.
+        Embedding dimension. Doubled after the downsampling.
+    heads : Sequence[int]
+        Number of attention heads in each of the three sets of blocks.
     kernel_size : int
-        Kernel size for the convolutional layers.
-    window_size_outer : int
-        Window size for the outer attention blocks.
-    window_size_inner : int
-        Window size for the inner attention blocks.
-    n_full_blocks : int
-        Number of full attention blocks.
+        Kernel size of the patch embedding and recovery.
+    stride : int
+        Stride of the patch embedding and recovery.
+    padding : int
+        Padding of the convolutions.
+    dilation : int
+        Dilation of the convolutions.
+    window_size_outer : Sequence[int]
+        Attention window ``(lat, lon)`` in the first and third set of blocks.
+        Entries must be even.
+    window_size_inner : Sequence[int]
+        Attention window ``(lat, lon)`` in the second set of blocks. Entries
+        must be even.
+    n_full_blocks : Sequence[int]
+        Number of plain-and-shifted block pairs in each of the three sets.
     noise_dim : int
-        Dimension of the noise input for the Bayesian model.
-    device : int
-        Device to run the model on.
-    parallelism : int
-        Degree of parallelism for the model.
-    dtp_group : dist.ProcessGroup
-        Process group for data parallelism.
-    spatial_group : dist.ProcessGroup
-        Process group for spatial parallelism.
-    channel_group : dist.ProcessGroup
-        Process group for channel parallelism.
-    up_group : dist.ProcessGroup
-        Process group for unsharded parallelism.
-    dtype : torch.dtype
-        Data type for the model parameters.
-    bayesian : bool
-        Whether to use the Bayesian version of the model.
-    nice_norm : bool
-        Whether to use the NICE normalization for the attention blocks.
-
-    Notes
-    -----
-    TODO: Reference to papers and documentation.
+        Size of the noise vector for the NICE normalization.
+    device : torch.device
+        Device to place the model on.
+    dropout : float, default: 0.1
+        Dropout probability. Forced to 0 if ``bayesian``, and ignored by the
+        non-distributed model, which uses a fixed 1e-3.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    bayesian : bool, default: False
+        Whether the distributed layers are Bayesian.
+    nice_norm : bool, default: False
+        Whether to use NICE normalization in the transformer blocks.
+    dtype : torch.dtype, default: torch.float32
+        Data type of the model.
+    channel_group : dist.ProcessGroup, optional
+        Channel (tensor-parallel) process group.
+    spatial_group : dist.ProcessGroup, optional
+        Spatial (domain-parallel) process group.
+    dtp_group : dist.ProcessGroup, optional
+        Process group the model is sharded over (spatial x channel).
+    up_group : dist.ProcessGroup, optional
+        Uncertainty-parallel process group. Only stored on the model.
+    **kwargs
+        Ignored.
     """
 
     def __init__(
@@ -661,21 +677,24 @@ class Beast(torch.nn.Module):
         n_patch_lon: int,
         window_size: Sequence[int],
     ) -> torch.Tensor:
-        """
-        Generate mask for attention mechanism when fields are rolled.
+        """Generate the attention mask for rolled fields.
 
-        n_patch_vert: int
-            Number of patches in the vertical (first) dimension
-        n_patch_lat: int
-            Number of patches in the latitude (second) dimension
-        n_patch_lon: int
-            Number of patches in the longitude (third) dimension
+        Parameters
+        ----------
+        batch_dim : int
+            Unused.
+        n_patch_lat : int
+            Number of patches along latitude.
+        n_patch_lon : int
+            Number of patches along longitude.
+        window_size : Sequence[int]
+            Attention window ``(lat, lon)``.
 
         Returns
         -------
-        attention_mask: Tensor
-            of shape (n_windows, n_patch_in_window, n_patch_in_window)
-            attention mask with value of 0 when attention should not be masked and -10000 when masked.
+        torch.Tensor
+            Mask of shape ``(n_windows, n_patch_in_window, n_patch_in_window)``,
+            0 where attention is allowed and -100000 where it is masked.
         """
         # Rolled mask
         # 1 n_patch_lat n_patch_lon 1
@@ -727,18 +746,19 @@ class Beast(torch.nn.Module):
         return self.mask_out, self.mask_in
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for the Beast model.
+        """Predict the output fields from the input fields.
+
+        Noise for the NICE normalization is sampled on every call.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor of shape (batch, in_channels, height, width).
+            Input of shape ``(batch, in_channels, height, width)``.
 
         Returns
         -------
         torch.Tensor
-            Output tensor of shape (batch, out_channels, height, width).
+            Output of shape ``(batch, out_channels, height, width)``.
         """
         # noise has shape [(sample), batch, noise_dim]
         noise = (

@@ -141,7 +141,7 @@ every later collective.
 ### `beast/checkpoint.py`
 
 `save_checkpoint` / `load_checkpoint` handle sharded state. `parse_checkpoint_path`
-and `parse_latest_model_state` recover metadata (step, epoch) from checkpoint
+recovers metadata (step, epoch) from checkpoint
 filenames, which is how a restarted job finds where it left off and what to pass as
 the sampler's `resume_idx`.
 

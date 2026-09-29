@@ -1,4 +1,4 @@
-"""Implements data transformations to be passed to the dataset classes."""
+"""Data transformations to pass to the dataset classes."""
 
 from typing import Tuple
 
@@ -7,28 +7,20 @@ from torch import Tensor, nn
 
 
 class Identity(nn.Module):
-    """
-    Trivial transformation that returns inputs unchanged.
-
-    Notes
-    -----
-    This module can be used as a placeholder transform when no data
-    transformation is required.
-    """
+    """Transformation that returns its input unchanged, as a placeholder."""
 
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Forward pass of the identity transformation.
+        """Return ``x`` unchanged.
 
         Parameters
         ----------
         x : Tensor
-            The input tensor.
+            Input tensor.
 
         Returns
         -------
         Tensor
-            The same tensor as input.
+            The input tensor.
         """
         return x
 
@@ -36,26 +28,30 @@ class Identity(nn.Module):
 def _reshape_for_downsampling(
     x: Tensor, dims: Tuple[int, ...], factor: int, negative_dims: bool = False
 ) -> Tuple[Tensor, Tuple[int, ...]]:
-    """
-    Reshape the input tensor into a form suitable for downsampling and return the dimensions that reduction should take place over.
+    """Split each downsampled dimension into ``(size // factor, factor)``.
 
     Parameters
     ----------
-    x: Tensor
-        The tensor to be reshaped.
-    dims: Tuple[int, ...]
-        The dimensions the downsampling will take place over
-    factor: int
-        The factor by which the dimensions are downscaled
-    negative_dims: bool, default: False
-        Indicates whether the tuple given for dims contains all negative or all positive dimensions (mixed is not implemented)
+    x : Tensor
+        Tensor to reshape.
+    dims : Tuple[int, ...]
+        Dimensions to downsample over, all positive or all negative.
+    factor : int
+        Downsampling factor.
+    negative_dims : bool, default: False
+        Whether ``dims`` holds negative indices.
 
     Returns
     -------
-    x_reshaped: Tensor
-        The reshaped tensor with all indicated dimensions split into (dim // factor, factor)
-    target_dims: Tuple[int, ...]
-        The tuple containing all of the newly created dimensions of size factor
+    x_reshaped : Tensor
+        The reshaped tensor.
+    target_dims : Tuple[int, ...]
+        The new dimensions of size ``factor``, to be reduced over.
+
+    Raises
+    ------
+    RuntimeError
+        If a dimension in ``dims`` is not divisible by ``factor``.
     """
     x_shape = x.shape
 
@@ -88,24 +84,23 @@ def _reshape_for_downsampling(
 
 
 class Downsample(nn.Module):
-    """
-    Downsampling transformation for a given downsampling factor.
+    """Downsample by averaging over blocks of ``factor`` along each dimension.
 
     Parameters
     ----------
     factor : int
-        The factor by which the dimensions are downsampled.
+        Downsampling factor.
     dims : Tuple[int, ...], default: (-1,)
-        The dimensions to downsample over. Defaults to only the last dimension.
+        Dimensions to downsample over, all positive or all negative.
 
     Attributes
     ----------
     factor : int
-        The factor by which selected dimensions are downsampled.
+        Downsampling factor.
     dims : Tuple[int, ...]
-        The dimensions over which downsampling is applied.
+        Dimensions to downsample over, sorted in descending order.
     negative_dims : bool
-        Whether ``dims`` contains negative dimension indices.
+        Whether ``dims`` holds negative indices.
     """
 
     def __init__(self, factor: int, dims: Tuple[int, ...] = (-1,)):
@@ -134,13 +129,12 @@ class Downsample(nn.Module):
         self.dims = tuple(sorted_dims)
 
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Perform downsampling by reshaping and taking the mean over blocks of dimension factor^len(dims).
+        """Average ``x`` over blocks of ``factor ** len(dims)`` elements.
 
         Parameters
         ----------
         x : Tensor
-            The input tensor.
+            Input tensor.
 
         Returns
         -------
@@ -155,39 +149,24 @@ class Downsample(nn.Module):
 
 
 class DownsampleMeanStd(Downsample):
-    """
-    Downsampling transformation returning mean and standard deviation.
+    """Downsample to the mean and standard deviation of each block.
 
-    Parameters
-    ----------
-    factor : int
-        The factor by which the dimensions are downsampled.
-    dims : Tuple[int, ...], default: (-1,)
-        The dimensions to downsample over. Defaults to only the last dimension.
-
-    Attributes
-    ----------
-    factor : int
-        The factor by which selected dimensions are downsampled.
-    dims : Tuple[int, ...]
-        The dimensions over which downsampling is applied.
-    negative_dims : bool
-        Whether ``dims`` contains negative dimension indices.
+    Parameters and attributes are those of :class:`Downsample`.
     """
 
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Perform downsampling and calculate both mean and standard deviation over each patch.
+        """Compute the mean and standard deviation over blocks of ``x``.
 
         Parameters
         ----------
         x : Tensor
-            The input tensor.
+            Input tensor.
 
         Returns
         -------
         Tensor
-            A tensor containing the mean and standard deviation stacked along a new dimension of size 2 appended to end.
+            Means and standard deviations stacked along a new last dimension
+            of size 2.
         """
         x, target_dims = _reshape_for_downsampling(
             x, self.dims, self.factor, self.negative_dims
