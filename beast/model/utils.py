@@ -109,7 +109,7 @@ def count_model_parameters(
     model : torch.nn.Module
         The model for which to count parameters.
     parallelism : int
-        The degree of parallelism (e.g., number of experts).
+        The degree of parallelism.
     bayesian : bool
         Whether the model is Bayesian (which would double the parameter count).
 

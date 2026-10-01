@@ -148,50 +148,6 @@ def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
     }
 
 
-def parse_latest_model_state(directory: str) -> dict[str, Any]:
-    """
-    Parse the latest model state and return checkpoint.
-
-    Given a directory where several checkpoints have been stored,
-    this function looks through the directory, finds the latest
-    point in training, and returns the dictionary for the relevant checkpoint.
-
-    Parameters
-    ----------
-    directory: str
-        Directory of all the checkpoints.
-
-    Returns
-    -------
-    checkpoint: dict
-        Dictionary containing model and optimizer states, epochs, and other information
-        stored in the checkpoint.
-
-    """
-    path_base = os.path.join(directory)
-
-    checkpoints: list[str] = [
-        fname for fname in os.listdir(path_base) if fname.endswith(".pt")
-    ]
-    local_checkpoint = ""
-
-    parsed: list[Dict[str, Any]] = []
-    for fname in checkpoints:
-        info = parse_checkpoint_path(fname)
-        if info is None:
-            continue
-        parsed.append(info)
-
-    if parsed:
-        latest = max(parsed, key=lambda x: (x["epoch"], x["step"]))
-        local_checkpoint = latest["fname"]
-
-    full_path = os.path.join(path_base, local_checkpoint)
-    checkpoint = load_checkpoint(full_path)
-
-    return checkpoint
-
-
 def load_state_dict(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer | None,
