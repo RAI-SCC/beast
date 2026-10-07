@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 import xarray as xr
-from torch import Tensor
 from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
@@ -139,7 +138,7 @@ class ERA5Distributed(Dataset):
 
         self.datapath = data_path
         self.years = time_range
-        self.mask_path = constant_masks_path
+        self.mask_path: str = constant_masks_path
         self.rollout = rollout
         mask_list = constant_masks
 
@@ -207,6 +206,24 @@ class ERA5Distributed(Dataset):
         else:
             load_data()
 
+        self._setup_domain_decomposition()
+
+        self.transform = transform
+        if target_transform is None:
+            self.target_transform = transform
+        else:
+            self.target_transform = target_transform
+
+        try:
+            _ = self.__getitem__(0)
+        except Exception as err:
+            raise RuntimeError(
+                "Dataset was instantiated, but data items cannot be loaded. Data "
+                "seems to be empty, or does not contain `fields`."
+            ) from err
+
+    def _setup_domain_decomposition(self) -> None:
+        """Compute the rank local shards of variables, masks and longitude, and the padding of odd ranks."""
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
@@ -277,27 +294,12 @@ class ERA5Distributed(Dataset):
             self.input_pad_oddrank = 0
             self.output_pad_oddrank = 0
 
-        self.transform = transform
-        if target_transform is None:
-            self.target_transform = transform
-        else:
-            self.target_transform = target_transform
-
-        try:
-            _ = self.__getitem__(0)
-        except Exception as err:
-            raise RuntimeError(
-                "Dataset was instantiated, but data items cannot be loaded. Data "
-                "seems to be empty, or does not contain `fields`."
-            ) from err
-
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
             self.n_data_items
-            - (self.in_timesteps + self.rollout* self.out_timesteps - 1)
+            - (self.in_timesteps + self.rollout * self.out_timesteps - 1)
             * (self.dt // SUBSAMPLING_FACTOR)
-        
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
@@ -470,84 +472,12 @@ class ERA5Distributed(Dataset):
         return self._padsample(input, self.input_pad_oddrank)
 
 
-class ERA5Dummy(Dataset):
+class ERA5Dummy(ERA5Distributed):
     """
     Generates a dummy dataset, returning tensors (input, target) for a specified shape.
 
     In a distributed (domain-parallel) setting, each process generates only it's shard of the channels and spatial latitude.
     Both input and target can consist of one or more timesteps, which are concatenated in the channel dimension.
-
-    Attributes
-    ----------
-    dtype : torch.dtype
-        dtype of the input and target tensors to be generated
-    world_size : int
-        The size of the domain-parallel process group.
-    local_rank : int
-        The rank withing the domain-parallel process group.
-    fill_value : int
-        The value with which data samples (input and target) will be filled. If None, tensors will be filled with numbers
-    years : Tuple(str,st)
-        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
-    in_timesteps : int
-        Number of timesteps to be concatenated for the input
-    out_timesteps : int
-        Number of timesteps to be concatenated for the target
-    dt : int
-        The temporal subsampling timestep in hours
-    n_data_items:
-        Number of data samples (time steps) in self.zarr_data
-    xlat : int
-        Global size of data samples in self.zarr_data in the latitude dimension
-    xlon : int
-        Global size of data samples in self.zarr_data in the longitude dimension
-    n_variables: int
-        Global number of variables (channels) in self.zarr_data
-    constant_masks: torch.Tensor
-        Tensor with the local shard of the constant masks (chunked in channels and longitude)
-    n_masks : int
-        Number of constant masks
-    in_var : Tuple(int, int)
-        The start and stop value of the range of channels for this particluar rank
-    in_masks: Tuple(int, int)
-        The start and stop value of the range of masks for this particluar rank
-    in_out_xlat : Tuple(int, int)
-        The start and stop value of the spatial range (in the latitude) for this particluar rank
-    in_out_xlon : Tuple(int, int)
-        The start and stop value of the spatial range (in the longitude) for this particluar rank
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    rollout: int
-        The number of rollout steps to be performed
-
-    Parameters
-    ----------
-    pg_rank : int
-        The domain-parallel process group rank.
-    pg_size : int
-        The size of the domain-parallel process group.
-    global shape : Tuple(int, int, int)
-        The [channel, latitude, longitude] dimensions of the individual data "time steps" that are generated
-    fill_value : int
-        A fill value with which input and target are filled. If `None`, random tensors will be generated
-    time_range : Tuple(str,st)
-        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
-    dt : int
-        The temporal subsampling timestep in hours
-    n_in_timesteps : int
-        The number of input time setps
-    n_out_timesteps : int
-        The number of output time setps
-    dtype : torch.dtype
-        The dtype for input and target tensors
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    rollout: int
-        The number of rollout steps to be performed
     """
 
     def __init__(
@@ -563,13 +493,12 @@ class ERA5Dummy(Dataset):
         dtype: torch.dtype = torch.float32,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
-        rollout: int = 1
+        rollout: int = 1,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
         self.out_timesteps = n_out_timesteps
         self.rollout = rollout
-
 
         self.dtype = dtype
         self.world_size = pg_size
@@ -595,50 +524,14 @@ class ERA5Dummy(Dataset):
         if self.xlon % 2 == 1:
             self.xlon -= 1
 
+        # The dummy dataset has no constant masks, so the variable imbalance is fully padded on odd ranks
+        self.mask_path = ""
+        self.constant_masks = np.zeros((0, self.xlat, self.xlon))
+        self.n_masks = 0
+
         self.in_out_xlat = [0, self.xlat]
-        if self.world_size > 1:
-            row, col = self.local_rank % 2, self.local_rank // 2
-            # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            if row == 0:
-                self.in_var = (
-                    0,
-                    (
-                        self.n_variables // 2
-                        if self.n_variables % 2 == 0
-                        else self.n_variables // 2 + 1
-                    ),
-                )
-            else:
-                self.in_var = (
-                    (
-                        self.n_variables // 2
-                        if self.n_variables % 2 == 0
-                        else self.n_variables // 2 + 1
-                    ),
-                    self.n_variables,
-                )
+        self._setup_domain_decomposition()
 
-            # We split the channels into two ranks; however, if we have an odd number of channels this will
-            # result in rank 0 having one more variable.
-            # since we do this for each timestep we accumulate an inbalance in the rank=1 channel group
-            self.input_pad_oddrank = (self.n_variables % 2) * self.in_timesteps
-            self.output_pad_oddrank = (self.n_variables % 2) * self.out_timesteps
-
-
-            # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
-            self.in_out_xlon = (
-                col * self.xlon // (self.world_size // 2),
-                (col + 1) * self.xlon // (self.world_size // 2),
-            )
-
-        else:
-            # Single-rank (no domain parallelism): all variables.
-            self.in_var = (0, self.n_variables)
-            self.in_out_xlon = (0, self.xlon)
-            self.input_pad_oddrank = 0
-            self.output_pad_oddrank = 0
-
-        
         self.transform = transform
         if target_transform is None:
             self.target_transform = transform
@@ -648,10 +541,16 @@ class ERA5Dummy(Dataset):
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
-            self.n_data_items - (self.in_timesteps + self.rollout* self.out_timesteps - 1) * self.dt
+            self.n_data_items
+            - (self.in_timesteps + self.rollout * self.out_timesteps - 1) * self.dt
         )
 
-    def _get_sample_list(self, idx: int, steps: int, shape: int) -> list[torch.Tensor]:
+    def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
+        shape = (
+            self.in_var[1] - self.in_var[0],
+            self.in_out_xlat[1] - self.in_out_xlat[0],
+            self.in_out_xlon[1] - self.in_out_xlon[0],
+        )
         sample_list = []
         for _ in range(steps):
             if self.fill_value:
@@ -662,59 +561,6 @@ class ERA5Dummy(Dataset):
             sample_list.append(torch.tensor(sample, dtype=self.dtype))
 
         return sample_list
-
-    def _padsample(self, sample: torch.Tensor, inbalance: int) -> torch.Tensor:
-        # For distributed dataset, we may create inbalances in the variables
-        if self.world_size > 1:
-            # Odd ranks load second half of variables, so they might have less masks
-            if (inbalance != 0) and (self.local_rank % 2 == 1):
-                # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
-                sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
-        return sample
-
-
-    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
-        """
-        Return single input, target.
-
-        Parameters
-        ----------
-        idx: int
-            Global index of item
-
-        Returns
-        -------
-        input : Tensor
-            The input sample of shape [channel shard * number of input timesteps, xlat, longitudinal shard].
-
-        target : Tensor
-            The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
-        """
-        shape = (
-            self.in_var[1] - self.in_var[0],
-            self.in_out_xlat[1] - self.in_out_xlat[0],
-            self.in_out_xlon[1] - self.in_out_xlon[0],
-        )
-
-        input_list = self._get_sample_list(idx, steps=self.in_timesteps, shape=shape)
-        input = torch.cat(input_list, dim=0)
-        input = self._padsample(input, self.input_pad_oddrank)
-
-        # Output data
-        target_list = self._get_sample_list(
-            idx, steps=self.out_timesteps * self.rollout, shape=shape
-        )
-        target = torch.cat(target_list, dim=0)
-        target = self._padsample(target, self.output_pad_oddrank)
-
-        if self.transform is not None:
-            input = self.transform(input)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return input, target
-
 
 
 @dc.dataclass
