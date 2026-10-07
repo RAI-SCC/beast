@@ -5,7 +5,7 @@ from typing import Any
 from beast.model.gb.beast_model import Beast
 
 BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
-    "BEAST-JUPITER-2.6B-64K": {
+    "BEAST-JUPITER-2.4B-64K": {
         "class": Beast,
         "config": {
             "height": 720,
@@ -13,7 +13,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "in_channels": 88,
             "out_channels": 84,
             "embed_dim": 3072,
-            "heads": [12, 24, 12],
+            "heads": [24, 48, 24],
             "kernel_size": 2,
             "stride": 2,
             "padding": 0,
@@ -49,7 +49,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "nice_norm": True,
         },
     },
-    "BEAST-LUMI-1.2B-1.8K": {
+    "BEAST-LUMI-1.1B-64K": {
         "class": Beast,
         "config": {
             "height": 720,
