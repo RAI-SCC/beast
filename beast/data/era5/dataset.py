@@ -73,6 +73,8 @@ class ERA5Distributed(Dataset):
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    rollout: int
+        The number of rollout steps to be performed
 
 
     Parameters
@@ -105,7 +107,8 @@ class ERA5Distributed(Dataset):
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-
+    rollout: int
+        The number of rollout steps to be performed
     """
 
     def __init__(
@@ -292,9 +295,9 @@ class ERA5Distributed(Dataset):
         """Return total number of samples."""
         return int(
             self.n_data_items
-            - (self.in_timesteps + self.out_timesteps - 1)
+            - (self.in_timesteps + self.rollout* self.out_timesteps - 1)
             * (self.dt // SUBSAMPLING_FACTOR)
-            * self.rollout
+        
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
@@ -516,6 +519,8 @@ class ERA5Dummy(Dataset):
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    rollout: int
+        The number of rollout steps to be performed
 
     Parameters
     ----------
@@ -541,7 +546,8 @@ class ERA5Dummy(Dataset):
         The transformation to be applied to the input weather data
     target_transform: Callable
         The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-
+    rollout: int
+        The number of rollout steps to be performed
     """
 
     def __init__(
@@ -557,10 +563,13 @@ class ERA5Dummy(Dataset):
         dtype: torch.dtype = torch.float32,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
+        rollout: int = 1
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
         self.out_timesteps = n_out_timesteps
+        self.rollout = rollout
+
 
         self.dtype = dtype
         self.world_size = pg_size
@@ -577,7 +586,7 @@ class ERA5Dummy(Dataset):
             min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
         print(f"Dummy Dataset max_date {max_date}, min_date {min_date} ")
 
-        self.num_vars, self.xlat, self.xlon = global_shape
+        self.n_variables, self.xlat, self.xlon = global_shape
         self.n_data_items = int((max_date - min_date).days * 24)
         print(f"Dummy Dataset n_data_items {self.n_data_items} ")
 
@@ -590,16 +599,46 @@ class ERA5Dummy(Dataset):
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
-            self.in_out_xlon = [
+            if row == 0:
+                self.in_var = (
+                    0,
+                    (
+                        self.n_variables // 2
+                        if self.n_variables % 2 == 0
+                        else self.n_variables // 2 + 1
+                    ),
+                )
+            else:
+                self.in_var = (
+                    (
+                        self.n_variables // 2
+                        if self.n_variables % 2 == 0
+                        else self.n_variables // 2 + 1
+                    ),
+                    self.n_variables,
+                )
+
+            # We split the channels into two ranks; however, if we have an odd number of channels this will
+            # result in rank 0 having one more variable.
+            # since we do this for each timestep we accumulate an inbalance in the rank=1 channel group
+            self.input_pad_oddrank = (self.n_variables % 2) * self.in_timesteps
+            self.output_pad_oddrank = (self.n_variables % 2) * self.out_timesteps
+
+
+            # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
+            self.in_out_xlon = (
                 col * self.xlon // (self.world_size // 2),
                 (col + 1) * self.xlon // (self.world_size // 2),
-            ]
+            )
 
         else:
-            self.in_var = [0, self.num_vars]
-            self.in_out_xlon = [0, self.xlon]
+            # Single-rank (no domain parallelism): all variables.
+            self.in_var = (0, self.n_variables)
+            self.in_out_xlon = (0, self.xlon)
+            self.input_pad_oddrank = 0
+            self.output_pad_oddrank = 0
 
+        
         self.transform = transform
         if target_transform is None:
             self.target_transform = transform
@@ -609,8 +648,30 @@ class ERA5Dummy(Dataset):
     def __len__(self) -> int:
         """Return total number of samples."""
         return int(
-            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
+            self.n_data_items - (self.in_timesteps + self.rollout* self.out_timesteps - 1) * self.dt
         )
+
+    def _get_sample_list(self, idx: int, steps: int, shape: int) -> list[torch.Tensor]:
+        sample_list = []
+        for _ in range(steps):
+            if self.fill_value:
+                sample = torch.full(shape, self.fill_value, dtype=self.dtype)
+            else:
+                sample = torch.rand(shape, dtype=self.dtype)
+
+            sample_list.append(torch.tensor(sample, dtype=self.dtype))
+
+        return sample_list
+
+    def _padsample(self, sample: torch.Tensor, inbalance: int) -> torch.Tensor:
+        # For distributed dataset, we may create inbalances in the variables
+        if self.world_size > 1:
+            # Odd ranks load second half of variables, so they might have less masks
+            if (inbalance != 0) and (self.local_rank % 2 == 1):
+                # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
+                sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
+        return sample
+
 
     def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
         """
@@ -629,23 +690,22 @@ class ERA5Dummy(Dataset):
         target : Tensor
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
-        shape_in = (
-            (self.in_var[1] - self.in_var[0]) * self.in_timesteps,
-            self.in_out_xlat[1] - self.in_out_xlat[0],
-            self.in_out_xlon[1] - self.in_out_xlon[0],
-        )
-        shape_out = (
-            (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
+        shape = (
+            self.in_var[1] - self.in_var[0],
             self.in_out_xlat[1] - self.in_out_xlat[0],
             self.in_out_xlon[1] - self.in_out_xlon[0],
         )
 
-        if self.fill_value:
-            input = torch.full(shape_in, self.fill_value, dtype=self.dtype)
-            target = torch.full(shape_out, self.fill_value, dtype=self.dtype)
-        else:
-            input = torch.rand(shape_in, dtype=self.dtype)
-            target = torch.rand(shape_out, dtype=self.dtype)
+        input_list = self._get_sample_list(idx, steps=self.in_timesteps, shape=shape)
+        input = torch.cat(input_list, dim=0)
+        input = self._padsample(input, self.input_pad_oddrank)
+
+        # Output data
+        target_list = self._get_sample_list(
+            idx, steps=self.out_timesteps * self.rollout, shape=shape
+        )
+        target = torch.cat(target_list, dim=0)
+        target = self._padsample(target, self.output_pad_oddrank)
 
         if self.transform is not None:
             input = self.transform(input)
@@ -654,6 +714,7 @@ class ERA5Dummy(Dataset):
             target = self.target_transform(target)
 
         return input, target
+
 
 
 @dc.dataclass
