@@ -109,12 +109,13 @@ class TestDataLoader:
         dtp_size = 4
         dp_rank = 0
         dp_size = 1
+        n_time = 48
         time_coords = pd.date_range(
             "2024-01-01", periods=n_time + 1, freq="h"
         ).strftime("%Y-%m-%d")
         config_dict["data"]["train_time_range"] = [time_coords[0], time_coords[-1]]
 
-       with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             dataloader = get_dataloader(
                 config_dict,
                 dtp_rank,
