@@ -77,7 +77,7 @@ def get_dataloader(
     Create a GBDataLoader instance from config specifications.
 
     If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
-    If no valid path is given (i.e. if the path doesn't exist), it will create a dummy dataset for the time range specified in the config file, filled with random numbers.
+    If no valid path is given (i.e. if the path doesn't exist), it will throw an error.
 
     Parameters
     ----------
@@ -139,29 +139,145 @@ def get_dataloader(
         )
     else:
         if dist.get_rank(group=None) == 0:
-            warnings.warn(
-                f"`{data_path}` not found. Running dummy dataset for time range {years}",
-                UserWarning,
+            raise FileNotFoundError(
+                f"`{data_path}` not found. "
             )
+    # if train_subset <=0, the entire dataset will be used for training
+    if (
+        mode == "train"
+        and config_dict["data"]["train_subset"] > 0
+        and (config_dict["data"]["train_subset"] < len(dataset))
+    ):
+        subset_indices = torch.arange(config_dict["data"]["train_subset"])
+        dataset = Subset(dataset, subset_indices.tolist())
+    # if valid_subset <=0, the entire dataset will be used for validation
+    elif (
+        mode == "validation"
+        and config_dict["data"]["valid_subset"] > 0
+        and (config_dict["data"]["valid_subset"] < len(dataset))
+    ):
+        subset_indices = torch.arange(config_dict["data"]["valid_subset"])
+        dataset = Subset(dataset, subset_indices.tolist())
 
-        shape = (
-            config_dict["data"]["n_variables"],
-            config_dict["data"]["xlat"],
-            config_dict["data"]["xlon"],
-        )
-        dataset = ERA5Dummy(
-            pg_rank=dtp_rank,
-            pg_size=dtp_size,
-            global_shape=shape,
-            time_range=years,
-            dt=config_dict["data"]["dt"],
-            n_in_timesteps=config_dict["data"]["n_in_timesteps"],
-            n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype,
-            transform=transform,
-            target_transform=target_transform,
-            **kwargs,
-        )
+    sampler = ResumableDistributedSampler(
+        dataset,
+        shuffle=True,
+        rank=dp_rank,
+        num_replicas=dp_size,
+        seed=42,
+        resume_idx=0,  # set from checkpoint on resume
+    )
+
+    dataloader = GBDataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        drop_last=True,
+        pin_memory=torch.cuda.is_available(),
+        prefetch_factor=config_dict["data"]["prefetch_factor"],
+        num_workers=config_dict["data"]["num_workers"],
+        persistent_workers=True,
+    )
+
+    return dataloader
+
+
+def get_dummy_dataloader(
+    config_dict: dict[str, Any],
+    dtp_rank: int,
+    dtp_size: int,
+    dp_rank: int,
+    dp_size: int,
+    mode: str = "train",
+    transform: Callable | None = None,
+    target_transform: Callable | None = None,
+    **kwargs: dict,
+) -> GBDataLoader:
+    """
+    Create a GBDataLoader instance from config specifications, using the dummy dataset.
+
+    The dataloader will create a dummy dataset for the time range specified in the config file, filled with random numbers. Details on how the data shape should be can be passed via the config. If not available, it will fall back to hard-coded default values from ERA5.
+
+    Parameters
+    ----------
+    config_dict : Dict
+        The configuration dictionary, that contains information on the dataset, i.e. the shapes of the data to be created, specifications of the time frame to be used, etc.
+    dtp_rank : int
+        The rank in the domain-tensor-parallel process group, that shares a model and a data item
+    dtp_size : int
+        The size of the domain-tensor-parallel process group, that shares a model and a data item
+    dp_rank : int
+        The rank in the data-parallel process group, that shares a model and a data item
+    dp_size : int
+        The size of the data-parallel process group (torch.DistributedDataParallel)
+    mode : str
+        The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
+    transform: Callable
+        The transformation to be applied to the input weather data
+    target_transform: Callable
+        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
+    **kwargs:
+        Additional options that can be forwarded to the Dataset object.
+
+    Returns
+    -------
+    dataloader : GBDataLoader
+        The dataloader instance
+    """
+
+    if mode == "train":
+        years = config_dict["data"]["train_time_range"]
+    elif mode == "validation":
+        years = config_dict["data"]["valid_time_range"]
+    else:
+        years = None
+
+    batch_size = config_dict["training"]["batch_size"]
+    dtype = set_dtype(config_dict["training"]["dtype"])
+
+    dataset: torch.utils.data.Dataset
+
+    #Hardcode shapes to original ERA5 data sizes
+    if "xlat" in config_dict["data"]:
+        xlat = config_dict["data"]["xlat"]
+    else:
+        xlat = 721
+    
+    if "xlon" in config_dict["data"]:
+        xlon = config_dict["data"]["xlon"]
+    else:
+        xlon = 1440
+
+    if "n_variables" in config_dict["data"]:
+        n_variables = config_dict["data"]["n_variables"]
+    else:
+        n_variables = 84
+
+    if "dt" in config_dict["data"]:
+        dt = config_dict["data"]["dt"]
+    else:
+        dt = 6
+
+    shape = (
+        n_variables,
+        xlat,
+        xlon
+    )
+
+    dataset = ERA5Dummy(
+        pg_rank=dtp_rank,
+        pg_size=dtp_size,
+        global_shape=shape,
+        time_range=years,
+        dt=config_dict["data"]["dt"],
+        n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+        n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+        dtype=dtype,
+        transform=transform,
+        target_transform=target_transform,
+        **kwargs,
+    )
 
     # if train_subset <=0, the entire dataset will be used for training
     if (
