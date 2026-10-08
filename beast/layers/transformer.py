@@ -5,7 +5,7 @@ import os
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, hooks  # type: ignore
+from jigsaw import attention, parallel  # type: ignore
 from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
 
 from beast.layers import mlp, nice_norm
@@ -321,14 +321,12 @@ class DistributedTransformer(torch.nn.Module):
         for p in itertools.chain(
             self.layer_norm1.parameters(), self.layer_norm2.parameters()
         ):
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(spatial_group)
-            )
+            parallel.mark_replicated(p, spatial_group, extend=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of distributed windowed transformer."""
-        x = self.attention_block(self.layer_norm1(x)) + x
-        x = self.mlp(self.layer_norm2(x)) + x
+        x = self.attention_block(mlp.synced_call(self.layer_norm1, x)) + x
+        x = self.mlp(mlp.synced_call(self.layer_norm2, x)) + x
         return x
 
 
@@ -437,12 +435,12 @@ class DistributedNICETransformer(torch.nn.Module):
             bayesian=bayesian,
         ).to(device)
 
+        # DistributedMLPNICE already marks every NICE norm parameter over the
+        # spatial group; extend=True keeps this a no-op rather than a second sum.
         for p in itertools.chain(
             self.layer_norm1.parameters(), self.layer_norm2.parameters()
         ):
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(spatial_group)
-            )
+            parallel.mark_replicated(p, spatial_group, extend=True)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """

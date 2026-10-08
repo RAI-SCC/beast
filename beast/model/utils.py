@@ -2,13 +2,13 @@
 
 import types
 
-import jigsaw.hooks as hooks  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
-from jigsaw import normalization  # type: ignore[import-not-found]
+from jigsaw import normalization, parallel  # type: ignore[import-not-found]
 from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
+from torch._C._functorch import get_unwrapped
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 
@@ -16,11 +16,55 @@ if JIGSAW_TE_AVAILABLE:
     import transformer_engine.pytorch as te
 
 
+def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | None:
+    """Draw a sample like ``VIModule.sample_variable``, through ``parallel.sync_grad``.
+
+    Only the sample sees the synced variational parameters, so only the data
+    fitting gradient is summed over their replica groups. The prior matching
+    term reads the raw parameters (``get_variational_parameters``, from the
+    loss) and keeps its full, replicated gradient, which DDP then averages.
+    """
+    if self.variational_distribution[variable] is None:
+        return None
+
+    variational_parameters = parallel.sync_grad(
+        *self.get_variational_parameters(variable)
+    )
+    sample = self.variational_distribution[variable].sample(*variational_parameters)
+
+    if self.return_log_probs:
+        log_probs = self.get_log_probs(sample, variable)
+        try:
+            log_probs = get_unwrapped(log_probs)
+        except RuntimeError:
+            pass
+        self._log_probs[variable].append(log_probs)
+    return sample
+
+
+def _fast_forward_synced(self: vi.VIModule, input_: torch.Tensor) -> torch.Tensor:
+    """Run a torch_blue fast path (e.g. ``VILinear``'s) through ``parallel.sync_grad``.
+
+    The fast path reads the variational parameters directly instead of calling
+    ``sample_variable``, so it gets the synced parameters swapped in for the
+    call. Inside that call they carry no mark, so the re-entered fast path finds
+    nothing left to sync. Must not be used on the outermost module, whose
+    forward samples.
+    """
+    synced = parallel.synced_parameters(self)
+    if not synced:
+        out: torch.Tensor = type(self)._fast_forward(self, input_)  # type: ignore[attr-defined]
+        return out
+    out = torch.func.functional_call(self, synced, (input_,))
+    return out
+
+
 @torch.no_grad()
 def convert_jigsaw_vi(
     module: torch.nn.Module,
     channel_pg: dist.ProcessGroup,
     spatial_pg: dist.ProcessGroup,
+    up_pg: dist.ProcessGroup | None,
     variational_distribution: vidist.base.Distribution = vidist.Normal(std=0.15),
     prior: vidist.base.Distribution = vidist.Normal(),
     rescale_prior: bool = False,
@@ -30,6 +74,14 @@ def convert_jigsaw_vi(
 ) -> None:
     """Convert a PyTorch module to a VI module using torch_blue, with custom handling for Jigsaw's specific layers and normalization.
 
+    Every parameter is then marked replicated (``jigsaw.parallel``) over the
+    groups it was marked with before the conversion, plus ``up_pg``: ensemble
+    members share their parameters, and each Uncertainty Parallelism rank only
+    sees the gradient of its own members. Weight samples are drawn through
+    ``parallel.sync_grad``, so that partial gradient is summed over the replica
+    groups in the backward pass. Wrap the result in DDP over the data-parallel
+    axis only (:func:`beast.comm.wrap_ddp`).
+
     Parameters
     ----------
     module : torch.nn.Module
@@ -37,7 +89,11 @@ def convert_jigsaw_vi(
     channel_pg : dist.ProcessGroup
         The process group for channel parallelism.
     spatial_pg : dist.ProcessGroup
-        The process group for spatial parallelism.
+        The process group for spatial parallelism. Every parameter must be
+        marked replicated over it once converted.
+    up_pg : dist.ProcessGroup | None
+        The process group for Uncertainty Parallelism (``SP``), or None if the
+        ensemble is not distributed.
     variational_distribution : torch_blue.vi.distributions.Distribution, optional
         The variational distribution to use for the VI conversion, by default vidist.Normal(std=0.15)
     prior : torch_blue.vi.distributions.Distribution, optional
@@ -50,6 +106,12 @@ def convert_jigsaw_vi(
         Whether to initialize the variational parameters based on the prior, by default False
     return_log_probs : bool, optional
         Whether the converted module should return log probabilities, by default True
+
+    Raises
+    ------
+    RuntimeError
+        If a parameter is not marked replicated over ``spatial_pg``. DDP no longer
+        averages over the spatial axis, so its copies would drift apart.
     """
     # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
@@ -59,6 +121,13 @@ def convert_jigsaw_vi(
     if JIGSAW_TE_AVAILABLE:
         vi.utils.convert.ban_convert(te.DotProductAttention)
         vi.utils.convert.ban_convert(te.DotProductAttention, ban_mode="submodule")
+
+    # The conversion replaces each parameter with fresh variational parameters,
+    # which carry none of the replica marks of the tensor they replace.
+    marks = {
+        m: {name: parallel.replica_groups(p) for name, p in m._parameters.items()}
+        for m in module.modules()
+    }
 
     vi.convert_to_vimodule(
         module,
@@ -89,12 +158,39 @@ def convert_jigsaw_vi(
             m._calculate_fan_in = types.MethodType(new_cf_channel, m)
             m.reset_variational_parameters()
 
-        if isinstance(m, vi.VIModule):
-            for p in m.parameters(recurse=False):
-                p.register_post_accumulate_grad_hook(
-                    hooks.make_grad_sync_hook(spatial_pg)
-                )
-                dist.broadcast(p.data, group_src=0, group=spatial_pg)
+        if isinstance(m, vi.VIModule) and m.random_variables is not None:
+            for var in m.random_variables:
+                if m.variational_distribution[var] is None:
+                    continue
+                for p in m.get_variational_parameters(var):
+                    parallel.mark_replicated(p, marks.get(m, {}).get(var, ()))
+            m.sample_variable = types.MethodType(_sample_variable_synced, m)  # type: ignore[method-assign]
+            if hasattr(type(m), "_fast_forward"):
+                m._fast_forward = types.MethodType(_fast_forward_synced, m)  # type: ignore[assignment]
+
+    for p in module.parameters():
+        parallel.mark_replicated(p, [up_pg], extend=True)
+
+    if spatial_pg is not None and spatial_pg.size() > 1:
+        spatial_ranks = dist.get_process_group_ranks(spatial_pg)
+        unmarked = [
+            name
+            for name, p in module.named_parameters()
+            if all(
+                dist.get_process_group_ranks(g) != spatial_ranks
+                for g in parallel.replica_groups(p)
+            )
+        ]
+        if unmarked:
+            raise RuntimeError(
+                f"{len(unmarked)} parameter(s) are not marked replicated over the "
+                f"spatial group, e.g. {unmarked[:5]}. Mark them with "
+                "jigsaw.parallel.mark_replicated where they are created and route "
+                "their module through jigsaw.parallel.synced_parameters."
+            )
+
+    # Conversion reinitialized the variational parameters on every rank.
+    parallel.broadcast_replicas(module)
 
 
 # TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.

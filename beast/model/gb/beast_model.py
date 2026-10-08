@@ -4,7 +4,7 @@ from typing import Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear, roll  # type: ignore
+from jigsaw import linear, parallel, roll  # type: ignore
 from jigsaw.modules.convolution import DistributedConv2D, DistributedConv2DTranspose
 
 from beast.layers import transformer
@@ -474,11 +474,11 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
+        # The weight is replicated over the spatial group too; DistributedXWT
+        # marks only its bias, over row_group, and syncs both in its forward.
         for p in self.upsample_mix.parameters():
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            parallel.mark_replicated(p, self.spatial_group, extend=True)
+        parallel.broadcast_replicas(self.upsample_mix)
 
     def _build_sequential_model(self) -> None:
 

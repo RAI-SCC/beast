@@ -93,7 +93,9 @@ class TestDistBeastlingModel:
                 device=device,
             )
             if bayesian:
-                convert_jigsaw_vi(model, jchannel_pg, jspatial_pg)
+                convert_jigsaw_vi(
+                    model, jchannel_pg, jspatial_pg, process_mesh_dict["SP"]
+                )
                 y = model(x, samples=2)
                 assert y.shape == (
                     2,
@@ -229,7 +231,7 @@ class TestBeastlingInit:
             device=device,
         ).to(device)
         if bayesian:
-            convert_jigsaw_vi(model, jchannel_pg, jspatial_pg)
+            convert_jigsaw_vi(model, jchannel_pg, jspatial_pg, process_mesh_dict["SP"])
 
         # --- JSpatial: everything replicated -------------------------------
         not_replicated = [

@@ -69,7 +69,7 @@ class TestProcessorMesh:
 
         process_mesh_dict = create_process_mesh_dict(mesh_dims=mesh_dims)
         assert isinstance(process_mesh_dict, dict)
-        expected_keys = {"DP", "SP", "JSpatial", "JChannel", "DTP", "DDP"}
+        expected_keys = {"DP", "SP", "JSpatial", "JChannel", "DTP", "DDP", "DPSP"}
         assert set(process_mesh_dict.keys()) == expected_keys
 
         get_process_group("DP")
@@ -78,6 +78,7 @@ class TestProcessorMesh:
         get_process_group("JChannel")
         get_process_group("DTP")
         get_process_group("DDP")
+        get_process_group("DPSP")
 
         with pytest.raises(ValueError, match="Process group 'InvalidGroup' not found."):
             get_process_group("InvalidGroup")

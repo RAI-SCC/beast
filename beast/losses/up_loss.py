@@ -38,7 +38,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         model: vi.VIModule,
         dataset_size: int,
         up_group: Optional[dist.ProcessGroup] = None,
-        sync_group: Optional[dist.ProcessGroup] = None,
         feature_weights: Optional[Tensor] = None,
         heat: float = 1.0,
         track: bool = False,
@@ -54,7 +53,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         )
 
         self.up_group = up_group if up_group is not None else dist.group.WORLD
-        self.sync_group_size = sync_group.size() if sync_group else 1
 
         if feature_weights is None:
             self.feature_weights = None
@@ -140,7 +138,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             self.up_group,
             *self._get_flat_params(),
             self.feature_weights,
-            self.sync_group_size,
         )
 
         data_fit = self.data_fitting(mean, std, expert_target)
@@ -184,7 +181,6 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         variational_means: Tensor,
         variational_log_stds: Tensor,
         feature_weights: Optional[Tensor] = None,
-        weight_synchronization_factor: Optional[int] = 1,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """
         Forward pass for mean-std / prior matching aggregation.
@@ -205,8 +201,6 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Log standard deviations of the variational distributions.
         feature_weights : Tensor, default: None
             Feature weights to apply to the aggregation.
-        weight_synchronization_factor: int, default: 1
-            Size of the ProcessGroup that gradients are summed over (typically jspatial)
 
         Returns
         -------
@@ -292,11 +286,9 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             variational_means,
             variational_log_stds,
             feature_weights,
-            weight_synchronization_factor,
         ) = inputs
         mean, std, prior_matching, variance_ratio, mse_part_half = outputs
 
-        ctx.weight_synchronization_factor = weight_synchronization_factor
         ctx.mark_non_differentiable(variance_ratio, mse_part_half)
         ctx.up_process_group = up_process_group
         ctx.save_for_backward(samples, mean, std, variance_ratio, mse_part_half)
@@ -309,7 +301,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_pm: Tensor,
         grad_vr: None,
         grad_mse_half: None,
-    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None, None]:
+    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None]:
         """
         Backward pass for mean-std / prior matching aggregation.
 
@@ -344,11 +336,19 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Gradient with respect to the variational_log_stds.
         None
             No gradient for the feature_weights.
-        None
-            No gradient for the weight_synchronization_factor
+
+        Notes
+        -----
+        Both gradients are this rank's view only; the reduction over the mesh
+        is left to the parameters' replica marks (see
+        :func:`beast.model.utils.mark_ensemble_replicated`). ``grad_samples``
+        covers this rank's ensemble members and domain shard, so those partials
+        are *summed* over the replica axes in the model's backward. The prior
+        matching gradient is computed in full on every replica, reaches the
+        variational parameters outside the model's forward, and is therefore
+        only *averaged*, by DDP.
         """
         up_process_group = ctx.up_process_group
-        weight_synchronization_factor = ctx.weight_synchronization_factor
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
 
         n_loc = samples.shape[0]
@@ -363,18 +363,17 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             samples - mean
         ) / std
 
-        grad_pm = (grad_pm / weight_synchronization_factor).expand_as(variance_ratio)
+        grad_pm = grad_pm.expand_as(variance_ratio)
         grad_var_means = grad_pm * mse_part_half
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
         return (
-            (grad_samples * up_process_group.size()),
+            grad_samples,
             None,
             None,
             None,
             grad_var_means,
             grad_var_log_stds,
-            None,
             None,
         )
 

@@ -14,6 +14,7 @@ from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
+from jigsaw import parallel  # type: ignore[import-not-found]
 from torch.nn.parallel import DistributedDataParallel
 
 _process_group_dict: dict[str, dist.ProcessGroup] = {}
@@ -47,8 +48,16 @@ def create_process_mesh_dict(
     Notes
     -----
     The returned dictionary contains groups for the following keys:
-    ``DP``, ``SP``, ``JSpatial``, ``JChannel``, plus combined
-    groups ``DTP`` and ``DDP`` used for different parallelism strategies.
+    ``DP``, ``SP``, ``JSpatial``, ``JChannel``, plus combined groups:
+
+    * ``DTP`` (``JSpatial x JChannel``): one model-parallel instance.
+    * ``DDP`` (``DP x SP x JSpatial``): every rank holding the same model shard;
+      used to pick one checkpoint writer per shard. Despite its name, it is
+      *not* the group to wrap DDP over: ``JSpatial`` (and, for a Bayesian model,
+      ``SP``) are replica axes that jigsaw reduces itself, which
+      ``jigsaw.parallel.check_ddp`` rejects in a DDP group.
+    * ``DPSP`` (``DP x SP``): the DDP group of a deterministic model, whose
+      ``SP`` ranks are plain copies. A Bayesian model uses ``DP``.
     """
     if not dist.is_initialized():
         raise RuntimeError("Distributed process group is not initialized.")
@@ -86,6 +95,7 @@ def create_process_mesh_dict(
     _process_group_dict["DDP"] = (
         _mesh["DP", "SP", "JSpatial"]._flatten("DDP").get_group()
     )
+    _process_group_dict["DPSP"] = _mesh["DP", "SP"]._flatten("DPSP").get_group()
 
     visualize_process_mesh()
 
@@ -169,7 +179,7 @@ def visualize_process_mesh() -> None:
     * ``gpu``       -- the local device (GPU) id of the rank
     * ``global``    -- the global rank in the default process group
     * one column per group (``DP``, ``SP``, ``JSpatial``, ``JChannel``,
-      ``DTP``, ``DDP``) showing the rank *within* that group.
+      ``DTP``, ``DDP``, ``DPSP``) showing the rank *within* that group.
 
     Notes
     -----
@@ -246,8 +256,8 @@ def shutdown_comm() -> None:
       collective, including the ``all_gather_object`` in
       :func:`visualize_process_mesh`. On torch 2.14 ``init_device_mesh`` hands
       out a distinct group per dimension, so the skip is a no-op there.
-    * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
-      so the same object can appear under more than one key.
+    * ``DTP``, ``DDP`` and ``DPSP`` are flattened views and may alias a
+      dimension group, so the same object can appear under more than one key.
     """
     global _mesh, _process_group_dict
 
@@ -269,12 +279,18 @@ def wrap_ddp(
     device_id: int | None,
     ddp_group: dist.ProcessGroup,
     reduction_size_mb: int = 100,
+    joint_hook: bool = True,
 ) -> DistributedDataParallel:
-    """Wrap a model in DistributedDataParallel over the given process group.
+    """Wrap a jigsaw model in DistributedDataParallel over the given process group.
 
-    Note that DDP *averages* gradients over ``ddp_group``. Whether that is the
-    correct reduction depends on which mesh axes the group spans, so this
-    belongs next to :func:`create_process_mesh_dict`, which decides that.
+    Built with ``jigsaw.parallel.wrap_ddp``, which first makes every marked
+    parameter identical across its replica groups and then checks the wrap
+    with ``jigsaw.parallel.check_ddp``. DDP *averages* gradients over
+    ``ddp_group``, so the group must span only the data-parallel axes:
+    ``DP`` for a Bayesian model (whose ``SP`` ranks hold different ensemble
+    members, and are a replica axis of every parameter) and ``DPSP`` for a
+    deterministic one. The model-parallel replica axes are reduced by jigsaw,
+    in the backward pass or, with ``joint_hook``, in DDP's buckets.
 
     Parameters
     ----------
@@ -283,10 +299,16 @@ def wrap_ddp(
     device_id : int | None
         CUDA device index the model lives on, or None for CPU.
     ddp_group : dist.ProcessGroup
-        Process group to synchronize gradients over.
+        Process group to average gradients over.
     reduction_size_mb : int, default: 100
         Gradient bucket size in MiB, applied both to the first bucket and to
         all subsequent ones.
+    joint_hook : bool, default: True
+        Register ``jigsaw.parallel.joint_comm_hook``: each replicated gradient
+        is averaged over ``ddp_group`` x its replica groups in one all-reduce
+        per bucket, instead of summed over the replica groups in the backward
+        pass and then averaged over ``ddp_group``. Same result, fewer bytes over
+        the inter-node links. Collective over the default group.
 
     Returns
     -------
@@ -310,14 +332,17 @@ def wrap_ddp(
     previous_first_bucket_bytes = dist._DEFAULT_FIRST_BUCKET_BYTES  # type: ignore[attr-defined]
     dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
     try:
-        return DistributedDataParallel(
+        ddp: DistributedDataParallel = parallel.wrap_ddp(
             model,
+            {"DP": ddp_group},
+            dp_key="DP",
+            joint_hook=joint_hook,
             device_ids=[device_id] if device_id is not None else None,
             output_device=device_id,
-            process_group=ddp_group,
             gradient_as_bucket_view=True,
             static_graph=True,
             bucket_cap_mb=reduction_size_mb,
         )
+        return ddp
     finally:
         dist._DEFAULT_FIRST_BUCKET_BYTES = previous_first_bucket_bytes  # type: ignore[attr-defined]

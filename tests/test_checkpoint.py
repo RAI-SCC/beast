@@ -4,14 +4,13 @@ import pytest
 import torch
 import torch.distributed as dist
 from small_models import SMALL_BEAST_OVERRIDES, small_beast_config
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 from beast.checkpoint import (
     load_checkpoint,
     load_state_dict,
     save_checkpoint,
 )
-from beast.comm import create_process_mesh_dict, get_process_group
+from beast.comm import create_process_mesh_dict, get_process_group, wrap_ddp
 from beast.model import convert_jigsaw_vi, get_model
 from beast.utils import set_all_seeds
 
@@ -84,7 +83,7 @@ class TestCheckpoint:
         channel_group = get_process_group("JChannel")
         spatial_group = get_process_group("JSpatial")
         dtp_group = get_process_group("DTP")
-        ddp_group = get_process_group("DDP")
+        up_group = get_process_group("SP")
 
         config = small_beast_config()
         model = get_model(
@@ -98,15 +97,14 @@ class TestCheckpoint:
             spatial_group=spatial_group,
         ).to(device)
         if bayesian:
-            convert_jigsaw_vi(model, channel_group, spatial_group)
+            convert_jigsaw_vi(model, channel_group, spatial_group, up_group)
             model.return_log_probs = False
 
         dist.barrier()
-        model = DDP(
+        model = wrap_ddp(
             model,
-            device_ids=[device],
-            output_device=device,
-            process_group=ddp_group,
+            device_id=device.index,
+            ddp_group=get_process_group("DP" if bayesian else "DPSP"),
         )
 
         input_beastling = torch.rand(
