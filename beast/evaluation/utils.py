@@ -148,9 +148,9 @@ def select_variables(
     config : dict[str, Any], optional
         Configuration used as a fallback, see :func:`_resolve_variables`.
     channel_rank : int
-        Rank in the channel group.
+        Rank in the ``JChannel`` process group.
     channel_group_size : int
-        Size of the channel group.
+        Size of the ``JChannel`` process group.
     all_surface_variables : list[str], optional
         All surface variables in the data.
     all_pressure_variables : list[str], optional

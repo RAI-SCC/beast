@@ -17,9 +17,9 @@ def crps(
 ) -> Tensor:
     """Compute the continuous ranked probability score (CRPS) of an ensemble.
 
-    With an uncertainty-parallel group, the ensemble is spread over its ranks and
-    the pairwise sample differences are computed by passing the samples around
-    the ranks in a ring.
+    If ``up_group`` has more than one rank, the ensemble is spread over its
+    ranks, and the pairwise sample differences are computed by passing the
+    samples around the ranks in a ring.
 
     Parameters
     ----------
@@ -28,7 +28,8 @@ def crps(
     target : Tensor
         True values, without a sample dimension.
     up_group : ProcessGroup, optional
-        Uncertainty-parallel process group. If None or of size 1, only the local
+        The ``SP`` process group the ensemble is spread over. If None or of
+        size 1, only the local
         ensemble is used.
     sample_dim : int, default: 0
         Dimension of ``prediction`` holding the ensemble samples.

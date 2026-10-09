@@ -25,20 +25,28 @@ def create_process_mesh_dict(
 ) -> dict[str, dist.ProcessGroup]:
     """Create the 4-D process mesh and its named process groups.
 
+    The four mesh dimensions and the two combined groups are:
+
+    * ``DP``: data parallelism, each rank group sees different data items.
+    * ``SP``: sample parallelism, the ensemble members of a Bayesian model.
+    * ``JSpatial``: spatial parallelism, each rank holds a tile of the grid.
+    * ``JChannel``: channel parallelism, each rank holds a slice of the channels.
+    * ``DTP``: ``JSpatial`` x ``JChannel``, the ranks that share one data item.
+    * ``DDP``: ``DP`` x ``SP`` x ``JSpatial``, the ranks gradients are averaged over.
+
     Parameters
     ----------
     mesh_dims : Sequence[int]
-        Sizes of the mesh dimensions in the order (DP, SP, JSpatial, JChannel).
-        Their product must equal the distributed world size.
+        Sizes of the mesh dimensions in the order ``(DP, SP, JSpatial,
+        JChannel)``. Their product must equal the world size.
     device_type : str, default: "cuda"
         Device type passed to ``init_device_mesh``.
 
     Returns
     -------
     dict[str, dist.ProcessGroup]
-        Groups keyed ``DP``, ``SP``, ``JSpatial`` and ``JChannel``, plus the
-        combined groups ``DTP`` (JSpatial x JChannel) and ``DDP`` (DP x SP x
-        JSpatial).
+        The process groups, keyed ``DP``, ``SP``, ``JSpatial``, ``JChannel``,
+        ``DTP`` and ``DDP``.
 
     Raises
     ------
@@ -55,9 +63,8 @@ def create_process_mesh_dict(
 
     mesh_dim_names = ["DP", "SP", "JSpatial", "JChannel"]
 
-    # Checked before the product so a stale 5-D layout (which used to carry a
-    # leading Expert dimension) reports the arity rather than failing later
-    # inside init_device_mesh with a mesh_shape/mesh_dim_names mismatch.
+    # Check the number of dimensions first, for a clearer error than the one
+    # init_device_mesh raises.
     if len(mesh_dims) != len(mesh_dim_names):
         raise ValueError(
             f"mesh_dims must be of length {len(mesh_dim_names)} "
@@ -213,6 +220,18 @@ def visualize_process_mesh() -> None:
     }
 
     def fmt_row(values: Sequence[Any]) -> str:
+        """Format one table row.
+
+        Parameters
+        ----------
+        values : Sequence[Any]
+            One value per column.
+
+        Returns
+        -------
+        str
+            The values, right-aligned to the column widths and separated by ``|``.
+        """
         return " | ".join(f"{str(v):>{widths[col]}}" for col, v in zip(columns, values))
 
     header = fmt_row(columns)
@@ -229,19 +248,9 @@ def visualize_process_mesh() -> None:
 def shutdown_comm() -> None:
     """Destroy the process groups created by :func:`create_process_mesh_dict`.
 
-    The default (``WORLD``) group is left intact, so the caller can keep using
-    plain collectives and build a fresh mesh afterwards.
-
-    Two cases are guarded defensively, because whether they occur depends on the
-    torch version and the backend rather than on anything here:
-
-    * A mesh dimension may be *backed by* the default process group when it
-      spans the whole world. Destroying that would take down every later
-      collective, including the ``all_gather_object`` in
-      :func:`visualize_process_mesh`. On torch 2.14 ``init_device_mesh`` hands
-      out a distinct group per dimension, so the skip is a no-op there.
-    * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
-      so the same object can appear under more than one key.
+    Each group is destroyed once, even if it is stored under several names. The
+    default (``WORLD``) group is kept, so collectives keep working and a new mesh
+    can be created afterwards.
     """
     global _mesh, _process_group_dict
 
@@ -266,9 +275,8 @@ def wrap_ddp(
 ) -> DistributedDataParallel:
     """Wrap a model in DistributedDataParallel over the given process group.
 
-    DDP *averages* gradients over ``ddp_group``. Whether that is the correct
-    reduction depends on which mesh axes the group spans, so this belongs next
-    to :func:`create_process_mesh_dict`, which decides that.
+    Gradients are averaged over ``ddp_group``, usually the ``DDP`` group of
+    :func:`create_process_mesh_dict`.
 
     Parameters
     ----------
@@ -279,7 +287,7 @@ def wrap_ddp(
     ddp_group : dist.ProcessGroup
         Process group to synchronize gradients over.
     reduction_size_mb : int, default: 100
-        Gradient bucket size in MiB, for the first bucket and all later ones.
+        Size of every gradient bucket, including the first, in MiB.
 
     Returns
     -------
@@ -288,18 +296,13 @@ def wrap_ddp(
 
     Notes
     -----
-    The wrap is built with ``gradient_as_bucket_view=True`` and
-    ``static_graph=True``. The latter is a promise about the model: the autograd
-    graph must not change between iterations, and no parameter may be unused in
-    some steps but used in others. A model taking data-dependent branches will
-    mis-reduce under it.
-
-    ``bucket_cap_mb`` only sizes the buckets after the first. torch exposes no
-    public setter for the first one, so the private
-    ``dist._DEFAULT_FIRST_BUCKET_BYTES`` is patched for the duration of the
-    constructor and restored afterwards. Leaving it patched would resize the
-    first bucket of every other DDP instance built later in the same process.
+    The model is wrapped with ``static_graph=True``, so its autograd graph must
+    be the same in every iteration and every parameter must be used in every
+    step.
     """
+    # DDP only exposes a setting for the size of the buckets after the first, so
+    # the first bucket size is set through the private module default for the
+    # duration of the constructor and then restored.
     previous_first_bucket_bytes = dist._DEFAULT_FIRST_BUCKET_BYTES  # type: ignore[attr-defined]
     dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
     try:

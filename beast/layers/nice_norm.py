@@ -71,10 +71,11 @@ class NiceNorm(torch.nn.Module):
 
 
 class DistributedNICENorm(torch.nn.Module):
-    """NICE norm for a channel-sharded model, inspired by FGN.
+    """Noise-conditioned layer norm for a channel-sharded model, inspired by FGN.
 
-    Layer norm is applied per local channel shard to limit communication, and
-    the scale and shift come from a :class:`~beast.layers.mlp.DistributedMLPNICE`.
+    Each rank normalizes its own channel shard, so no communication is needed
+    for the statistics. The scale and shift are computed from the noise vector
+    by a :class:`~beast.layers.mlp.DistributedMLPNICE`.
 
     Parameters
     ----------
@@ -83,15 +84,15 @@ class DistributedNICENorm(torch.nn.Module):
     noise_dim : int
         Size of the noise vector.
     rank : int
-        Local rank within the model group.
+        Rank of this process in the ``DTP`` process group.
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Process group the model is sharded over (spatial x channel).
+        Passed on to the :class:`~beast.layers.mlp.DistributedMLPNICE`.
     spatial_group : dist.ProcessGroup
-        Spatial process group.
+        The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
-        Channel process group.
+        The ``JChannel`` process group, over which the channels are sharded.
     """
 
     def __init__(
@@ -114,7 +115,7 @@ class DistributedNICENorm(torch.nn.Module):
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
-        # To limit communication, we do grouped layer norm on the local shard
+        # Normalize each local channel shard separately
         self.ln = torch.nn.LayerNorm(
             self.global_dim // self.channel_group.size(), elementwise_affine=False
         )
@@ -135,6 +136,21 @@ class DistributedNICENorm(torch.nn.Module):
     def _calc_shift_scale(
         self, x: torch.Tensor, scale_shift: torch.Tensor
     ) -> torch.Tensor:
+        """Normalize ``x`` and apply the scale and shift.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Local channel shard of shape ``(B, N, channels)``.
+        scale_shift : torch.Tensor
+            Scale and shift concatenated along the last dimension, of shape
+            ``(B, 2 * channels)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of the same shape as ``x``.
+        """
         x = self.ln(x)
         scale_shift = scale_shift.unsqueeze(1)
         scale, shift = torch.chunk(scale_shift, 2, dim=-1)
@@ -142,7 +158,7 @@ class DistributedNICENorm(torch.nn.Module):
         return x
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """Normalize the local shard of ``x`` and apply the noise-conditioned scale and shift.
+        """Normalize the local channel shard and apply the noise-conditioned scale and shift.
 
         Parameters
         ----------

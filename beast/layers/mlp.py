@@ -81,7 +81,8 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
     Parameters
     ----------
     group : dist.ProcessGroup
-        Process group to all-reduce over, the channel group in practice.
+        Process group to sum the gradient over, usually the ``JChannel`` process
+        group.
 
     Returns
     -------
@@ -91,6 +92,18 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
     """
 
     def hook(grad: torch.Tensor) -> torch.Tensor:
+        """Sum a gradient over ``group``.
+
+        Parameters
+        ----------
+        grad : torch.Tensor
+            Gradient of the hooked tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            The gradient summed over all ranks of ``group``.
+        """
         grad = grad.contiguous()
         dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
         return grad  # replaces grad
@@ -101,30 +114,33 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
 class DistributedMLPNICE(torch.nn.Module):
     """MLP for the noise input of :class:`~beast.layers.nice_norm.DistributedNICENorm`.
 
-    The first layer is sharded across the channel group and the second is a
-    :class:`jigsaw.linear.DistributedXWT`. Parameters are broadcast over the
-    spatial group at construction and their gradients are synchronized over it.
+    The first layer is sharded over the ``JChannel`` process group and the second
+    is a :class:`jigsaw.linear.DistributedXWT`. The parameters are replicated
+    over the ``JSpatial`` process group: they are broadcast at construction and
+    their gradients are synchronized.
 
     Parameters
     ----------
     in_dim : int
         Global input dimension of the noise.
     hidden_dim : int
-        Global hidden dimension. Must be divisible by the channel group size.
+        Global hidden dimension. Must be divisible by the size of
+        ``channel_group``.
     out_dim : int
         Global output dimension.
     bias : bool
         Whether the linear layers have a bias.
     local_rank : int
-        Local rank within the model group.
+        Rank of this process in the ``DTP`` process group.
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Process group the model is sharded over (spatial x channel).
+        Stored on the module. The linear layers use ``channel_group`` as their
+        model-parallel group.
     spatial_group : dist.ProcessGroup
-        Spatial process group.
+        The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
-        Channel process group.
+        The ``JChannel`` process group, over which the layers are sharded.
     """
 
     def __init__(
@@ -189,7 +205,7 @@ class DistributedMLPNICE(torch.nn.Module):
         torch.Tensor
             Local output.
         """
-        # hook ensures the grad_input is synchronized across the channels in the backward pass
+        # Sum the input gradient over the channel ranks in the backward pass
         if x.requires_grad:
             x.register_hook(make_grad_input_hook(self.channel_group))
         x = self.linear1(x)
@@ -201,8 +217,8 @@ class DistributedMLPNICE(torch.nn.Module):
 class DistributedSynchronizedMLP(torch.nn.Module):
     """MLP sharded across channels and synchronized across space.
 
-    Parameters are broadcast over the spatial group at construction, and
-    gradient hooks keep them synchronized during training.
+    The parameters are replicated over the ``JSpatial`` process group: they are
+    broadcast at construction and their gradients are synchronized.
 
     Parameters
     ----------
@@ -218,15 +234,16 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         Dropout probability, applied after the activation and after the
         second layer.
     local_rank : int
-        Local rank within the model group.
+        Rank of this process in the ``DTP`` process group.
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Process group the model is sharded over (spatial x channel).
+        Model-parallel process group of the linear layers, passed to
+        :class:`jigsaw.linear.DistributedXWT`.
     spatial_group : dist.ProcessGroup
-        Spatial process group, over which the model is replicated.
+        The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
-        Channel process group, over which the model is tensor parallel.
+        The ``JChannel`` process group, over which the layers are sharded.
     bayesian : bool, default: False
         Whether the linear layers are Bayesian.
     """

@@ -61,8 +61,7 @@ class TransformerBlock(torch.nn.Module):
 
         self.device = device
 
-        # import attention from jigsaw module
-        # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.
+        # QKV projection, scaled dot-product attention and output projection
         self.attention_block = attention.Attention(
             self.in_dim,
             self.embed_dim,
@@ -140,8 +139,7 @@ class NiceTransformer(torch.nn.Module):
         self.qk_norm = qk_norm
         self.device = device
 
-        # import attention from jigsaw module
-        # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.
+        # QKV projection, scaled dot-product attention and output projection
         self.attention_block = attention.Attention(
             self.in_dim,
             self.embed_dim,
@@ -185,8 +183,8 @@ class NiceTransformer(torch.nn.Module):
 class DistributedTransformer(torch.nn.Module):
     """Windowed transformer block sharded across processes.
 
-    The spatial domain is split across the spatial group and the channels are
-    split across the channel group.
+    The grid is split over the ``JSpatial`` process group and the channels over
+    the ``JChannel`` process group.
 
     Parameters
     ----------
@@ -201,15 +199,16 @@ class DistributedTransformer(torch.nn.Module):
     dropout : float
         Dropout probability.
     local_rank : int
-        Rank within the model group.
+        Rank of this process in the ``DTP`` process group.
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Process group the model is sharded over (spatial x channel).
+        Model-parallel process group of the MLP, passed to
+        :class:`~beast.layers.mlp.DistributedSynchronizedMLP`.
     spatial_group : dist.ProcessGroup
-        Spatial (domain-parallel) process group.
+        The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
-        Channel (tensor-parallel) process group.
+        The ``JChannel`` process group.
     bayesian : bool
         Whether the layers are Bayesian.
     qk_norm : bool, default: False
@@ -301,9 +300,8 @@ class DistributedTransformer(torch.nn.Module):
 class DistributedNICETransformer(torch.nn.Module):
     """Windowed transformer block with NICE normalization, sharded across processes.
 
-    The spatial domain is split across the spatial group and the channels are
-    split across the channel group. The noise is replicated across the model
-    group.
+    The grid is split over the ``JSpatial`` process group and the channels over
+    the ``JChannel`` process group. Every rank receives the same noise.
 
     Parameters
     ----------
@@ -320,15 +318,16 @@ class DistributedNICETransformer(torch.nn.Module):
     dropout : float
         Dropout probability.
     local_rank : int
-        Rank within the model group.
+        Rank of this process in the ``DTP`` process group.
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Unused; the channel group is used in its place.
+        Not used by this block. Its normalization and MLP layers use
+        ``channel_group`` as their model-parallel group.
     spatial_group : dist.ProcessGroup
-        Spatial (domain-parallel) process group.
+        The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
-        Channel (tensor-parallel) process group.
+        The ``JChannel`` process group.
     bayesian : bool
         Whether the layers are Bayesian.
     qk_norm : bool, default: False
@@ -418,7 +417,7 @@ class DistributedNICETransformer(torch.nn.Module):
         x : torch.Tensor
             Local input shard.
         noise : torch.Tensor
-            Noise for the NICE normalization, identical across the model group.
+            Noise for the NICE normalization, the same on every rank.
 
         Returns
         -------

@@ -1,4 +1,8 @@
-"""KL loss for variational inference BNNs with uncertainty parallelism (UP)."""
+"""KL loss for Bayesian neural networks with uncertainty parallelism (UP).
+
+With UP, the ensemble samples of a Bayesian model are spread over the ``SP``
+process group.
+"""
 
 from typing import Any, Optional, cast
 
@@ -13,8 +17,8 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     """KL loss with Gaussian predictive, variational and prior distributions.
 
     The predictive mean and standard deviation are estimated from the samples of
-    all ranks in the UP group, and the prior matching term is computed while
-    that communication is in flight.
+    all ranks in ``up_group``, and the prior matching term is computed while
+    those statistics are being communicated.
 
     Parameters
     ----------
@@ -23,11 +27,15 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     dataset_size : int
         Size of the dataset.
     up_group : dist.ProcessGroup, optional
-        Process group of the uncertainty-parallel samples. Defaults to
-        ``dist.group.WORLD``.
+        Process group the ensemble samples are spread over, usually the ``SP``
+        process group. Defaults to all ranks.
+    sync_group : dist.ProcessGroup, optional
+        Process group the gradients of the variational parameters are summed
+        over, usually the ``JSpatial`` process group. The prior matching
+        gradient is divided by its size, so that the sum counts it once.
     feature_weights : Tensor, optional
-        Per-variable weights, for models with multiple experts. Variables with
-        weight 0 get a predictive standard deviation of 1.
+        Weights applied to the model output and target, per variable or per
+        grid point.
     heat : float, default: 1.0
         Heat / cold posterior parameter of the KL loss.
     track : bool, default: False
@@ -81,9 +89,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         self.use_fmod = use_fmod
 
-        # The base class allows dataset_size to be None and resolved per call;
-        # this subclass requires it up front, so re-bind it under a non-optional
-        # name that the data-fitting term can use without a None check.
+        # Stored as a plain int: this loss always needs the dataset size
         self._dataset_size: int = dataset_size
 
     def data_fitting(
@@ -151,21 +157,21 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             How well the variational distribution matches the prior.
         """
         if self.feature_weights is not None:
-            expert_output = model_output * self.feature_weights
-            expert_target = target * self.feature_weights[0]
+            weighted_output = model_output * self.feature_weights
+            weighted_target = target * self.feature_weights[0]
         else:
-            expert_output = model_output
-            expert_target = target
+            weighted_output = model_output
+            weighted_target = target
 
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
-            expert_output,
+            weighted_output,
             self.up_group,
             *self._get_flat_params(),
             self.feature_weights,
             self.sync_group_size,
         )
 
-        data_fit = self.data_fitting(mean, std, expert_target, dataset_size)
+        data_fit = self.data_fitting(mean, std, weighted_target, dataset_size)
 
         if self._track and self.log is not None:
             # torch_blue annotates self.log as Dict[str, List[Tensor]] but appends
@@ -206,7 +212,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
 
 class MeanStdPriorMatchingAggregation(torch.autograd.Function):
-    """Autograd function aggregating sample statistics over the UP group.
+    """Autograd function that aggregates sample statistics over the ``SP`` process group.
 
     The prior matching loss is computed while the second all-reduce is in flight.
     """
@@ -229,7 +235,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         samples : Tensor
             Local samples, along dimension 0.
         up_process_group : dist.ProcessGroup
-            Process group of the uncertainty-parallel samples.
+            Process group the samples are spread over, usually the ``SP``
+            process group.
         prior_means : Tensor
             Means of the prior distributions.
         prior_log_stds : Tensor
@@ -239,17 +246,19 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         variational_log_stds : Tensor
             Log standard deviations of the variational distributions.
         feature_weights : Tensor, optional
-            Per-variable weights. Variables with weight 0 get a standard
-            deviation of 1.
-        weight_synchronization_factor: int, default: 1
-            Size of the ProcessGroup that gradients are summed over (typically jspatial)
+            Weights applied to the samples before aggregation.
+        weight_synchronization_factor : int, default: 1
+            Size of the process group the parameter gradients are summed over,
+            usually the ``JSpatial`` process group. The prior matching gradient
+            is divided by it.
 
         Returns
         -------
         mean : Tensor
-            Mean over the samples of the whole UP group.
+            Mean over the samples of all ranks in ``up_process_group``.
         std : Tensor
-            Standard deviation over the samples of the whole UP group.
+            Standard deviation over the samples of all ranks in
+            ``up_process_group``.
         prior_matching : Tensor
             The prior matching loss.
         variance_ratio : Tensor
@@ -368,9 +377,11 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_pm : Tensor
             Gradient with respect to the prior matching loss.
         grad_vr : None
-            Gradient with respect to the variance ratio, unused.
+            Gradient with respect to the variance ratio. Ignored, since the
+            variance ratio is not differentiable.
         grad_mse_half : None
-            Gradient with respect to ``mse_part_half``, unused.
+            Gradient with respect to ``mse_part_half``. Ignored, since
+            ``mse_part_half`` is not differentiable.
 
         Returns
         -------
@@ -389,7 +400,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         None
             No gradient for the feature_weights.
         None
-            No gradient for the weight_synchronization_factor
+            No gradient for the weight_synchronization_factor.
         """
         up_process_group = ctx.up_process_group
         weight_synchronization_factor = ctx.weight_synchronization_factor

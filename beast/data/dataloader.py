@@ -23,20 +23,23 @@ from beast.utils import set_dtype
 DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
 
 
-class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):
-    """Multiprocessing loader iterator that times each ``__next__`` call."""
+class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):  # numpydoc ignore=PR02
+    """Multiprocessing data loader iterator that also times each batch fetch.
+
+    Parameters
+    ----------
+    loader : DataLoader
+        The data loader to iterate over.
+    """
 
     def __next__(self) -> tuple[Any, float, float]:
-        """Fetch the next batch together with the fetch timestamps.
+        """Fetch the next batch and time the fetch.
 
         Returns
         -------
-        *data
-            The batch items, unpacked.
-        start : float
-            ``perf_counter_ns`` timestamp before the fetch.
-        end : float
-            ``perf_counter_ns`` timestamp after the fetch.
+        tuple
+            The items of the batch, followed by the ``time.perf_counter_ns``
+            timestamps taken before and after the fetch.
         """
         start = time.perf_counter_ns()
 
@@ -47,9 +50,25 @@ class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):
 
 
 class BeastDataLoader(DataLoader):
-    """Data loader whose iterator, :class:`BeastDataLoaderIter`, times each batch fetch."""
+    """Data loader that also reports how long each batch took to fetch.
+
+    It takes the same arguments as :class:`torch.utils.data.DataLoader`. Each
+    batch is followed by the ``time.perf_counter_ns`` timestamps taken before
+    and after fetching it.
+
+    See Also
+    --------
+    torch.utils.data.DataLoader : The data loader this class extends.
+    """
 
     def _get_iterator(self) -> _BaseDataLoaderIter:
+        """Create the iterator that times each batch fetch.
+
+        Returns
+        -------
+        _BaseDataLoaderIter
+            A :class:`BeastDataLoaderIter` over this data loader.
+        """
         return BeastDataLoaderIter(self)
 
 
@@ -75,16 +94,16 @@ def get_dataloader(
     Parameters
     ----------
     config_dict : dict[str, Any]
-        Configuration with the sections ``data`` and ``training``, see
-        ``docs/configuration.md``.
+        Configuration with the sections ``data`` and ``training``, described
+        in the configuration reference of the documentation.
     dtp_rank : int
-        Rank in the domain-tensor-parallel group, which shares a data item.
+        Rank in the ``DTP`` process group, the ranks that share one data item.
     dtp_size : int
-        Size of the domain-tensor-parallel group.
+        Size of the ``DTP`` process group.
     dp_rank : int
-        Rank in the data-parallel group.
+        Rank in the ``DP`` process group.
     dp_size : int
-        Size of the data-parallel group.
+        Size of the ``DP`` process group.
     mode : {"train", "validation"}, default: "train"
         Selects the time range and subset size.
     transform : Callable, optional

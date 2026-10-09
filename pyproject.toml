@@ -108,3 +108,14 @@ command_line = "-m pytest"
 
 [tool.coverage.report]
 format = "markdown"
+
+# Docstrings - numpydoc's own validator (also run via pre-commit)
+[tool.numpydoc_validation]
+checks = [
+    "all",
+    "ES01",  # an extended summary is optional
+    "EX01",  # an Examples section is optional
+    "SA01",  # a See Also section is optional
+]
+# Constructors are documented in the class docstring, as numpydoc prescribes.
+exclude = ['\.__init__$']

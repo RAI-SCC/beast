@@ -76,8 +76,6 @@ class Downsample(nn.Module):
 
     Attributes
     ----------
-    factor : int
-        Downsampling factor.
     dims : Tuple[int, ...]
         Dimensions to downsample over, sorted in descending order.
     negative_dims : bool
@@ -129,10 +127,22 @@ class Downsample(nn.Module):
         return x.mean(dim=target_dims)
 
 
-class DownsampleMeanStd(Downsample):
-    """Downsample to the mean and standard deviation of each block.
+class DownsampleMeanStd(Downsample):  # numpydoc ignore=PR02
+    """Downsample to the mean and standard deviation of blocks of ``factor``.
 
-    Parameters and attributes are those of :class:`Downsample`.
+    Parameters
+    ----------
+    factor : int
+        Downsampling factor.
+    dims : Tuple[int, ...], default: (-1,)
+        Dimensions to downsample over, all positive or all negative.
+
+    Attributes
+    ----------
+    dims : Tuple[int, ...]
+        Dimensions to downsample over, sorted in descending order.
+    negative_dims : bool
+        Whether ``dims`` holds negative indices.
     """
 
     def forward(self, x: Tensor) -> Tensor:

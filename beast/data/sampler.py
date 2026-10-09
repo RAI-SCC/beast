@@ -10,8 +10,34 @@ from torch.utils.data.distributed import DistributedSampler
 class ResumableDistributedSampler(DistributedSampler):
     """Distributed sampler that can resume part-way through an epoch.
 
-    The full index sequence of an epoch is generated up front, so resuming only
-    requires skipping the first ``resume_idx`` indices of this rank's shard.
+    The index order of an epoch depends only on ``seed`` and the epoch, so a
+    resumed run skips the first ``resume_idx`` indices of this rank's shard and
+    continues where it stopped.
+
+    Parameters
+    ----------
+    dataset : Dataset
+        Dataset to sample from.
+    num_replicas : int, optional
+        Number of ranks to split the data over, usually the size of the ``DP``
+        process group. Defaults to the world size.
+    rank : int, optional
+        Rank of this process among the ``num_replicas`` ranks. Defaults to the
+        global rank.
+    shuffle : bool, default: True
+        Whether to shuffle the indices every epoch.
+    seed : int, default: 0
+        Shuffling seed. Must be identical on all ranks.
+    drop_last : bool, default: False
+        Whether to drop the tail of the data so that every rank gets the same
+        number of indices. If False, indices are repeated instead.
+    resume_idx : int, default: 0
+        Number of leading indices of this rank's shard to skip.
+
+    Attributes
+    ----------
+    resume_idx : int
+        Number of leading indices of this rank's shard to skip.
     """
 
     def __init__(
@@ -24,31 +50,19 @@ class ResumableDistributedSampler(DistributedSampler):
         drop_last: bool = False,
         resume_idx: int = 0,
     ) -> None:
-        """Initialize the sampler.
-
-        Parameters
-        ----------
-        dataset : Dataset
-            Dataset to sample from.
-        num_replicas : int, optional
-            Number of data-parallel replicas, i.e. the size of the DP group.
-        rank : int, optional
-            Data-parallel rank of this process.
-        shuffle : bool, default: True
-            Whether to shuffle the indices each epoch.
-        seed : int, default: 0
-            Shuffling seed. Must be identical on all ranks.
-        drop_last : bool, default: False
-            Drop the tail of the data to make it evenly divisible across
-            replicas. If False, indices are repeated to pad it instead.
-        resume_idx : int, default: 0
-            Number of leading indices of this rank's shard to skip.
-        """
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
         self.resume_idx = resume_idx
 
     def __iter__(self) -> Iterator[int]:
-        """Iterate over this rank's remaining indices for the current epoch."""
+        """Iterate over this rank's indices for the current epoch.
+
+        Returns
+        -------
+        Iterator[int]
+            The indices of this rank's shard after skipping the first
+            ``resume_idx``. Unless ``drop_last`` is set, they are repeated
+            until there are as many as in a full epoch.
+        """
         if self.shuffle:
             g = torch.Generator()
             g.manual_seed(self.seed + self.epoch)
@@ -70,5 +84,11 @@ class ResumableDistributedSampler(DistributedSampler):
         return iter(indices)
 
     def __len__(self) -> int:
-        """Return the number of indices left after skipping ``resume_idx``."""
+        """Return the number of indices left after skipping ``resume_idx``.
+
+        Returns
+        -------
+        int
+            The number of remaining indices of this rank.
+        """
         return max(0, self.num_samples - self.resume_idx)

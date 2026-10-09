@@ -28,25 +28,26 @@ def convert_jigsaw_vi(
     prior_initialization: bool = False,
     return_log_probs: bool = True,
 ) -> None:
-    """Convert a module to a torch_blue VI module in place, Jigsaw-aware.
+    """Make a module with jigsaw layers Bayesian, in place.
 
-    Normalization layers and Transformer Engine attention are excluded from the
-    conversion. The fan-in of ``AVIDistributedXWT`` and ``AVIConvTranspose2d``
-    layers is scaled by the channel-parallel size, and every variational
-    parameter gets a gradient-sync hook over ``spatial_pg`` and is broadcast
-    from its rank 0.
+    Linear and convolution layers become torch_blue variational layers.
+    Normalization layers and Transformer Engine attention keep deterministic
+    weights. The variational parameters are replicated over ``spatial_pg``:
+    they are broadcast from its first rank and their gradients are synchronized.
+    The fan-in of the channel-sharded layers (``AVIDistributedXWT`` and
+    ``AVIConvTranspose2d``) is scaled by the size of ``channel_pg``, so that
+    they are initialized like the full layer.
 
-    The remaining options are passed through to
-    :func:`torch_blue.vi.convert_to_vimodule`.
+    The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
 
     Parameters
     ----------
     module : torch.nn.Module
         Module to convert.
     channel_pg : dist.ProcessGroup
-        Channel-parallel process group.
+        The ``JChannel`` process group.
     spatial_pg : dist.ProcessGroup
-        Spatial-parallel process group.
+        The ``JSpatial`` process group.
     variational_distribution : torch_blue.vi.distributions.Distribution, default: Normal(std=0.15)
         Variational distribution of the converted weights.
     prior : torch_blue.vi.distributions.Distribution, default: Normal()
@@ -60,7 +61,6 @@ def convert_jigsaw_vi(
     return_log_probs : bool, default: True
         Whether the converted module returns log probabilities.
     """
-    # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
@@ -85,7 +85,20 @@ def convert_jigsaw_vi(
     def new_cf_channel(
         self: torch.nn.Module, variable_shapes: dict[str, torch.Size] | None = None
     ) -> int:
-        """Return the fan-in of the layer scaled by the channel-parallel size."""
+        """Return the fan-in of the full layer, not just of the local shard.
+
+        Parameters
+        ----------
+        self : torch.nn.Module
+            The layer the method is bound to.
+        variable_shapes : dict[str, torch.Size], optional
+            Shapes of the variational parameters, passed to the original method.
+
+        Returns
+        -------
+        int
+            The fan-in of the local shard times the size of ``channel_pg``.
+        """
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
@@ -107,7 +120,6 @@ def convert_jigsaw_vi(
                 dist.broadcast(p.data, group_src=0, group=spatial_pg)
 
 
-# TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.
 def count_model_parameters(
     model: torch.nn.Module, parallelism: int, bayesian: bool
 ) -> int:
@@ -121,7 +133,9 @@ def count_model_parameters(
     parallelism : int
         The degree of parallelism.
     bayesian : bool
-        Whether to count each parameter twice (mean and spread).
+        Whether to double the count, for a mean and a spread per weight. A
+        single-process model converted with torch_blue already holds both as
+        separate parameters, so its count is doubled once more.
 
     Returns
     -------

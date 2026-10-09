@@ -19,8 +19,9 @@ class Beast(torch.nn.Module):
     from the concatenation with the patch embedding. Each set alternates plain
     and shifted windows.
 
-    The model is sharded across the spatial and channel groups if ``dtp_group``
-    spans more than one process. Its inputs and outputs are then local shards.
+    The model is sharded over the ``JSpatial`` and ``JChannel`` process groups
+    if ``dtp_group`` has more than one rank. Its inputs and outputs are then the
+    local shards.
 
     Parameters
     ----------
@@ -53,12 +54,13 @@ class Beast(torch.nn.Module):
     n_full_blocks : Sequence[int]
         Number of plain-and-shifted block pairs in each of the three sets.
     noise_dim : int
-        Size of the noise vector for the NICE normalization.
+        Size of the noise vector for the NICE normalization. Required even if
+        ``nice_norm`` is False.
     device : torch.device
         Device to place the model on.
     dropout : float, default: 0.1
-        Dropout probability. Forced to 0 if ``bayesian``, and ignored by the
-        non-distributed model, which uses a fixed 1e-3.
+        Dropout probability of the distributed model, set to 0 if ``bayesian``.
+        The single-process model always uses a dropout of 1e-3.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
     bayesian : bool, default: False
@@ -68,15 +70,17 @@ class Beast(torch.nn.Module):
     dtype : torch.dtype, default: torch.float32
         Data type of the model.
     channel_group : dist.ProcessGroup, optional
-        Channel (tensor-parallel) process group.
+        The ``JChannel`` process group.
     spatial_group : dist.ProcessGroup, optional
-        Spatial (domain-parallel) process group.
+        The ``JSpatial`` process group.
     dtp_group : dist.ProcessGroup, optional
-        Process group the model is sharded over (spatial x channel).
+        The ``DTP`` process group. The model is sharded if it has more than
+        one rank.
     up_group : dist.ProcessGroup, optional
-        Uncertainty-parallel process group. Only stored on the model.
+        The ``SP`` process group. Only stored on the model.
     **kwargs
-        Ignored.
+        Accepted and ignored, so unknown keyword arguments do not raise an
+        error.
     """
 
     def __init__(
@@ -154,7 +158,20 @@ class Beast(torch.nn.Module):
         self._build_model()
 
     def _build_model(self) -> None:
+        """Check the configuration and build the layers.
 
+        The sharded layers are built if the ``DTP`` group has more than one
+        rank, otherwise single-process layers. The layers are also grouped into
+        ``params["low_lr"]`` (convolutions and the upsampling mix) and
+        ``params["normal_lr"]`` (transformer blocks), for separate learning
+        rates.
+
+        Raises
+        ------
+        AssertionError
+            If a window size is odd, or the width is not divisible by the size
+            of ``spatial_group`` times the patch and window sizes.
+        """
         assert self.window_size_outer[0] % 2 == 0, (
             "window_outer[0] size must be divisible by 2"
         )
@@ -234,6 +251,13 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
+        """Build the layers sharded over the ``JSpatial`` and ``JChannel`` groups.
+
+        Raises
+        ------
+        AssertionError
+            If ``channel_group``, ``spatial_group`` or ``dtp_group`` is None.
+        """
         assert self.channel_group is not None, (
             "channel_group must not be None for distributed model"
         )
@@ -501,7 +525,7 @@ class Beast(torch.nn.Module):
             dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
     def _build_sequential_model(self) -> None:
-
+        """Build the single-process layers."""
         self.patch_embedding = torch.nn.Conv2d(
             self.in_channels,
             self.embed_dim,  # global values
@@ -580,7 +604,7 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[0],
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
                     **block_kwargs,
                 ).to(self.device)
@@ -595,7 +619,7 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim * 2,
                     out_dim=self.embed_dim * 2,
                     heads=self.heads[1],
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
                     **block_kwargs,
                 ).to(self.device)
@@ -610,7 +634,7 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[2],
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
                     **block_kwargs,
                 ).to(self.device)
@@ -636,6 +660,21 @@ class Beast(torch.nn.Module):
         )
 
     def _get_windows(self, x: torch.Tensor, window_size: Sequence[int]) -> torch.Tensor:
+        """Split a field into non-overlapping attention windows.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Field of shape ``(batch, lat, lon, channels)``.
+        window_size : Sequence[int]
+            Window size ``(lat, lon)``. Must divide the field size.
+
+        Returns
+        -------
+        torch.Tensor
+            Windows of shape ``(batch * n_windows, window_lat * window_lon,
+            channels)``.
+        """
         batch_size, xlat, xlon, channels = x.shape
         x = x.reshape(
             batch_size,
@@ -658,6 +697,31 @@ class Beast(torch.nn.Module):
         channels: int,
         window_size: Sequence[int],
     ) -> torch.Tensor:  # noqa: N803
+        """Reassemble a field from its attention windows.
+
+        This is the inverse of :meth:`_get_windows`.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Windows of shape ``(batch * n_windows, window_lat * window_lon,
+            channels)``.
+        batch_size : int
+            Batch size of the field.
+        xlat : int
+            Number of latitudes of the field.
+        xlon : int
+            Number of longitudes of the field.
+        channels : int
+            Number of channels of the field.
+        window_size : Sequence[int]
+            Window size ``(lat, lon)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Field of shape ``(batch, lat, lon, channels)``.
+        """
         x = x.reshape(
             batch_size,
             xlat // window_size[0],
@@ -673,7 +737,8 @@ class Beast(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Predict the output fields from the input fields.
 
-        Noise for the NICE normalization is sampled on every call.
+        A new noise vector for the NICE normalization is drawn on every call,
+        also if ``nice_norm`` is False.
 
         Parameters
         ----------
@@ -695,7 +760,6 @@ class Beast(torch.nn.Module):
         x = self.patch_embedding(x)
         x_res = x.clone()
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
-        # TODO: fuse as x.permute(0, 2, 3, 1)
         x = x.permute(0, 2, 3, 1).contiguous()
 
         # attention
