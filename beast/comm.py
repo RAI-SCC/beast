@@ -51,13 +51,11 @@ def create_process_mesh_dict(
     ``DP``, ``SP``, ``JSpatial``, ``JChannel``, plus combined groups:
 
     * ``DTP`` (``JSpatial x JChannel``): one model-parallel instance.
-    * ``DDP`` (``DP x SP x JSpatial``): every rank holding the same model shard;
-      used to pick one checkpoint writer per shard. Despite its name, it is
-      *not* the group to wrap DDP over: ``JSpatial`` (and, for a Bayesian model,
-      ``SP``) are replica axes that jigsaw reduces itself, which
-      ``jigsaw.parallel.check_ddp`` rejects in a DDP group.
-    * ``DPSP`` (``DP x SP``): the DDP group of a deterministic model, whose
-      ``SP`` ranks are plain copies. A Bayesian model uses ``DP``.
+    * ``DDP`` (``DP x SP``): the DDP group of a deterministic model, whose
+      ``SP`` ranks are plain copies. A Bayesian model wraps DDP over ``DP``
+      only, as its ``SP`` ranks hold different ensemble members. ``JSpatial``
+      is never part of it: it is a replica axis that jigsaw reduces itself, and
+      ``jigsaw.parallel.check_ddp`` rejects it in a DDP group.
     """
     if not dist.is_initialized():
         raise RuntimeError("Distributed process group is not initialized.")
@@ -92,10 +90,7 @@ def create_process_mesh_dict(
     _process_group_dict["DTP"] = (
         _mesh["JSpatial", "JChannel"]._flatten("DTP").get_group()
     )
-    _process_group_dict["DDP"] = (
-        _mesh["DP", "SP", "JSpatial"]._flatten("DDP").get_group()
-    )
-    _process_group_dict["DPSP"] = _mesh["DP", "SP"]._flatten("DPSP").get_group()
+    _process_group_dict["DDP"] = _mesh["DP", "SP"]._flatten("DDP").get_group()
 
     visualize_process_mesh()
 
@@ -179,7 +174,7 @@ def visualize_process_mesh() -> None:
     * ``gpu``       -- the local device (GPU) id of the rank
     * ``global``    -- the global rank in the default process group
     * one column per group (``DP``, ``SP``, ``JSpatial``, ``JChannel``,
-      ``DTP``, ``DDP``, ``DPSP``) showing the rank *within* that group.
+      ``DTP``, ``DDP``) showing the rank *within* that group.
 
     Notes
     -----
@@ -256,8 +251,8 @@ def shutdown_comm() -> None:
       collective, including the ``all_gather_object`` in
       :func:`visualize_process_mesh`. On torch 2.14 ``init_device_mesh`` hands
       out a distinct group per dimension, so the skip is a no-op there.
-    * ``DTP``, ``DDP`` and ``DPSP`` are flattened views and may alias a
-      dimension group, so the same object can appear under more than one key.
+    * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
+      so the same object can appear under more than one key.
     """
     global _mesh, _process_group_dict
 
@@ -288,7 +283,7 @@ def wrap_ddp(
     with ``jigsaw.parallel.check_ddp``. DDP *averages* gradients over
     ``ddp_group``, so the group must span only the data-parallel axes:
     ``DP`` for a Bayesian model (whose ``SP`` ranks hold different ensemble
-    members, and are a replica axis of every parameter) and ``DPSP`` for a
+    members, and are a replica axis of every parameter) and ``DDP`` for a
     deterministic one. The model-parallel replica axes are reduced by jigsaw,
     in the backward pass or, with ``joint_hook``, in DDP's buckets.
 

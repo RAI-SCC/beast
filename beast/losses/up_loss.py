@@ -341,7 +341,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         -----
         Both gradients are this rank's view only; the reduction over the mesh
         is left to the parameters' replica marks (see
-        :func:`beast.model.utils.mark_ensemble_replicated`). ``grad_samples``
+        :func:`beast.model.utils.convert_jigsaw_vi`). ``grad_samples``
         covers this rank's ensemble members and domain shard, so those partials
         are *summed* over the replica axes in the model's backward. The prior
         matching gradient is computed in full on every replica, reaches the
