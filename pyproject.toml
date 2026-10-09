@@ -7,6 +7,25 @@ name = "beast"
 version = "0.0.1"
 description = "A PyTorch library for probabilistic weather models that scale to thousands of GPUs"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Deifilia Kieckhefen" },
+    { name = "Juan Pedro Gutiérrez Hermosillo Muriedas" },
+    { name = "Lars Helge Heyen" },
+    { name = "Mathis Bode" },
+    { name = "Iida Hakulinen" },
+    { name = "Andreas Herten" },
+    { name = "Chelsea Maria John" },
+    { name = "Thorsten Kurth" },
+    { name = "Anni Moisala" },
+    { name = "Asena Karolin Özdemir" },
+    { name = "Kaleb Phipps" },
+    { name = "Oskar Taubert" },
+    { name = "Arvid Weyrauch" },
+    { name = "Markus Götz" },
+    { name = "Charlotte Debus" },
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",

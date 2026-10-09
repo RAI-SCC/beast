@@ -2,7 +2,8 @@
 
 BEAST predicts future atmospheric states from current ones. It reads gridded
 weather fields, such as ERA5 reanalysis, and returns the fields one or more
-timesteps later.
+timesteps later. The model and its parallelization are described in the paper
+[4D Parallelism Unlocks Exascale Bayesian Neural Networks for High-Fidelity Atmospheric Modeling](https://arxiv.org/abs/2609.12815).
 
 ## What makes it different
 
@@ -31,6 +32,23 @@ come from [torch-blue](https://github.com/RAI-SCC/torch_blue).
   save checkpoints.
 
 BEAST does not include a training loop, trained weights or data.
+
+## Citing BEAST
+
+If you use BEAST in your research, please cite the paper:
+
+```bibtex
+@misc{kieckhefen2026beast,
+  title         = {4D Parallelism Unlocks Exascale Bayesian Neural Networks for High-Fidelity Atmospheric Modeling},
+  author        = {Kieckhefen, Deifilia and Guti{\'e}rrez Hermosillo Muriedas, Juan Pedro and Heyen, Lars Helge and Bode, Mathis and Hakulinen, Iida and Herten, Andreas and John, Chelsea Maria and Kurth, Thorsten and Moisala, Anni and {\"O}zdemir, Asena Karolin and Phipps, Kaleb and Taubert, Oskar and Weyrauch, Arvid and G{\"o}tz, Markus and Debus, Charlotte},
+  year          = {2026},
+  eprint        = {2609.12815},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.ao-ph},
+  doi           = {10.48550/arXiv.2609.12815},
+  url           = {https://arxiv.org/abs/2609.12815}
+}
+```
 
 ## Next steps
 
