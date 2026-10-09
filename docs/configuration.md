@@ -1,79 +1,54 @@
-# Configuration reference
+# Configuration
 
-`beast.data.get_dataloader` is driven by a nested dictionary (`config_dict`) that
-the caller supplies. There is **no schema class and no validation** in the code: a
-missing key surfaces as a `KeyError` deep inside dataloader construction, and a
-misspelled key is silently ignored.
+BEAST is configured in three places: a dictionary for the data loader, keyword
+arguments for the model, and a few environment variables.
 
-This file is the only complete record of which keys the library reads. **If you add
-a `config_dict[...]` lookup, add it here in the same change.**
+## Data loader
 
-The ways this bites in practice are collected in [pitfalls.md](pitfalls.md).
+{func}`~beast.data.dataloader.get_dataloader` reads the sections `data` and
+`training` of a nested dictionary. The keys are not validated: a missing key
+raises a `KeyError` when the loader is built, and unknown keys are ignored.
 
-## Sections
-
-The data loading code reads two sections, `data` and `training`. The `Beast` model
-is configured through `get_model` keyword arguments instead (see below).
-
-## `data`
-
-Read by `get_dataloader` in `beast/data/dataloader.py`.
+### `data`
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `data_path` | `str` | Path to the ERA5 zarr store. **If this path does not exist, a dummy random dataset is used instead** — see the warning below. |
-| `constant_masks_path` | `str` | Directory holding the constant mask files (orography, land-sea mask, …). |
-| `constant_masks` | `list[str]` | Filenames of the masks to load, relative to `constant_masks_path`. |
-| `normalization_dir` | `str` | Directory containing `norm_mean.npy` and `norm_std.npy`. |
-| `train_time_range` | `tuple[str, str]` | Training period as `("%Y-%m-%d", "%Y-%m-%d")`. Used when `mode="train"`. |
-| `valid_time_range` | `tuple[str, str]` | Validation period, same format. Used when `mode="validation"`. |
-| `dt` | `int` | Temporal stride in hours between consecutive timesteps. |
-| `n_in_timesteps` | `int` | Number of input timesteps, concatenated along the channel dimension. |
-| `n_out_timesteps` | `int` | Number of target timesteps, concatenated along the channel dimension. |
-| `train_subset` | `int` | Cap the training set to this many samples. `<= 0` means use all. |
-| `valid_subset` | `int` | Cap the validation set to this many samples. `<= 0` means use all. |
-| `num_workers` | `int` | `DataLoader` worker processes. Must be `> 0`: `persistent_workers=True` is hard-coded, and PyTorch rejects the combination with `ValueError: persistent_workers option needs num_workers > 0`. |
-| `prefetch_factor` | `int` | Batches prefetched per worker. |
-| `n_variables` | `int` | Channel count. **Only read on the dummy-dataset path**, to shape the random tensors. |
-| `xlat` | `int` | Latitude grid points. **Dummy path only.** |
-| `xlon` | `int` | Longitude grid points. **Dummy path only.** |
+| `data_path` | `str` | Path to the zarr store, see [Data format](#data-format). If the path does not exist, a dataset of random numbers is used instead and rank 0 issues a warning. |
+| `constant_masks_path` | `str` | Directory with the constant mask files. |
+| `constant_masks` | `list[str]` | File names of the constant masks, appended to every input. |
+| `normalization_dir` | `str` | Directory with `norm_mean.npy` and `norm_std.npy`. |
+| `train_time_range` | `[str, str]` | Start (inclusive) and end (exclusive) of the training data, as `%Y-%m-%d`. Used with `mode="train"`. |
+| `valid_time_range` | `[str, str]` | The same for the validation data. Used with `mode="validation"`. |
+| `dt` | `int` | Hours between consecutive timesteps. |
+| `n_in_timesteps` | `int` | Number of input timesteps, stacked along the channels. |
+| `n_out_timesteps` | `int` | Number of target timesteps, stacked along the channels. |
+| `train_subset` | `int` | Use only the first this many training samples. `0` or less uses all. |
+| `valid_subset` | `int` | The same for the validation samples. |
+| `num_workers` | `int` | Worker processes of the data loader. Must be at least 1. |
+| `prefetch_factor` | `int` | Batches loaded in advance by each worker. |
+| `n_variables`, `xlat`, `xlon` | `int` | Shape of the random data. Only read if `data_path` does not exist. |
 
-> **The dummy-data fallback is silent by default.**
-> `get_dataloader` checks `os.path.exists(data_path)`. If the path is missing it
-> emits a `UserWarning` **on rank 0 only** and substitutes `ERA5Dummy`, which
-> returns random numbers of the right shape. Training then runs to completion and
-> produces a model that has learned nothing. On a large multi-rank job that single
-> warning is easy to lose in the log. If your loss curve is flat, grep the rank-0
-> log for `not found. Running dummy dataset` before debugging anything else.
->
-> Note that `n_variables`, `xlat` and `xlon` are read *only* on this fallback path,
-> so a config that omits them works fine against real data and then raises
-> `KeyError` the day the data path becomes unreachable.
+Any other `mode` than `"train"` and `"validation"` uses the whole time range of the
+data.
 
-## `training`
+### `training`
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `batch_size` | `int` | Per-`DataLoader` batch size, i.e. per data-parallel rank. |
-| `dtype` | `str` | One of `"float32"`, `"bfloat16"`, `"float16"`. Parsed by `beast.utils.set_dtype`. |
+| `batch_size` | `int` | Batch size of each data-parallel rank. |
+| `dtype` | `str` | `"float32"`, `"bfloat16"` or `"float16"`. Any other value gives `float32`. |
 
-> `set_dtype` has a catch-all `case _: return torch.float32`. An unrecognised or
-> misspelled dtype silently yields float32 rather than raising, so a typo such as
-> `"bf16"` costs you mixed-precision performance with no error.
-
-## Example
-
-A minimal config that exercises the real code path:
+### Example
 
 ```python
-config = {
+config_dict = {
     "data": {
-        "data_path": "/scratch/era5/era5.zarr",
-        "constant_masks_path": "/scratch/era5/masks",
+        "data_path": "/data/era5/era5.zarr",
+        "constant_masks_path": "/data/era5/masks",
         "constant_masks": ["land_sea_mask.npy", "orography.npy"],
-        "normalization_dir": "/scratch/era5/norm",
-        "train_time_range": ("1979-01-01", "2015-12-31"),
-        "valid_time_range": ("2016-01-01", "2017-12-31"),
+        "normalization_dir": "/data/era5/normalization",
+        "train_time_range": ["1979-01-01", "2016-01-01"],
+        "valid_time_range": ["2016-01-01", "2018-01-01"],
         "dt": 6,
         "n_in_timesteps": 1,
         "n_out_timesteps": 1,
@@ -81,10 +56,6 @@ config = {
         "valid_subset": 0,
         "num_workers": 4,
         "prefetch_factor": 2,
-        # Only consulted if data_path is missing, but cheap insurance:
-        "n_variables": 88,
-        "xlat": 720,
-        "xlon": 1440,
     },
     "training": {
         "batch_size": 1,
@@ -93,69 +64,68 @@ config = {
 }
 ```
 
-Used together with the process mesh:
+## Data format
+
+{class}`~beast.data.era5.ERA5Distributed` reads a zarr store with one array,
+`fields`, with the dimensions `time`, `feature`, `latitude` and `longitude`. It
+should be chunked along `time`. If the number of latitudes or longitudes is odd,
+the last row or column is dropped.
+
+- **Channel order.** The evaluation helpers expect the surface variables first,
+  followed by every pressure-level variable at each of its levels.
+- **Normalization.** `norm_mean.npy` and `norm_std.npy` hold one value per
+  feature, in the order of the `feature` dimension.
+- **Constant masks.** Each mask is a `.npy` array of shape `(latitude,
+  longitude)`.
+- **Land-sea mask for SST.** The loss weights from
+  {meth}`~beast.data.era5.ERA5Distributed.get_feature_weights` read
+  `sst_mask.npy` from `constant_masks_path` (1 over land) and expect sea surface
+  temperature to be variable 4.
+
+## Model
+
+The model is configured with keyword arguments to {func}`~beast.get_model`, not
+with the dictionary. `get_model` takes the name of a configuration and accepts
+any argument of {class}`~beast.model.beast_model.Beast` as an override:
 
 ```python
-from beast.comm import create_process_mesh_dict, get_process_group
-from beast.data.dataloader import get_dataloader
-import torch.distributed as dist
-
-create_process_mesh_dict([dp, sp, jspatial, jchannel])
-dtp = get_process_group("DTP")
-dp_group = get_process_group("DP")
-
-loader = get_dataloader(
-    config,
-    dtp_rank=dist.get_rank(dtp),
-    dtp_size=dist.get_world_size(dtp),
-    dp_rank=dist.get_rank(dp_group),
-    dp_size=dist.get_world_size(dp_group),
-    mode="train",
-)
+model = get_model("BEASTLING", device=torch.device("cpu"), nice_norm=True)
 ```
 
-`dtp_rank`/`dtp_size` select which *shard* of each sample this rank loads;
-`dp_rank`/`dp_size` select which *samples* it sees. Swapping the two produces a
-job that runs without error and trains on the wrong data.
+`device` has no default and must always be given.
 
-## Unsupported `mode`
+### Model presets
 
-`get_dataloader` accepts `mode` values `"train"` and `"validation"`. Any other
-value — including `"test"` — falls through to `years = None`, meaning **the entire
-time range** rather than an error. `"test"` is documented as not yet supported.
+| Name | Intended for |
+|------|--------------|
+| `BEAST-JUPITER-2.6B-64K` | The largest run, on JUPITER |
+| `BEAST-JUPITER-0.7B-1.8K` | JUPITER |
+| `BEAST-LUMI-1.2B-1.8K` | LUMI |
+| `BEASTLING` | Development and tests on one device |
 
-## Model configuration
+The presets are the configurations of the BEAST runs on JUPITER and LUMI: 88
+input channels (84 ERA5 variables and 4 constant masks), 84 output channels, and
+a 720 x 1440 grid (120 x 240 for `BEASTLING`). Only `BEASTLING` is deterministic. The full values
+are in {mod}`beast.model.beast_config`. For other data, override `height`,
+`width`, `in_channels` and `out_channels`.
 
-The production `Beast` model is **not** configured through `config_dict`. Use the
-factory:
+The grid has to fit the windows. With `stride` equal to `kernel_size`, as in all
+presets:
 
-```python
-from beast import get_model
-
-model = get_model("BEASTLING", device=torch.device("cpu"))
-```
-
-`get_model` takes a named configuration from `beast/model/beast_config.py` and
-applies any keyword arguments as overrides. `device` has no default and must be
-supplied. The available IDs are `BEAST-JUPITER-2.6B-64K`,
-`BEAST-JUPITER-0.7B-1.8K`, `BEAST-LUMI-1.2B-1.8K` and `BEASTLING`.
-
-> `get_model` shallow-copies the stored config (`.copy()`). Nested mutable values
-> such as the `heads` list are **shared** with the module-level `BEAST_CONFIGURATIONS`
-> dict. Mutating `model_config["heads"]` in place would corrupt the registry for
-> every later call in the process. Pass replacements, never mutate in place.
+- `window_size_outer` and `window_size_inner` must be even.
+- `height` must be divisible by `kernel_size * window_size_outer[0]` and by
+  `2 * kernel_size * window_size_inner[0]`.
+- `width` must be divisible by `n * kernel_size * window_size_outer[1]` and by
+  `n * 2 * kernel_size * window_size_inner[1]`, where `n` is the size of the
+  `JSpatial` process group.
 
 ## Environment variables
 
-These sit outside `config_dict` and are read at import time, so setting them from
-Python after importing `beast` has no effect.
+These are read when `beast` is imported, so set them before the import. The
+switches accept only `1` and `True`.
 
-| Variable | Default | Read in | Effect |
-|----------|---------|---------|--------|
-| `BEAST_DL_DSYNC_INIT` | `0` | `data/dataloader.py` | Initialize datasets in synchronized waves. Recommended beyond 512 nodes to avoid stampeding the filesystem. |
-| `BEAST_DS_HOURLY_SUBSAMPLING` | `1` | `data/era5/dataset.py` | Keep only samples where `hour % factor == 0`. |
-| `BEAST_USE_TE_DPA` | `0` | `layers/transformer.py` | Use Transformer Engine `DotProductAttention` instead of flash attention. Also requires jigsaw to expose TE support. |
-
-`BEAST_DL_DSYNC_INIT` and `BEAST_USE_TE_DPA` are parsed as
-`os.getenv(...) in ["True", "1"]`. Only the exact strings `True` and `1` enable
-them — `true`, `TRUE` and `yes` are all read as false.
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `BEAST_DL_DSYNC_INIT` | `0` | Open the datasets in waves of ranks, to spread out file system access. Recommended beyond 512 nodes. |
+| `BEAST_DS_HOURLY_SUBSAMPLING` | `1` | Use only timesteps whose hour is a multiple of this value. Applied only when a time range is set. |
+| `BEAST_USE_TE_DPA` | `0` | Use Transformer Engine attention, if it is installed. |

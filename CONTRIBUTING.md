@@ -3,7 +3,7 @@
 Thanks for your interest in BEAST. This guide covers how to get a working
 development environment and what we expect from a pull request.
 
-If you are an AI coding agent, read [AGENTS.md](AGENTS.md) instead — it has the
+If you are an AI coding agent, read `AGENTS.md` instead — it has the
 same information plus the codebase-specific detail you need.
 
 ## Development setup
@@ -43,7 +43,7 @@ A run writes about 490 MB of zarr fixtures to `TMPDIR` (2.1 GB for 4 ranks), and
 pytest retains the last three runs. If you hit `OSError: [Errno 28] No space left
 on device`, that is disk exhaustion rather than a real failure; clear it with
 `rm -rf "${TMPDIR:-/tmp}"/pytest-of-*` or set `TMPDIR=/var/tmp`. See
-[TESTING.md](TESTING.md).
+[the testing guide](docs/testing.md).
 
 ## Code quality
 
@@ -105,13 +105,13 @@ A single-rank pass proves very little about sharded behaviour.
 4. Update the docs in the same PR:
    - public API changes → [docs/architecture.md](docs/architecture.md)
    - new `config_dict` keys → [docs/configuration.md](docs/configuration.md)
-   - new environment variables → both of the above and [AGENTS.md](AGENTS.md)
+   - new environment variables → both of the above and `AGENTS.md`
 5. Describe what you changed and how you verified it. If you could not run the
    distributed or GPU tests, say so explicitly.
 
 ## Before you debug something surprising
 
-Read [docs/pitfalls.md](docs/pitfalls.md). BEAST is distributed and probabilistic,
+Read [docs/troubleshooting.md](docs/troubleshooting.md). BEAST is distributed and probabilistic,
 so a mistake usually produces plausible-looking numbers or a silent hang rather
 than an exception, and several common "failures" are environment problems rather
 than bugs. The list covers setup, testing, configuration, distributed execution

@@ -15,4 +15,4 @@ A 30-second summary, so you know what you are looking at before you open it:
   `git submodule update --init --recursive` before anything else.
 - `mpirun -n 4 pytest` needs `--device cpu` unless the machine has ≥4 GPUs.
 - Most mistakes here surface as plausible numbers or a hang, not an exception —
-  [docs/pitfalls.md](docs/pitfalls.md) is the catalogue.
+  [docs/troubleshooting.md](docs/troubleshooting.md) lists the common ones.

@@ -213,7 +213,7 @@ The boolean ones are read as `os.getenv(...) in ["True", "1"]`, so `true`,
 
 ## Gotchas
 
-**[docs/pitfalls.md](docs/pitfalls.md) is the complete list — read it before
+**[docs/troubleshooting.md](docs/troubleshooting.md) is the list — read it before
 debugging anything surprising.** Because this code is distributed and
 probabilistic, most mistakes here produce plausible numbers or a hang rather than
 an exception, and a good share of "failures" are actually environment problems.
@@ -252,4 +252,4 @@ The ones you are most likely to hit:
   runs over the whole package where the hook does not.
 - Public API changes should touch `docs/architecture.md` in the same PR.
 - New `config_dict` keys should touch `docs/configuration.md` in the same PR.
-- A new way to fail quietly belongs in `docs/pitfalls.md` in the same PR.
+- A new way to fail quietly belongs in `docs/troubleshooting.md` in the same PR.
