@@ -8,7 +8,7 @@ from torch import permute, reshape
 from torch.utils.checkpoint import checkpoint
 from torch_blue.vi import VIModule, convert_to_vimodule
 
-from .downsampled_SWIN import (
+from .downsampled_swin import (
     MLP,
     EarthAttention2DNoBias,
     GroupedPatchEmbedding2D,
