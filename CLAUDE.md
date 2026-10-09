@@ -14,6 +14,5 @@ A 30-second summary, so you know what you are looking at before you open it:
 - `libs/jigsaw` is a git submodule and a hard import dependency. Run
   `git submodule update --init --recursive` before anything else.
 - `mpirun -n 4 pytest` needs `--device cpu` unless the machine has ≥4 GPUs.
-- `beast/model/test_models/` holds experimental architectures, not model tests.
 - Most mistakes here surface as plausible numbers or a hang, not an exception —
   [docs/pitfalls.md](docs/pitfalls.md) is the catalogue.

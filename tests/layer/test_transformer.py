@@ -11,25 +11,21 @@ class TestTransformer:
     def test_transformer_init(self, device: torch.device) -> None:
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
-        noise_dim = 16
 
         model = transformer.TransformerBlock(
             in_dim=in_dim,
             embed_dim=embed_dim,
             out_dim=out_dim,
             heads=heads,
-            noise_dim=noise_dim,
             dropout=0.0,
             device=device,
-            dtype=torch.float32,
         )
 
         assert isinstance(model, transformer.TransformerBlock)
 
-    def test_nice_transformer_forward(self, device: torch.device) -> None:
+    def test_transformer_forward(self, device: torch.device) -> None:
         in_dim, embed_dim, out_dim = 256, 256, 256
         heads = 4
-        noise_dim = 16
         seq_length = 32
 
         model = transformer.TransformerBlock(
@@ -37,10 +33,8 @@ class TestTransformer:
             embed_dim=embed_dim,
             out_dim=out_dim,
             heads=heads,
-            noise_dim=noise_dim,
             dropout=0.0,
             device=device,
-            dtype=torch.float32,
         )
         # x dummy data
         x = torch.randn(1, seq_length, in_dim, device=device)
@@ -62,7 +56,6 @@ class TestNiceTransformer:
             noise_dim=noise_dim,
             dropout=0.0,
             device=device,
-            dtype=torch.float32,
         )
 
         assert isinstance(model, transformer.NiceTransformer)
@@ -81,7 +74,6 @@ class TestNiceTransformer:
             noise_dim=noise_dim,
             dropout=0.0,
             device=device,
-            dtype=torch.float32,
         )
         # x dummy data
         x = torch.randn(1, seq_length, in_dim, device=device)

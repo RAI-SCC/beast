@@ -1,6 +1,5 @@
-"""Transformer, MLP, normalization and expert layers."""
+"""Transformer, MLP and normalization layers."""
 
-from beast.layers.expert import Expert, ExpertWeightingLayer
 from beast.layers.transformer import (
     DistributedNICETransformer,
     DistributedTransformer,
@@ -9,8 +8,6 @@ from beast.layers.transformer import (
 )
 
 __all__ = [
-    "ExpertWeightingLayer",
-    "Expert",
     "NiceTransformer",
     "TransformerBlock",
     "DistributedNICETransformer",

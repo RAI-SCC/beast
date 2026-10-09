@@ -113,7 +113,6 @@ def get_dataloader(
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
-        # print(f'kwargs {kwargs}')
         dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,

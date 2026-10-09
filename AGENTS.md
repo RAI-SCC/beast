@@ -38,7 +38,6 @@ beast/
     transforms.py     Normalization / de-normalization transforms
   layers/
     transformer.py    Transformer blocks, incl. distributed and NICE variants
-    expert.py         Expert + ExpertWeightingLayer
     mlp.py            MLP blocks
     nice_norm.py      NICE normalization
   losses/up_loss.py   UPAllGaussLoss and Gaussian prior matching
@@ -47,20 +46,11 @@ beast/
     model_configs.py  CONFIGS registry (currently only BEAST_CONFIGURATIONS)
     gb/beast_model.py The Beast module — the production model
     gb/beast_config.py Named configurations (BEAST-JUPITER-*, BEAST-LUMI-*, BEASTLING)
-    test_models/      Historical/experimental architectures. See caveat below.
   evaluation/         Metrics (mae, mse, rmse, crps, spread_skill_ratio), plotting
 libs/jigsaw/          Git submodule: domain-decomposed distributed primitives
 tests/                Mirrors beast/ layout
 docs/                 Architecture, configuration schema, publishing checklist
 ```
-
-### `beast/model/test_models/` is not what it sounds like
-
-Despite the name it holds **historical and experimental architectures**
-(ViT, Swin variants, a weather mixer), not tests for models. It is excluded from
-both mypy and ruff in `pyproject.toml`. Do not hold it to the standards of the
-rest of the codebase, and do not refactor it unless asked — but also do not treat
-it as a template for new code. Tests for the real model live in `tests/model/`.
 
 ## Setup
 
@@ -86,8 +76,8 @@ pre-commit install
 | Type check | `mypy` |
 | All checks | `pre-commit run --all-files` |
 
-`pyproject.toml` configures mypy to check the `beast` package only; `tests/` and
-`beast/model/test_models/` are excluded. `pre-commit` runs the full pytest suite as
+`pyproject.toml` configures mypy to check the `beast` package only; `tests/` is
+excluded. `pre-commit` runs the full pytest suite as
 a local hook, so commits are slow — this is intentional, do not disable it.
 
 ## Conventions
@@ -195,11 +185,7 @@ Two rules that are easy to get wrong:
 
 1. `create_process_mesh_dict` must be called before `get_process_group`. It takes
    **exactly four** dimensions, in the order `(DP, SP, JSpatial, JChannel)`, and
-   their product must equal the world size. The mesh used to carry a leading
-   `Expert` dimension; that was removed, and the arity is now checked explicitly so
-   a stale 5-D layout reports the mismatch instead of failing deeper inside
-   `init_device_mesh`. Note `beast/layers/expert.py` is unaffected — the mixture-of-
-   experts *layers* still exist, it is only the mesh axis that is gone.
+   their product must equal the world size.
 2. **DDP averages gradients over its group.** Whether averaging is the correct
    reduction depends on which mesh axes the group spans. This is why `wrap_ddp`
    lives in `comm.py` next to the mesh definition rather than in a training script.

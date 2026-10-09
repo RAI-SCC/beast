@@ -42,11 +42,6 @@ Tracking what remains before making this repository public (target: November 202
       require specific wording and project IDs.
 - [ ] **Add the paper citation** once published (`TODO` in `README.md`, and
       `preferred-citation` in `CITATION.cff`).
-- [ ] **Decide whether `beast/model/test_models/` ships.** It holds ~4000 lines of
-      experimental architectures, excluded from mypy and ruff, with a name that
-      actively misleads readers into thinking it contains model tests. Options:
-      keep it (and rename to `experimental/`), move it to a separate repository,
-      or drop it. Shipping it as-is invites confusion on day one.
 - [ ] **Confirm `torch-blue` and `jigsaw` are public** and will stay at the pinned
       refs. `pyproject.toml` pins `torch-blue` to a git branch
       (`@stable-beast`) and `.gitmodules` tracks `jigsaw` at `branch = main`. Both

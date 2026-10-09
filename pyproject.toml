@@ -68,7 +68,6 @@ python_version="3.12"
 packages=["beast"]
 exclude=[
     'tests/',
-    'beast/model/test_models/',
 ]
 
 disallow_untyped_defs = true
@@ -84,7 +83,7 @@ follow_untyped_imports = true
 # Ruff
 [tool.ruff]
 target-version = "py312"
-exclude = ["docs", "examples", "beast/model/test_models/"]
+exclude = ["docs", "examples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "D", "D417", "N"]

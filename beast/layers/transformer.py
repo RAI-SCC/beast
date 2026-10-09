@@ -35,16 +35,12 @@ class TransformerBlock(torch.nn.Module):
         Output dimension.
     heads : int
         Number of attention heads.
-    noise_dim : int, default: 32
-        Unused.
     dropout : float, default: 0.0
         Attention dropout probability.
     device : torch.device, optional
         Device to place parameters on.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
-    dtype : torch.dtype, default: torch.float32
-        Stored on the module but not applied to the parameters.
     """
 
     def __init__(
@@ -53,21 +49,17 @@ class TransformerBlock(torch.nn.Module):
         embed_dim: int,
         out_dim: int,
         heads: int,
-        noise_dim: int = 32,
         dropout: float = 0.0,
         device: torch.device | None = None,
         qk_norm: bool = False,
-        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         self.in_dim = in_dim
         self.embed_dim = embed_dim
         self.heads = heads
         self.out_dim = out_dim
-        self.noise_dim = noise_dim
 
         self.device = device
-        self.dtype = dtype
 
         # import attention from jigsaw module
         # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.
@@ -126,8 +118,6 @@ class NiceTransformer(torch.nn.Module):
         Device to place parameters on.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
-    dtype : torch.dtype, default: torch.float32
-        Stored on the module but not applied to the parameters.
     """
 
     def __init__(
@@ -140,7 +130,6 @@ class NiceTransformer(torch.nn.Module):
         dropout: float = 0.0,
         device: torch.device | None = None,
         qk_norm: bool = False,
-        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         self.in_dim = in_dim
@@ -150,7 +139,6 @@ class NiceTransformer(torch.nn.Module):
         self.noise_dim = noise_dim
         self.qk_norm = qk_norm
         self.device = device
-        self.dtype = dtype
 
         # import attention from jigsaw module
         # Performs QKV mapping, flash attention with sdpa, head merging with a linear layer.

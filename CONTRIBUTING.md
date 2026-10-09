@@ -67,7 +67,7 @@ pre-commit and still fail CI.
 ## Conventions
 
 - **Type annotations are required** on functions in `beast/`
-  (`disallow_untyped_defs`). `tests/` and `beast/model/test_models/` are exempt.
+  (`disallow_untyped_defs`). `tests/` is exempt.
 - **NumPy-style docstrings** on public functions, enforced by ruff's `D` rules.
   Include `Parameters` and `Returns` sections.
 - Python 3.12 idioms: `X | None` rather than `Optional[X]`, built-in generics.

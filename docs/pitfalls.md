@@ -199,9 +199,7 @@ is the test most likely to catch a mistake here. Run it under MPI.
 ### The mesh is exactly four dimensions
 
 `create_process_mesh_dict` takes `(DP, SP, JSpatial, JChannel)` and validates the
-arity. It previously carried a leading `Expert` dimension, which was removed. Note
-that `beast/layers/expert.py` is unaffected — the mixture-of-experts *layers* still
-exist; only the mesh axis is gone.
+arity.
 
 ### Building a mesh is a collective call that prints
 
@@ -262,13 +260,3 @@ its `__getitem__` returns `(event, lead_time, inputs)` where the parent returns 
 `(input, target)` training pair. It is an evaluation dataset, not a training one.
 The override carries a documented `# type: ignore[override]`; do not pass an
 `EWBEra5` to code written against the `ERA5Distributed` interface.
-
-### `beast/model/test_models/` does not contain tests
-
-It holds historical and experimental architectures (ViT, Swin variants, a weather
-mixer) and is excluded from both mypy and ruff in `pyproject.toml`. Do not hold it
-to the standards of the rest of the codebase, do not use it as a template, and do
-not refactor it unless asked. Tests for the real model live in `tests/model/`.
-
-It is also the only consumer of the `config_dict["model"]` section — the
-production `Beast` is configured through `get_model` keyword arguments instead.

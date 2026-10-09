@@ -12,10 +12,8 @@ The ways this bites in practice are collected in [pitfalls.md](pitfalls.md).
 
 ## Sections
 
-The supported code path reads two sections, `data` and `training`. A third section,
-`model`, is read *only* by the legacy architectures in `beast/model/test_models/`
-— the production `Beast` model is configured through `get_model` keyword arguments
-instead. See [Legacy `model` section](#legacy-model-section) at the end.
+The data loading code reads two sections, `data` and `training`. The `Beast` model
+is configured through `get_model` keyword arguments instead (see below).
 
 ## `data`
 
@@ -39,7 +37,6 @@ Read by `get_dataloader` in `beast/data/dataloader.py`.
 | `n_variables` | `int` | Channel count. **Only read on the dummy-dataset path**, to shape the random tensors. |
 | `xlat` | `int` | Latitude grid points. **Dummy path only.** |
 | `xlon` | `int` | Longitude grid points. **Dummy path only.** |
-| `n_global_variables` | `int` | Global channel count. Read only by `test_models/`. |
 
 > **The dummy-data fallback is silent by default.**
 > `get_dataloader` checks `os.path.exists(data_path)`. If the path is missing it
@@ -147,16 +144,6 @@ supplied. The available IDs are `BEAST-JUPITER-2.6B-64K`,
 > such as the `heads` list are **shared** with the module-level `BEAST_CONFIGURATIONS`
 > dict. Mutating `model_config["heads"]` in place would corrupt the registry for
 > every later call in the process. Pass replacements, never mutate in place.
-
-### Legacy `model` section
-
-These keys are read only by `beast/model/test_models/` (ViT, weather mixer, Swin
-variants), which is excluded from mypy and ruff and is not part of the supported
-API. They are listed for completeness:
-
-`add`, `concat`, `dropout`, `features_hidden_dim_fraction`, `heads`, `hidden_dim`,
-`linear_residual`, `mixing_blocks`, `n_blocks`, `patch_size`,
-`spatial_hidden_dim_fraction`, `stride`, `transformer_dim`
 
 ## Environment variables
 

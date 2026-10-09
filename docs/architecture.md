@@ -59,7 +59,6 @@ bridges jigsaw's distributed layers and torch-blue's variational-inference layer
   Transformer Engine's `DotProductAttention` when jigsaw exposes it.
 - `nice_norm.py` — NICE normalization, an alternative to LayerNorm used when a
   configuration sets `nice_norm: true`.
-- `expert.py` — `Expert` and `ExpertWeightingLayer`, mixture-of-experts components.
 - `mlp.py` — feed-forward blocks.
 
 Windowed attention is controlled by `window_size_outer` and `window_size_inner`
@@ -97,11 +96,8 @@ and silently substitutes `ERA5Dummy`. Training proceeds happily on random noise.
 
 Owns the distributed topology. `create_process_mesh_dict(mesh_dims)` builds a
 4-D `DeviceMesh` and caches the resulting process groups in a module-level dict,
-retrieved by name with `get_process_group`. It validates the arity explicitly —
-the mesh used to carry a leading `Expert` dimension, and a stale 5-D layout now
-reports the mismatch rather than failing deeper inside `init_device_mesh`. The
-mixture-of-experts *layers* in `beast/layers/expert.py` are unaffected; only the
-mesh axis was removed.
+retrieved by name with `get_process_group`. It checks that exactly four mesh
+dimensions are given.
 
 | Group | Axis | Meaning |
 |-------|------|---------|

@@ -563,7 +563,6 @@ class TestDataset:
             n_out_timesteps=out_timesteps,
             dtype=torch.float32,
             dsync_access=False,
-            transform=trf.Identity(),
         )
 
         dataset_r1 = ERA5Distributed(

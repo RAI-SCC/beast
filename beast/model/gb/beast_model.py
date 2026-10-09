@@ -170,7 +170,6 @@ class Beast(torch.nn.Module):
 
         # Activation
         self.activation = torch.nn.GELU()
-        self.mask_in, self.mask_out = None, None
 
         self.channel_group_size = (
             dist.get_world_size(group=self.channel_group)
@@ -569,6 +568,10 @@ class Beast(torch.nn.Module):
             if self.nice_norm
             else transformer.TransformerBlock
         )
+        # Only the NICE blocks take the size of the noise vector
+        block_kwargs: dict[str, Any] = (
+            {"noise_dim": self.noise_dim} if self.nice_norm else {}
+        )
 
         self.transformer_1 = torch.nn.ModuleList(
             [
@@ -577,10 +580,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[0],
-                    noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[0])
             ]
@@ -593,10 +595,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim * 2,
                     out_dim=self.embed_dim * 2,
                     heads=self.heads[1],
-                    noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[1])
             ]
@@ -609,10 +610,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[2],
-                    noise_dim=self.noise_dim,
                     dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[2])
             ]
@@ -670,81 +670,6 @@ class Beast(torch.nn.Module):
         x = x.reshape(batch_size, xlat, xlon, channels)
         return x
 
-    def _gen_mask_(
-        self,
-        batch_dim: int,
-        n_patch_lat: int,
-        n_patch_lon: int,
-        window_size: Sequence[int],
-    ) -> torch.Tensor:
-        """Generate the attention mask for rolled fields.
-
-        Parameters
-        ----------
-        batch_dim : int
-            Unused.
-        n_patch_lat : int
-            Number of patches along latitude.
-        n_patch_lon : int
-            Number of patches along longitude.
-        window_size : Sequence[int]
-            Attention window ``(lat, lon)``.
-
-        Returns
-        -------
-        torch.Tensor
-            Mask of shape ``(n_windows, n_patch_in_window, n_patch_in_window)``,
-            0 where attention is allowed and -100000 where it is masked.
-        """
-        # Rolled mask
-        # 1 n_patch_lat n_patch_lon 1
-        img_mask = torch.zeros((1, n_patch_lat, n_patch_lon, 1), device=self.device)
-
-        img_mask[:, slice(0, window_size[0] // 2)] = 1
-        img_mask[:, slice(window_size[0] // 2, None)] = 2
-
-        mask_windows = self._get_windows(
-            img_mask, window_size
-        )  # n_windows, window_size, window_size, 1
-        mask_windows = mask_windows.view(-1, window_size[0] * window_size[1])
-        # (n_windows, window sequence length)
-        attention_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-        # (n_windows, window sequence length, window sequence length)
-        attention_mask = attention_mask.masked_fill(attention_mask != 0, -100000.0)
-
-        # Generates masks once
-        # This assumes constant batch dimension within a run (restarting a job is ok)
-        return attention_mask
-
-    def _define_masks(self, x_shape: torch.Size) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, _, lat, lon = x_shape
-        self.mask_out = (
-            self._gen_mask_(
-                batch_size,
-                lat // self.kernel_size,
-                lon // self.kernel_size,
-                self.window_size_outer,
-            )
-            .unsqueeze(1)
-            .detach()
-            if self.mask_out is None
-            else self.mask_out
-        )
-
-        self.mask_in = (
-            self._gen_mask_(
-                batch_size,
-                lat // self.kernel_size // 2,
-                lon // self.kernel_size // 2,
-                self.window_size_inner,
-            )
-            .unsqueeze(1)
-            .detach()
-            if self.mask_in is None
-            else self.mask_in
-        )
-        return self.mask_out, self.mask_in
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Predict the output fields from the input fields.
 
@@ -765,10 +690,6 @@ class Beast(torch.nn.Module):
             torch.randn(x.shape[0], self.noise_dim, device=self.device).to(self.dtype)
             / self.noise_dim
         )
-
-        # Define masks once upon initialization (dependent on batch dimension)
-        # Note: Masks do not currently work with torch flash.
-        # self.mask_out, self.mask_in = self._define_masks(x.shape)
 
         # x has global shape (B, channels, xlat, xlon)
         x = self.patch_embedding(x)

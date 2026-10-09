@@ -6,25 +6,6 @@ import torch
 from torch import Tensor, nn
 
 
-class Identity(nn.Module):
-    """Transformation that returns its input unchanged, as a placeholder."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Return ``x`` unchanged.
-
-        Parameters
-        ----------
-        x : Tensor
-            Input tensor.
-
-        Returns
-        -------
-        Tensor
-            The input tensor.
-        """
-        return x
-
-
 def _reshape_for_downsampling(
     x: Tensor, dims: Tuple[int, ...], factor: int, negative_dims: bool = False
 ) -> Tuple[Tensor, Tuple[int, ...]]:
