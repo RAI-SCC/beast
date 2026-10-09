@@ -1,31 +1,25 @@
-## What this changes
+# Description
 
-<!-- One or two sentences. What behaviour is different after this PR? -->
+<!-- Summarize the change and why it is needed. -->
 
-## Why
+Fixes # (issue)
 
-<!-- Link the issue, or explain the motivation. -->
+## Type of change
 
-## How it was verified
+<!-- Delete the options that do not apply. -->
 
-<!-- Tick what you actually ran. Leave the rest unticked rather than guessing. -->
+- [ ] Bug fix (non-breaking change that fixes an issue)
+- [ ] New feature (non-breaking change that adds functionality)
+- [ ] Breaking change (existing code using BEAST has to change)
+- [ ] Documentation only
 
-- [ ] `pre-commit run --all-files`
-- [ ] `TMPDIR=/var/tmp pytest` (single rank, CPU)
-- [ ] `TMPDIR=/var/tmp pytest --device cuda` (GPU)
-- [ ] `TMPDIR=/var/tmp mpirun -n 4 pytest` (distributed)
+## Checklist
 
-If this touches distributed code — the process mesh, sharded layers, gradient
-reduction, or the data shards — the multi-rank run is not optional. A single-rank
-pass does not exercise the collectives.
+<!-- If you cannot check a box, explain why below. -->
 
-## Docs
-
-- [ ] Public API changed → updated `docs/architecture.md`
-- [ ] New `config_dict` key → updated `docs/configuration.md`
-- [ ] New environment variable → updated `docs/configuration.md` and `AGENTS.md`
-- [ ] No docs change needed
-
-## Anything reviewers should look at closely
-
-<!-- Known gaps, decisions you were unsure about, things you could not test. -->
+- [ ] My code follows the [contributing guidelines](../CONTRIBUTING.md), including numpydoc docstrings
+- [ ] I have reviewed my own changes
+- [ ] I have added tests that cover my changes
+- [ ] `pre-commit run --all-files` and `mypy` pass
+- [ ] The tests pass with `mpirun -n 4 pytest --device cpu`, if the change touches distributed code
+- [ ] I have updated the documentation, and it builds with `sphinx-build -W`
