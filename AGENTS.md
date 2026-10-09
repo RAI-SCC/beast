@@ -33,7 +33,7 @@ beast/
   utils.py            Seeding, dtype parsing, latitude weights
   data/
     era5/dataset.py   ERA5Distributed, ERA5Dummy, EWBEra5, Event (largest data file)
-    dataloader.py     GBDataLoader + get_dataloader factory (config-driven)
+    dataloader.py     BeastDataLoader + get_dataloader factory (config-driven)
     sampler.py        ResumableDistributedSampler (mid-epoch restart)
     transforms.py     Normalization / de-normalization transforms
   layers/
@@ -44,8 +44,8 @@ beast/
   model/
     model_factory.py  get_model(model_id, **kwargs)
     model_configs.py  CONFIGS registry (currently only BEAST_CONFIGURATIONS)
-    gb/beast_model.py The Beast module — the production model
-    gb/beast_config.py Named configurations (BEAST-JUPITER-*, BEAST-LUMI-*, BEASTLING)
+    beast_model.py    The Beast module
+    beast_config.py   Named configurations (BEAST-JUPITER-*, BEAST-LUMI-*, BEASTLING)
   evaluation/         Metrics (mae, mse, rmse, crps, spread_skill_ratio), plotting
 libs/jigsaw/          Git submodule: domain-decomposed distributed primitives
 tests/                Mirrors beast/ layout

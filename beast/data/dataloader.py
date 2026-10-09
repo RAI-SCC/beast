@@ -23,7 +23,7 @@ from beast.utils import set_dtype
 DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
 
 
-class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
+class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):
     """Multiprocessing loader iterator that times each ``__next__`` call."""
 
     def __next__(self) -> tuple[Any, float, float]:
@@ -46,11 +46,11 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
         return *data, start, end
 
 
-class GBDataLoader(DataLoader):
-    """Data loader whose iterator, :class:`GBDataLoaderIter`, times each batch fetch."""
+class BeastDataLoader(DataLoader):
+    """Data loader whose iterator, :class:`BeastDataLoaderIter`, times each batch fetch."""
 
     def _get_iterator(self) -> _BaseDataLoaderIter:
-        return GBDataLoaderIter(self)
+        return BeastDataLoaderIter(self)
 
 
 def get_dataloader(
@@ -63,8 +63,8 @@ def get_dataloader(
     transform: Callable | None = None,
     target_transform: Callable | None = None,
     **kwargs: Any,
-) -> GBDataLoader:
-    """Create a :class:`GBDataLoader` from a configuration dictionary.
+) -> BeastDataLoader:
+    """Create a :class:`BeastDataLoader` from a configuration dictionary.
 
     If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
     from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
@@ -96,7 +96,7 @@ def get_dataloader(
 
     Returns
     -------
-    GBDataLoader
+    BeastDataLoader
         The dataloader, sampling with a :class:`ResumableDistributedSampler`.
     """
     data_path = config_dict["data"]["data_path"]
@@ -182,7 +182,7 @@ def get_dataloader(
         resume_idx=0,  # set from checkpoint on resume
     )
 
-    dataloader = GBDataLoader(
+    dataloader = BeastDataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=(sampler is None),

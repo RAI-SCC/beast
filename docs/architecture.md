@@ -31,7 +31,7 @@ Two things distinguish it from a standard vision transformer:
 package root. It looks `model_id` up in `CONFIGS` (`model_configs.py`), shallow-copies
 the stored config, applies `kwargs` as overrides, and instantiates the class.
 
-`CONFIGS` currently aggregates only `BEAST_CONFIGURATIONS` from `gb/beast_config.py`:
+`CONFIGS` currently aggregates only `BEAST_CONFIGURATIONS` from `beast_config.py`:
 
 | Model ID | Grid | `embed_dim` | Bayesian | Purpose |
 |----------|------|-------------|----------|---------|
@@ -43,7 +43,7 @@ the stored config, applies `kwargs` as overrides, and instantiates the class.
 `BEASTLING` is the one you want when developing locally — it is deterministic,
 uses a coarse grid, and fits on a single device.
 
-`gb/beast_model.py` defines `Beast`. Its `__init__` is **keyword-only** and takes
+`beast_model.py` defines `Beast`. Its `__init__` is **keyword-only** and takes
 the architecture parameters plus four optional process groups (`channel_group`,
 `spatial_group`, `dtp_group`, `up_group`). Passing `None` for all of them yields a
 single-device model, which is how most tests run it.
@@ -82,7 +82,7 @@ because a single-rank run exercises none of the interesting paths.
   WeatherBench-style layout, and `Event` describes a named case study.
 - `dataloader.py` — `get_dataloader(config_dict, ...)` builds the dataset, applies
   optional subsetting, wraps it in a `ResumableDistributedSampler`, and returns a
-  `GBDataLoader`. `GBDataLoader` is a plain `DataLoader` whose iterator also yields
+  `BeastDataLoader`. `BeastDataLoader` is a plain `DataLoader` whose iterator also yields
   the perf-counter timestamps bracketing each fetch, for I/O profiling.
 - `sampler.py` — `ResumableDistributedSampler` slices the shuffled index list at
   `resume_idx`, so a job restarted mid-epoch does not repeat samples.

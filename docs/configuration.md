@@ -135,7 +135,7 @@ from beast import get_model
 model = get_model("BEASTLING", device=torch.device("cpu"))
 ```
 
-`get_model` takes a named configuration from `beast/model/gb/beast_config.py` and
+`get_model` takes a named configuration from `beast/model/beast_config.py` and
 applies any keyword arguments as overrides. `device` has no default and must be
 supplied. The available IDs are `BEAST-JUPITER-2.6B-64K`,
 `BEAST-JUPITER-0.7B-1.8K`, `BEAST-LUMI-1.2B-1.8K` and `BEASTLING`.
