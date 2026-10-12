@@ -223,6 +223,10 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
+        if total_samples < 2:
+            raise ValueError(
+                f"MeanStdPriorMatchingAggregation needs at least 2 samples in total to estimate the variance, got {total_samples}."
+            )
 
         # Pass 1: exact global mean. One field, blocking -- we need the result
         # before we can form deviations.

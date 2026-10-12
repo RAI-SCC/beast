@@ -25,7 +25,7 @@ def set_dtype(dtype: str) -> torch.dtype:
     Parameters
     ----------
     dtype : str
-        Data type as a string, e.g., "float32", "bfloat16"
+        Data type as a string: "float32"/"fp32", "bfloat16"/"bf16" or "float16"/"fp16".
 
     Returns
     -------
@@ -33,14 +33,17 @@ def set_dtype(dtype: str) -> torch.dtype:
         Corresponding torch data type.
     """
     match dtype:
-        case "float32":
+        case "float32" | "fp32":
             return torch.float32
-        case "bfloat16":
+        case "bfloat16" | "bf16":
             return torch.bfloat16
-        case "float16":
+        case "float16" | "fp16":
             return torch.float16
         case _:
-            return torch.float32
+            raise ValueError(
+                f"Unknown dtype '{dtype}'. Accepted values: 'float32' ('fp32'), "
+                "'bfloat16' ('bf16'), 'float16' ('fp16')."
+            )
 
 
 @torch.no_grad()

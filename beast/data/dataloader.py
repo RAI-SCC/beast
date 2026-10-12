@@ -71,7 +71,7 @@ def get_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-    **kwargs: dict,
+    **kwargs: Any,
 ) -> GBDataLoader:
     """
     Create a GBDataLoader instance from config specifications.

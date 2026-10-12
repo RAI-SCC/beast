@@ -1,10 +1,9 @@
 """Utilities for saving and loading model checkpoints and state_dicts."""
 
 import math
-import os
 import re
 import warnings
-from typing import Any, Dict, Tuple, cast
+from typing import Any, Tuple, cast
 
 import torch
 import torch.distributed as dist
@@ -51,7 +50,7 @@ def save_checkpoint(
         channel_group: dist.ProcessGroup | None = get_process_group("JChannel")
         ddp_group: dist.ProcessGroup | None = get_process_group("DDP")
 
-    except Exception:
+    except ValueError:
         channel_group = None
         ddp_group = None
 
@@ -185,17 +184,10 @@ def load_state_dict(
             k.replace("module.", "", 1): v for k, v in model_state_dict.items()
         }
 
-    try:
-        model.load_state_dict(model_state_dict)
-        if optimizer is not None:
-            optimizer.load_state_dict(optimizer_state_dict)
-        if last_epoch is not None:
-            start_epoch = last_epoch + 1
-    except Exception as err:
-        if dist.get_rank() == 0:
-            print(err)
-            print("Model cannot be loaded from checkpoint. Reinitializing model.")
-        start_epoch = 0
+    model.load_state_dict(model_state_dict)
+    if optimizer is not None:
+        optimizer.load_state_dict(optimizer_state_dict)
+    start_epoch = last_epoch + 1 if last_epoch is not None else 0
 
     return (
         model,
