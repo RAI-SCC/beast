@@ -161,7 +161,7 @@ class DistributedMLPNICE(torch.nn.Module):
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
 
-        self.linear2 = linear.DistributedXWT(
+        self.linear2 = linear.DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,
@@ -169,7 +169,7 @@ class DistributedMLPNICE(torch.nn.Module):
             device=device,
             model_group=channel_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=False,
         )
 
@@ -256,7 +256,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.channel_group = channel_group
 
         # pass in global dimensions for linear layers.
-        self.linear1 = linear.DistributedXWT(
+        self.linear1 = linear.DistributedLinear(
             in_dim,
             hidden_dim,
             bias=bias,
@@ -264,11 +264,11 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             device=device,
             model_group=model_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=bayesian,
         )
 
-        self.linear2 = linear.DistributedXWT(
+        self.linear2 = linear.DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,
@@ -276,11 +276,11 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             device=device,
             model_group=model_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=bayesian,
         )
 
-        # DistributedXWT marks only its bias over row_group (the spatial group);
+        # DistributedLinear marks only its bias over row_group (the spatial group);
         # the weight is replicated over it too, and synced in the XWT forward.
         for p in self.parameters():
             parallel.mark_replicated(p, self.spatial_group, extend=True)

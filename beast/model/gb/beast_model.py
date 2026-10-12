@@ -5,7 +5,7 @@ from typing import Sequence
 import torch
 import torch.distributed as dist
 from jigsaw import linear, parallel, roll  # type: ignore
-from jigsaw.modules.convolution import DistributedConv2D, DistributedConv2DTranspose
+from jigsaw.modules.convolution import DistributedConv2d, DistributedConvTranspose2d
 
 from beast.layers import transformer
 
@@ -225,7 +225,7 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding: torch.nn.Module = DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = DistributedConv2d(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -241,7 +241,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample: torch.nn.Module = DistributedConv2D(
+        self.downsample: torch.nn.Module = DistributedConv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -257,7 +257,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample: torch.nn.Module = DistributedConv2DTranspose(
+        self.upsample: torch.nn.Module = DistributedConvTranspose2d(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -274,7 +274,7 @@ class Beast(torch.nn.Module):
         )
 
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
+        self.upsample_mix: torch.nn.Module = linear.DistributedLinear(
             in_dim=self.embed_dim,
             out_dim=self.embed_dim,
             bias=True,
@@ -282,11 +282,11 @@ class Beast(torch.nn.Module):
             device=self.device,
             model_group=self.channel_group,
             row_group=self.spatial_group,
-            column_group=self.channel_group,
+            col_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = DistributedConv2DTranspose(
+        self.patch_recovery: torch.nn.Module = DistributedConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -474,7 +474,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        # The weight is replicated over the spatial group too; DistributedXWT
+        # The weight is replicated over the spatial group too; DistributedLinear
         # marks only its bias, over row_group, and syncs both in its forward.
         for p in self.upsample_mix.parameters():
             parallel.mark_replicated(p, self.spatial_group, extend=True)
