@@ -13,11 +13,12 @@ from beast.layers import mlp, nice_norm
 
 USE_TE_DPA = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
 if USE_TE_DPA and not JIGSAW_TE_AVAILABLE:
-    warnings.warn(
-        "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
-        "Falling back to torch SDPA.",
-        UserWarning,
-    )
+    if os.getenv("RANK", "0") == "0":
+        warnings.warn(
+            "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
+            "Falling back to torch SDPA.",
+            UserWarning,
+        )
     USE_TE_DPA = False
 
 

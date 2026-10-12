@@ -31,6 +31,11 @@ def set_dtype(dtype: str) -> torch.dtype:
     -------
     torch.dtype
         Corresponding torch data type.
+
+    Raises
+    ------
+    ValueError
+        If the data type is not one of the accepted values.
     """
     match dtype:
         case "float32" | "fp32":
