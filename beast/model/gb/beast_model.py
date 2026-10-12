@@ -1,5 +1,6 @@
 """Beast (Bayesian Exascale Atmospheric Swim Transformer) model definition."""
 
+import warnings
 from typing import Sequence
 
 import torch
@@ -88,7 +89,7 @@ class Beast(torch.nn.Module):
         # Device,
         device: torch.device,
         # Dropout
-        dropout: float = 1e-1,
+        dropout: float | None = None,
         # Norm
         qk_norm: bool = False,
         # Boolean flags
@@ -119,7 +120,12 @@ class Beast(torch.nn.Module):
         self.window_size_inner = window_size_inner
         self.n_full_blocks = n_full_blocks
         self.noise_dim = noise_dim
-        self.dropout = dropout if not bayesian else 0.0
+        if bayesian and dropout:
+            warnings.warn(
+                f"dropout={dropout} is ignored for Bayesian models, using 0.0.",
+                UserWarning,
+            )
+        self.dropout = 0.0 if bayesian else (dropout if dropout is not None else 1e-1)
         self.device = device
         self.channel_group = channel_group
         self.spatial_group = spatial_group

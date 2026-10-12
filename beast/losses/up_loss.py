@@ -220,9 +220,18 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
         Tensor
             The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+
+        Raises
+        ------
+        ValueError
+            If fewer than 2 samples are available in total across the UP group.
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
+        if total_samples < 2:
+            raise ValueError(
+                f"MeanStdPriorMatchingAggregation needs at least 2 samples in total to estimate the variance, got {total_samples}."
+            )
 
         # Pass 1: exact global mean. One field, blocking -- we need the result
         # before we can form deviations.

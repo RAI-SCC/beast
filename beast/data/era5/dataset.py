@@ -140,7 +140,7 @@ class ERA5Distributed(Dataset):
         self.rollout = rollout
         mask_list = constant_masks
 
-        self.norm_values: dict[str, np.array] = {}
+        self.norm_values: dict[str, np.ndarray] = {}
 
         def load_data() -> None:
             """Inline utility function for initial data access."""
@@ -640,7 +640,7 @@ class ERA5Dummy(Dataset):
             self.in_out_xlon[1] - self.in_out_xlon[0],
         )
 
-        if self.fill_value:
+        if self.fill_value is not None:
             input = torch.full(shape_in, self.fill_value, dtype=self.dtype)
             target = torch.full(shape_out, self.fill_value, dtype=self.dtype)
         else:
