@@ -28,30 +28,39 @@ def convert_jigsaw_vi(
     prior_initialization: bool = False,
     return_log_probs: bool = True,
 ) -> None:
-    """Convert a PyTorch module to a VI module using torch_blue, with custom handling for Jigsaw's specific layers and normalization.
+    """Make a module with jigsaw layers Bayesian, in place.
+
+    Linear and convolution layers become torch_blue variational layers.
+    Normalization layers and Transformer Engine attention keep deterministic
+    weights. The variational parameters are replicated over ``spatial_pg``:
+    they are broadcast from its first rank and their gradients are synchronized.
+    The fan-in of the channel-sharded layers (``AVIDistributedXWT`` and
+    ``AVIConvTranspose2d``) is scaled by the size of ``channel_pg``, so that
+    they are initialized like the full layer.
+
+    The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
 
     Parameters
     ----------
     module : torch.nn.Module
-        The PyTorch module to convert.
+        Module to convert.
     channel_pg : dist.ProcessGroup
-        The process group for channel parallelism.
+        The ``JChannel`` process group.
     spatial_pg : dist.ProcessGroup
-        The process group for spatial parallelism.
-    variational_distribution : torch_blue.vi.distributions.Distribution, optional
-        The variational distribution to use for the VI conversion, by default vidist.Normal(std=0.15)
-    prior : torch_blue.vi.distributions.Distribution, optional
-        The prior distribution to use for the VI conversion, by default vidist.Normal()
-    rescale_prior : bool, optional
-        Whether to rescale the prior based on the number of processes, by default False
-    kaiming_initialization : bool, optional
-        Whether to use Kaiming initialization for the variational parameters, by default True
-    prior_initialization : bool, optional
-        Whether to initialize the variational parameters based on the prior, by default False
-    return_log_probs : bool, optional
-        Whether the converted module should return log probabilities, by default True
+        The ``JSpatial`` process group.
+    variational_distribution : torch_blue.vi.distributions.Distribution, default: Normal(std=0.15)
+        Variational distribution of the converted weights.
+    prior : torch_blue.vi.distributions.Distribution, default: Normal()
+        Prior distribution of the converted weights.
+    rescale_prior : bool, default: False
+        Whether to rescale the prior.
+    kaiming_initialization : bool, default: True
+        Whether to use Kaiming initialization for the variational parameters.
+    prior_initialization : bool, default: False
+        Whether to initialize the variational parameters from the prior.
+    return_log_probs : bool, default: True
+        Whether the converted module returns log probabilities.
     """
-    # torch_blue.vi.distributions.Distribution._init_uniform = _init_uniform_override
     vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
@@ -76,6 +85,20 @@ def convert_jigsaw_vi(
     def new_cf_channel(
         self: torch.nn.Module, variable_shapes: dict[str, torch.Size] | None = None
     ) -> int:
+        """Return the fan-in of the full layer, not just of the local shard.
+
+        Parameters
+        ----------
+        self : torch.nn.Module
+            The layer the method is bound to.
+        variable_shapes : dict[str, torch.Size], optional
+            Shapes of the variational parameters, passed to the original method.
+
+        Returns
+        -------
+        int
+            The fan-in of the local shard times the size of ``channel_pg``.
+        """
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
@@ -97,26 +120,27 @@ def convert_jigsaw_vi(
                 dist.broadcast(p.data, group_src=0, group=spatial_pg)
 
 
-# TODO: How are parameters counted in torch_blue? Could this lead to double counting? Additionally, if we just pass a process group (e.g. channel parallel group), the size could be used, and it would lead to a more general method.
 def count_model_parameters(
     model: torch.nn.Module, parallelism: int, bayesian: bool
 ) -> int:
-    """
-    Count the number of parameters in a model, taking into account parallelism and whether the model is Bayesian.
+    """Count model parameters, scaled by parallelism and doubled if Bayesian.
 
     Parameters
     ----------
     model : torch.nn.Module
-        The model for which to count parameters.
+        Model to count. With ``parallelism > 1`` only submodules that provide
+        ``get_parameter_count()`` contribute.
     parallelism : int
         The degree of parallelism.
     bayesian : bool
-        Whether the model is Bayesian (which would double the parameter count).
+        Whether to double the count, for a mean and a spread per weight. A
+        single-process model converted with torch_blue already holds both as
+        separate parameters, so its count is doubled once more.
 
     Returns
     -------
     int
-        The total number of parameters in the model, adjusted for parallelism and Bayesian nature.
+        Total parameter count.
     """
     if parallelism == 1:
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)

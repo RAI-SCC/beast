@@ -1,7 +1,6 @@
-"""Beast (Bayesian Exascale Atmospheric Swim Transformer) model definition."""
+"""The BEAST (Bayesian Exascale Atmospheric Swin Transformer) model."""
 
-import warnings
-from typing import Sequence
+from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
@@ -12,56 +11,76 @@ from beast.layers import transformer
 
 
 class Beast(torch.nn.Module):
-    """Base class for the BEAST model.
+    """Bayesian Exascale Atmospheric Swin Transformer.
 
-    Bayesian Exascale Atmospheric Swim Transformer.
+    The input is patch-embedded, passed through windowed transformer blocks at
+    full resolution, downsampled by 2 for a second set of blocks, upsampled and
+    passed through a third set, and finally recovered to the output channels
+    from the concatenation with the patch embedding. Each set alternates plain
+    and shifted windows.
+
+    The model is sharded over the ``JSpatial`` and ``JChannel`` process groups
+    if ``dtp_group`` has more than one rank. Its inputs and outputs are then the
+    local shards.
 
     Parameters
     ----------
     height : int
-        Height of the input data.
+        Global height of the input, in grid points.
     width : int
-        Width of the input data.
+        Global width of the input, in grid points.
     in_channels : int
         Number of input channels.
     out_channels : int
         Number of output channels.
     embed_dim : int
-        Embedding dimension for the model.
-    heads : int
-        Number of attention heads.
+        Embedding dimension. Doubled after the downsampling.
+    heads : Sequence[int]
+        Number of attention heads in each of the three sets of blocks.
     kernel_size : int
-        Kernel size for the convolutional layers.
-    window_size_outer : int
-        Window size for the outer attention blocks.
-    window_size_inner : int
-        Window size for the inner attention blocks.
-    n_full_blocks : int
-        Number of full attention blocks.
+        Kernel size of the patch embedding and recovery.
+    stride : int
+        Stride of the patch embedding and recovery.
+    padding : int
+        Padding of the convolutions.
+    dilation : int
+        Dilation of the convolutions.
+    window_size_outer : Sequence[int]
+        Attention window ``(lat, lon)`` in the first and third set of blocks.
+        Entries must be even.
+    window_size_inner : Sequence[int]
+        Attention window ``(lat, lon)`` in the second set of blocks. Entries
+        must be even.
+    n_full_blocks : Sequence[int]
+        Number of plain-and-shifted block pairs in each of the three sets.
     noise_dim : int
-        Dimension of the noise input for the Bayesian model.
-    device : int
-        Device to run the model on.
-    parallelism : int
-        Degree of parallelism for the model.
-    dtp_group : dist.ProcessGroup
-        Process group for data parallelism.
-    spatial_group : dist.ProcessGroup
-        Process group for spatial parallelism.
-    channel_group : dist.ProcessGroup
-        Process group for channel parallelism.
-    up_group : dist.ProcessGroup
-        Process group for unsharded parallelism.
-    dtype : torch.dtype
-        Data type for the model parameters.
-    bayesian : bool
-        Whether to use the Bayesian version of the model.
-    nice_norm : bool
-        Whether to use the NICE normalization for the attention blocks.
-
-    Notes
-    -----
-    TODO: Reference to papers and documentation.
+        Size of the noise vector for the NICE normalization. Required even if
+        ``nice_norm`` is False.
+    device : torch.device
+        Device to place the model on.
+    dropout : float, default: 0.1
+        Dropout probability of the distributed model, set to 0 if ``bayesian``.
+        The single-process model always uses a dropout of 1e-3.
+    qk_norm : bool, default: False
+        Whether to normalize queries and keys in the attention.
+    bayesian : bool, default: False
+        Whether the distributed layers are Bayesian.
+    nice_norm : bool, default: False
+        Whether to use NICE normalization in the transformer blocks.
+    dtype : torch.dtype, default: torch.float32
+        Data type of the model.
+    channel_group : dist.ProcessGroup, optional
+        The ``JChannel`` process group.
+    spatial_group : dist.ProcessGroup, optional
+        The ``JSpatial`` process group.
+    dtp_group : dist.ProcessGroup, optional
+        The ``DTP`` process group. The model is sharded if it has more than
+        one rank.
+    up_group : dist.ProcessGroup, optional
+        The ``SP`` process group. Only stored on the model.
+    **kwargs
+        Accepted and ignored, so unknown keyword arguments do not raise an
+        error.
     """
 
     def __init__(
@@ -102,7 +121,7 @@ class Beast(torch.nn.Module):
         spatial_group: dist.ProcessGroup | None = None,
         dtp_group: dist.ProcessGroup | None = None,
         up_group: dist.ProcessGroup | None = None,
-        **kwargs: dict,
+        **kwargs: Any,
     ) -> None:
         super().__init__()
 
@@ -139,7 +158,20 @@ class Beast(torch.nn.Module):
         self._build_model()
 
     def _build_model(self) -> None:
+        """Check the configuration and build the layers.
 
+        The sharded layers are built if the ``DTP`` group has more than one
+        rank, otherwise single-process layers. The layers are also grouped into
+        ``params["low_lr"]`` (convolutions and the upsampling mix) and
+        ``params["normal_lr"]`` (transformer blocks), for separate learning
+        rates.
+
+        Raises
+        ------
+        AssertionError
+            If a window size is odd, or the width is not divisible by the size
+            of ``spatial_group`` times the patch and window sizes.
+        """
         assert self.window_size_outer[0] % 2 == 0, (
             "window_outer[0] size must be divisible by 2"
         )
@@ -155,7 +187,6 @@ class Beast(torch.nn.Module):
 
         # Activation
         self.activation = torch.nn.GELU()
-        self.mask_in, self.mask_out = None, None
 
         self.channel_group_size = (
             dist.get_world_size(group=self.channel_group)
@@ -220,6 +251,13 @@ class Beast(torch.nn.Module):
         )
 
     def _build_dist_model(self) -> None:
+        """Build the layers sharded over the ``JSpatial`` and ``JChannel`` groups.
+
+        Raises
+        ------
+        AssertionError
+            If ``channel_group``, ``spatial_group`` or ``dtp_group`` is None.
+        """
         assert self.channel_group is not None, (
             "channel_group must not be None for distributed model"
         )
@@ -487,7 +525,7 @@ class Beast(torch.nn.Module):
             dist.broadcast(p.data, group_src=0, group=self.spatial_group)
 
     def _build_sequential_model(self) -> None:
-
+        """Build the single-process layers."""
         self.patch_embedding = torch.nn.Conv2d(
             self.in_channels,
             self.embed_dim,  # global values
@@ -554,6 +592,10 @@ class Beast(torch.nn.Module):
             if self.nice_norm
             else transformer.TransformerBlock
         )
+        # Only the NICE blocks take the size of the noise vector
+        block_kwargs: dict[str, Any] = (
+            {"noise_dim": self.noise_dim} if self.nice_norm else {}
+        )
 
         self.transformer_1 = torch.nn.ModuleList(
             [
@@ -562,10 +604,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[0],
-                    noise_dim=self.noise_dim,
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[0])
             ]
@@ -578,10 +619,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim * 2,
                     out_dim=self.embed_dim * 2,
                     heads=self.heads[1],
-                    noise_dim=self.noise_dim,
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[1])
             ]
@@ -594,10 +634,9 @@ class Beast(torch.nn.Module):
                     embed_dim=self.embed_dim,
                     out_dim=self.embed_dim,
                     heads=self.heads[2],
-                    noise_dim=self.noise_dim,
-                    dropout=1e-3,  # TODO Make this flag for bayesian vs non-bayesian
+                    dropout=1e-3,
                     device=self.device,
-                    dtype=self.dtype,
+                    **block_kwargs,
                 ).to(self.device)
                 for i in torch.arange(2 * self.n_full_blocks[2])
             ]
@@ -621,6 +660,21 @@ class Beast(torch.nn.Module):
         )
 
     def _get_windows(self, x: torch.Tensor, window_size: Sequence[int]) -> torch.Tensor:
+        """Split a field into non-overlapping attention windows.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Field of shape ``(batch, lat, lon, channels)``.
+        window_size : Sequence[int]
+            Window size ``(lat, lon)``. Must divide the field size.
+
+        Returns
+        -------
+        torch.Tensor
+            Windows of shape ``(batch * n_windows, window_lat * window_lon,
+            channels)``.
+        """
         batch_size, xlat, xlon, channels = x.shape
         x = x.reshape(
             batch_size,
@@ -643,6 +697,31 @@ class Beast(torch.nn.Module):
         channels: int,
         window_size: Sequence[int],
     ) -> torch.Tensor:  # noqa: N803
+        """Reassemble a field from its attention windows.
+
+        This is the inverse of :meth:`_get_windows`.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Windows of shape ``(batch * n_windows, window_lat * window_lon,
+            channels)``.
+        batch_size : int
+            Batch size of the field.
+        xlat : int
+            Number of latitudes of the field.
+        xlon : int
+            Number of longitudes of the field.
+        channels : int
+            Number of channels of the field.
+        window_size : Sequence[int]
+            Window size ``(lat, lon)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Field of shape ``(batch, lat, lon, channels)``.
+        """
         x = x.reshape(
             batch_size,
             xlat // window_size[0],
@@ -655,91 +734,21 @@ class Beast(torch.nn.Module):
         x = x.reshape(batch_size, xlat, xlon, channels)
         return x
 
-    def _gen_mask_(
-        self,
-        batch_dim: int,
-        n_patch_lat: int,
-        n_patch_lon: int,
-        window_size: Sequence[int],
-    ) -> torch.Tensor:
-        """
-        Generate mask for attention mechanism when fields are rolled.
-
-        n_patch_vert: int
-            Number of patches in the vertical (first) dimension
-        n_patch_lat: int
-            Number of patches in the latitude (second) dimension
-        n_patch_lon: int
-            Number of patches in the longitude (third) dimension
-
-        Returns
-        -------
-        attention_mask: Tensor
-            of shape (n_windows, n_patch_in_window, n_patch_in_window)
-            attention mask with value of 0 when attention should not be masked and -10000 when masked.
-        """
-        # Rolled mask
-        # 1 n_patch_lat n_patch_lon 1
-        img_mask = torch.zeros((1, n_patch_lat, n_patch_lon, 1), device=self.device)
-
-        img_mask[:, slice(0, window_size[0] // 2)] = 1
-        img_mask[:, slice(window_size[0] // 2, None)] = 2
-
-        mask_windows = self._get_windows(
-            img_mask, window_size
-        )  # n_windows, window_size, window_size, 1
-        mask_windows = mask_windows.view(-1, window_size[0] * window_size[1])
-        # (n_windows, window sequence length)
-        attention_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-        # (n_windows, window sequence length, window sequence length)
-        attention_mask = attention_mask.masked_fill(attention_mask != 0, -100000.0)
-
-        # Generates masks once
-        # This assumes constant batch dimension within a run (restarting a job is ok)
-        return attention_mask
-
-    def _define_masks(self, x_shape: torch.Size) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, _, lat, lon = x_shape
-        self.mask_out = (
-            self._gen_mask_(
-                batch_size,
-                lat // self.kernel_size,
-                lon // self.kernel_size,
-                self.window_size_outer,
-            )
-            .unsqueeze(1)
-            .detach()
-            if self.mask_out is None
-            else self.mask_out
-        )
-
-        self.mask_in = (
-            self._gen_mask_(
-                batch_size,
-                lat // self.kernel_size // 2,
-                lon // self.kernel_size // 2,
-                self.window_size_inner,
-            )
-            .unsqueeze(1)
-            .detach()
-            if self.mask_in is None
-            else self.mask_in
-        )
-        return self.mask_out, self.mask_in
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for the Beast model.
+        """Predict the output fields from the input fields.
+
+        A new noise vector for the NICE normalization is drawn on every call,
+        also if ``nice_norm`` is False.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor of shape (batch, in_channels, height, width).
+            Input of shape ``(batch, in_channels, height, width)``.
 
         Returns
         -------
         torch.Tensor
-            Output tensor of shape (batch, out_channels, height, width).
+            Output of shape ``(batch, out_channels, height, width)``.
         """
         # noise has shape [(sample), batch, noise_dim]
         noise = (
@@ -747,15 +756,10 @@ class Beast(torch.nn.Module):
             / self.noise_dim
         )
 
-        # Define masks once upon initialization (dependent on batch dimension)
-        # Note: Masks do not currently work with torch flash.
-        # self.mask_out, self.mask_in = self._define_masks(x.shape)
-
         # x has global shape (B, channels, xlat, xlon)
         x = self.patch_embedding(x)
         x_res = x.clone()
         batch_size, channels, xlat, xlon = x.shape  # noqa: N806
-        # TODO: fuse as x.permute(0, 2, 3, 1)
         x = x.permute(0, 2, 3, 1).contiguous()
 
         # attention

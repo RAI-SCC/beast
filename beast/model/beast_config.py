@@ -1,8 +1,8 @@
-"""Official BEAST configurations for the get_model factory function."""
+"""Named BEAST configurations for :func:`~beast.model.get_model`."""
 
 from typing import Any
 
-from beast.model.gb.beast_model import Beast
+from beast.model.beast_model import Beast
 
 BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
     "BEAST-JUPITER-2.4B-64K": {

@@ -1,0 +1,4 @@
+sphinx>=8.1
+sphinx-autoapi>=3.3
+myst-parser>=4.0
+sphinx-rtd-theme>=3.0

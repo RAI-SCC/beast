@@ -26,7 +26,7 @@ group sizes of both 1 and 2, which is what the mesh layouts in the tests use.
 
 from typing import Any
 
-from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
+from beast.model.beast_config import BEAST_CONFIGURATIONS
 
 SMALL_BEAST_OVERRIDES: dict[str, Any] = {
     "height": 48,

@@ -20,31 +20,31 @@ def save_checkpoint(
     step: int | None,
     loss: float,
 ) -> str:
-    """
-    Save checkpoint to file.
+    """Save a checkpoint named ``cp-epoch{epoch}[-step{step}][-jc{rank}].pt``.
 
-    If there is no channel_group defined, this assumes that the model is
-    not distributed. Model will save on global rank = 0.
+    Without a ``JChannel`` process group the model is assumed to be
+    non-distributed and is written by global rank 0. Otherwise each channel
+    rank writes its own shard, from the rank 0 of the ``DDP`` group.
 
     Parameters
     ----------
-    checkpoint_path: str
-        Directory to save checkpoint to.
-    model: torch.nn.Module
+    checkpoint_path : str
+        Directory to write the checkpoint to.
+    model : torch.nn.Module
         Model to save.
-    optimizer: torch.optim
+    optimizer : torch.optim.Optimizer or None
         Optimizer to save.
-    epoch: int
+    epoch : int
         Current epoch.
-    step: int
-        Current step (batch).
-    loss: torch.Tensor | int
+    step : int or None
+        Current step (batch). Omitted from the file name if None or 0.
+    loss : float
         Average loss value.
 
     Returns
     -------
     str
-        Path to the checkpoint
+        Path of the checkpoint file, on every rank.
     """
     try:
         channel_group: dist.ProcessGroup | None = get_process_group("JChannel")
@@ -90,23 +90,21 @@ def save_checkpoint(
 def load_checkpoint(
     checkpoint_path: str, map_location: str | torch.device = "cpu"
 ) -> dict[str, Any]:
-    """
-    Load a checkpoint.
-
-    Returns the model state dict, optimizer state dict, scheduler state dict, epoch, step, and channel group rank.
+    """Load a checkpoint written by :func:`save_checkpoint`.
 
     Parameters
     ----------
-    checkpoint_path: str
-        Path to the checkpoint file
-    map_location: Callable | device | str |
-        A function, torch.device, string or a dict specifying how to remap storage locations
+    checkpoint_path : str
+        Path to the checkpoint file.
+    map_location : str or torch.device, default: "cpu"
+        Where to remap the stored tensors, as in :func:`torch.load`.
 
     Returns
     -------
-    checkpoint:  Dict[str, Any]
-        Dictionary containing model state dict, optimizer state dict, epoch, step, and other information.
-
+    dict[str, Any]
+        The checkpoint, with the keys ``model_state_dict``,
+        ``optimizer_state_dict``, ``epoch``, ``step``, ``channel_group_rank``,
+        ``loss`` and ``format``.
     """
     return cast(
         dict[str, Any],
@@ -115,18 +113,19 @@ def load_checkpoint(
 
 
 def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
-    """Parse epochs, step, and channel rank from the checkpoint name.
+    """Parse epoch, step and channel rank from a checkpoint file name.
 
     Parameters
     ----------
-    fname: str
-        Name of checkpoint file. Should be formatted as f"cp-epoch{num}-step{num}-jc{num}.pt"
-        If the model is not distributed, the file name is just f"cp-epoch{num}-step{num}.pt"
+    fname : str
+        File name of the form ``cp-epoch{n}[-step{n}][-jc{n}].pt``.
 
     Returns
     -------
-    dictionary
-        of epoch, step, channel rank, checkpoint file name.
+    dict[str, Any] or None
+        The keys ``epoch``, ``step``, ``jchannel_rank`` and ``fname``, with
+        ``math.inf`` for a missing step or channel rank. None, with a warning,
+        if ``fname`` does not match the pattern.
     """
     m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?(?:-jc(\d+))?\.pt$", fname)
     if not m:
@@ -154,26 +153,28 @@ def load_state_dict(
     optimizer_state_dict: dict,
     last_epoch: int,
 ) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim.Optimizer | None, int]:
-    """
-    Load state dict for a given model.
+    """Load model and optimizer state, adapting to DDP-wrapped models.
+
+    A ``module.`` key prefix is added or stripped as needed to match ``model``.
+    If loading fails, the error is printed on rank 0 and the returned epoch is 0.
 
     Parameters
     ----------
-    model: torch.nn.Module
-        Model to load state dict into.
-    optimizer: torch.optim
-        Optimizer to load optimizer state dict into.
-    model_state_dict: dict
+    model : torch.nn.Module
+        Model to load the state into.
+    optimizer : torch.optim.Optimizer or None
+        Optimizer to load the state into.
+    model_state_dict : dict
         State dict of the model.
-    optimizer_state_dict: dict
+    optimizer_state_dict : dict
         State dict of the optimizer.
-    last_epoch: int
-        Epoch to load
+    last_epoch : int
+        Last completed epoch of the checkpoint.
 
     Returns
     -------
-    torch.nn.Module | Tuple[torch.nn.Module, torch.optim, int]
-        Either just the model, or a tuple of the model, optimizer and starting epoch
+    tuple[torch.nn.Module, torch.optim.Optimizer or None, int]
+        The model, the optimizer and the epoch to resume from.
     """
     # DDP checks
     is_state_dict_ddp = any(k.startswith("module.") for k in model_state_dict.keys())
