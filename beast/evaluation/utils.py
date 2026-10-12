@@ -4,6 +4,8 @@ from typing import Any, Sequence
 
 import torch
 
+from beast.utils import get_spatial_weights
+
 DATA_KEY = "data"
 """Key to access the data section in the configuration file."""
 EVALUATION_KEY = "evaluation"
@@ -345,19 +347,15 @@ def latitude_weighted_average(
     torch.Tensor
         The latitude-weighted average of the input data.
     """
-    # Compute latitude weights based on the cosine of the latitude values.
-    latitudes = torch.linspace(
-        -torch.pi / 2.0, torch.pi / 2.0, data.shape[lat_dim] + 1, device=data.device
-    )[:-1]
-
-    cosines = torch.cos(latitudes)
-    cosine_mean = cosines.mean()
-    weights = (cosines / cosine_mean).reshape(
+    weights = get_spatial_weights(
+        data.shape[lat_dim], device=data.device, dtype=data.dtype
+    )
+    weights = weights.reshape(
         *[
             -1 if i == ((lat_dim + data.dim()) % data.dim()) else 1
             for i in range(data.dim())
         ]
-    )  # Normalize weights to have a mean of 1
+    )  # Reshape weights to (1, ..., 1, lat_dim, 1, ...)
 
     # Apply weights and compute the average.
     weighted_data = data * weights
