@@ -185,7 +185,6 @@ __pycache__/
 # Use .claude/* rather than .claude/ so the negation below can take effect --
 # git does not descend into a directory ignored as a whole.
 .claude/*
-!.claude/settings.json
 
 # Other agent tooling
 .aider*
