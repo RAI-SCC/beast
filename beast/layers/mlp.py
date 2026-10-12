@@ -71,31 +71,6 @@ class MLP(torch.nn.Module):
         return x
 
 
-def synced_call(module: torch.nn.Module, *args: torch.Tensor) -> torch.Tensor:
-    """Call ``module`` with its replicated parameters routed through ``sync_grad``.
-
-    For plain torch modules, whose forward does not call
-    ``jigsaw.parallel.sync_grad`` itself: their marked parameters are summed
-    over their replica groups in the backward pass. Unmarked ones pass through.
-
-    Parameters
-    ----------
-    module : torch.nn.Module
-        Module to call.
-    *args : torch.Tensor
-        Inputs of ``module``.
-
-    Returns
-    -------
-    torch.Tensor
-        Output of ``module``.
-    """
-    out: torch.Tensor = torch.func.functional_call(
-        module, parallel.synced_parameters(module), args
-    )
-    return out
-
-
 def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
     """All-reduce grad_input (activation grad) across the channel group."""
 
@@ -193,7 +168,7 @@ class DistributedMLPNICE(torch.nn.Module):
         # hook ensures the grad_input is synchronized across the channels in the backward pass
         if x.requires_grad:
             x.register_hook(make_grad_input_hook(self.channel_group))
-        x = synced_call(self.linear1, x)
+        x = parallel.synced_call(self.linear1, x)
         x = self.activation(x)
         x = self.linear2(x)
         return x

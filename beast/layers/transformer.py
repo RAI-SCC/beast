@@ -325,8 +325,8 @@ class DistributedTransformer(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of distributed windowed transformer."""
-        x = self.attention_block(mlp.synced_call(self.layer_norm1, x)) + x
-        x = self.mlp(mlp.synced_call(self.layer_norm2, x)) + x
+        x = self.attention_block(parallel.synced_call(self.layer_norm1, x)) + x
+        x = self.mlp(parallel.synced_call(self.layer_norm2, x)) + x
         return x
 
 
