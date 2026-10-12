@@ -44,7 +44,9 @@ def set_dtype(dtype: str) -> torch.dtype:
 
 
 @torch.no_grad()
-def get_spatial_weights(n_lat: int, device: torch.device) -> torch.Tensor:
+def get_spatial_weights(
+    n_lat: int, device: torch.device, cropped_lats: int = 1
+) -> torch.Tensor:
     """
     Calculate spatial weights based on latitude for loss weighting.
 
@@ -54,13 +56,17 @@ def get_spatial_weights(n_lat: int, device: torch.device) -> torch.Tensor:
         Number of latitude elements
     device : torch.device
         Device to place the resulting weights tensor on.
+    cropped_lats: int, default 1
+        Number of latitude points dropped due to cropping
 
     Returns
     -------
     torch.Tensor
         A tensor of shape (1, 1, n_lat, 1) containing the spatial weights normalized by the cosine of the latitude.
     """
-    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat)
+    latitude = np.linspace(np.pi / 2.0, -np.pi / 2.0, n_lat + cropped_lats)
+    if cropped_lats > 0:
+        latitude = latitude[:-cropped_lats]
     cossum = np.sum(np.cos(latitude))
     weight = torch.tensor(n_lat * np.cos(latitude) / cossum, device=device).to(
         torch.float32
