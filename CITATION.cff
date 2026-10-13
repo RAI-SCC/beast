@@ -1,0 +1,121 @@
+cff-version: 1.2.0
+title: "BEAST: Bayesian Exascale Atmospheric Swin Transformer"
+message: "If you use this software, please cite the paper given under preferred-citation."
+type: software
+license: MIT
+version: 0.0.1
+repository-code: "https://github.com/RAI-SCC/beast"
+abstract: >-
+  BEAST is a PyTorch library for probabilistic weather forecasting with
+  Bayesian neural networks at scale. Its Bayesian Swin Transformer predicts
+  global atmospheric states at 0.25 degree resolution and quantifies both
+  aleatoric and epistemic uncertainty. A 4D parallelization scheme, which
+  combines domain and tensor parallelism with uncertainty parallelism over the
+  ensemble members, lets a single model span thousands of GPUs.
+keywords:
+  - atmospheric forecasting
+  - uncertainty quantification
+  - exascale computing
+  - artificial intelligence
+  - domain parallelism
+  - sampling parallelism
+authors:
+  - family-names: "Kieckhefen"
+    given-names: "Deifilia"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Gutiérrez Hermosillo Muriedas"
+    given-names: "Juan Pedro"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Heyen"
+    given-names: "Lars Helge"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Bode"
+    given-names: "Mathis"
+    affiliation: "Forschungszentrum Jülich"
+  - family-names: "Hakulinen"
+    given-names: "Iida"
+    affiliation: "CSC – IT Center for Science Ltd."
+  - family-names: "Herten"
+    given-names: "Andreas"
+    affiliation: "Forschungszentrum Jülich"
+  - family-names: "John"
+    given-names: "Chelsea Maria"
+    affiliation: "Forschungszentrum Jülich"
+  - family-names: "Kurth"
+    given-names: "Thorsten"
+    affiliation: "NVIDIA"
+  - family-names: "Moisala"
+    given-names: "Anni"
+    affiliation: "CSC – IT Center for Science Ltd."
+  - family-names: "Özdemir"
+    given-names: "Asena Karolin"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Phipps"
+    given-names: "Kaleb"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Taubert"
+    given-names: "Oskar"
+    affiliation: "CSC – IT Center for Science Ltd."
+  - family-names: "Weyrauch"
+    given-names: "Arvid"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Götz"
+    given-names: "Markus"
+    affiliation: "Karlsruhe Institute of Technology"
+  - family-names: "Debus"
+    given-names: "Charlotte"
+    affiliation: "Karlsruhe Institute of Technology"
+preferred-citation:
+  type: article
+  title: "4D Parallelism Unlocks Exascale Bayesian Neural Networks for High-Fidelity Atmospheric Modeling"
+  journal: "arXiv"
+  year: 2026
+  month: 9
+  doi: "10.48550/arXiv.2609.12815"
+  url: "https://arxiv.org/abs/2609.12815"
+  authors:
+    - family-names: "Kieckhefen"
+      given-names: "Deifilia"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Gutiérrez Hermosillo Muriedas"
+      given-names: "Juan Pedro"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Heyen"
+      given-names: "Lars Helge"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Bode"
+      given-names: "Mathis"
+      affiliation: "Forschungszentrum Jülich"
+    - family-names: "Hakulinen"
+      given-names: "Iida"
+      affiliation: "CSC – IT Center for Science Ltd."
+    - family-names: "Herten"
+      given-names: "Andreas"
+      affiliation: "Forschungszentrum Jülich"
+    - family-names: "John"
+      given-names: "Chelsea Maria"
+      affiliation: "Forschungszentrum Jülich"
+    - family-names: "Kurth"
+      given-names: "Thorsten"
+      affiliation: "NVIDIA"
+    - family-names: "Moisala"
+      given-names: "Anni"
+      affiliation: "CSC – IT Center for Science Ltd."
+    - family-names: "Özdemir"
+      given-names: "Asena Karolin"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Phipps"
+      given-names: "Kaleb"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Taubert"
+      given-names: "Oskar"
+      affiliation: "CSC – IT Center for Science Ltd."
+    - family-names: "Weyrauch"
+      given-names: "Arvid"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Götz"
+      given-names: "Markus"
+      affiliation: "Karlsruhe Institute of Technology"
+    - family-names: "Debus"
+      given-names: "Charlotte"
+      affiliation: "Karlsruhe Institute of Technology"

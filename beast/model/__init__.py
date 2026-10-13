@@ -1,10 +1,7 @@
-"""Model module for BEAST weather prediction model.
+"""BEAST models, their configurations and the model factory."""
 
-This package provides model configurations and factory functions for
-the BEAST weather prediction model.
-"""
-
-from .gb import BEAST_CONFIGURATIONS, Beast
+from .beast_config import BEAST_CONFIGURATIONS
+from .beast_model import Beast
 from .model_factory import get_model
 from .utils import convert_jigsaw_vi, count_model_parameters
 

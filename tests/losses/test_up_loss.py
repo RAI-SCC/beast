@@ -384,3 +384,18 @@ def test_backward_prior_matching(
         f"Gradient mismatch for variational log_std: "
         f"{parameter_log_std.grad} vs {expected_grad_log_std}"
     )
+
+
+def test_aggregation_rejects_single_sample(device: torch.device) -> None:
+    """Test that MeanStdPriorMatchingAggregation raises if fewer than 2 samples are available in total."""
+
+    class SingleRankGroup:
+        def size(self) -> int:
+            return 1
+
+    samples = torch.randn(1, 3, device=device)
+    zeros = torch.zeros(1, device=device)
+    with pytest.raises(ValueError, match="at least 2 samples"):
+        MeanStdPriorMatchingAggregation.apply(
+            samples, SingleRankGroup(), zeros, zeros, zeros, zeros, None
+        )

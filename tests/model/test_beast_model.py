@@ -7,8 +7,8 @@ from small_models import small_beast_config
 from torch_blue.vi import convert_to_vimodule
 
 from beast.comm import create_process_mesh_dict
-from beast.model.gb.beast_config import BEAST_CONFIGURATIONS
-from beast.model.gb.beast_model import Beast
+from beast.model.beast_config import BEAST_CONFIGURATIONS
+from beast.model.beast_model import Beast
 from beast.model.utils import convert_jigsaw_vi
 from beast.utils import set_all_seeds
 

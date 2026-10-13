@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint, format and docstrings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: ruff check
+        run: uvx ruff@0.15.20 check --output-format=github
+
+      - name: ruff format
+        run: uvx ruff@0.15.20 format --check
+
+      - name: numpydoc
+        run: uvx --from numpydoc==1.11.0 numpydoc lint $(git ls-files 'beast/*.py')
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: |
+          uv venv --python 3.12
+          uv pip install -e libs/jigsaw/ -e ".[dev]"
+
+      - name: mypy
+        run: .venv/bin/mypy --config-file pyproject.toml --ignore-missing-imports
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.ranks }} rank(s))
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+        ranks: [1, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenmpi-dev openmpi-bin
+
+      - name: Install
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e libs/jigsaw/ -e ".[dev]"
+
+      - name: Run tests
+        env:
+          TMPDIR: ${{ github.workspace }}/.pytest-tmp
+        run: |
+          mkdir -p "$TMPDIR"
+          if [ "${{ matrix.ranks }}" = "1" ]; then
+            .venv/bin/pytest -q --device cpu
+          else
+            mpirun -n ${{ matrix.ranks }} --oversubscribe --allow-run-as-root .venv/bin/pytest -q --device cpu
+          fi
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install
+        run: |
+          uv venv --python 3.12
+          uv pip install -r docs/requirements.txt
+
+      - name: Build
+        run: .venv/bin/sphinx-build -W -b html docs docs/_build/html
