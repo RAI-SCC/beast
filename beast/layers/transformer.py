@@ -400,12 +400,6 @@ class DistributedNICETransformer(torch.nn.Module):
             bayesian=bayesian,
         ).to(device)
 
-        # DistributedMLPNICE already marks every NICE norm parameter over the
-        # spatial group; extend=True keeps this a no-op rather than a second sum.
-        for p in itertools.chain(
-            self.layer_norm1.parameters(), self.layer_norm2.parameters()
-        ):
-            parallel.mark_replicated(p, spatial_group, extend=True)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Apply attention and the MLP, each with a residual connection.

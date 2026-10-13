@@ -7,13 +7,9 @@ import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
 from jigsaw import normalization, parallel  # type: ignore[import-not-found]
-from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
 from torch._C._functorch import get_unwrapped
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
-
-if JIGSAW_TE_AVAILABLE:
-    import transformer_engine.pytorch as te
 
 
 def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | None:
@@ -64,7 +60,6 @@ def convert_jigsaw_vi(
     module: torch.nn.Module,
     channel_pg: dist.ProcessGroup,
     spatial_pg: dist.ProcessGroup,
-    up_pg: dist.ProcessGroup | None,
     variational_distribution: vidist.base.Distribution = vidist.Normal(std=0.15),
     prior: vidist.base.Distribution = vidist.Normal(),
     rescale_prior: bool = False,
@@ -75,8 +70,7 @@ def convert_jigsaw_vi(
     """Make a module with jigsaw layers Bayesian, in place.
 
     Linear and convolution layers become torch_blue variational layers.
-    Normalization layers and Transformer Engine attention keep deterministic
-    weights. The variational parameters are replicated over ``spatial_pg``:
+    Normalization layers keep deterministic weights. The variational parameters are replicated over ``spatial_pg``:
     they are broadcast from its first rank and their gradients are synchronized.
     The fan-in of the channel-sharded layers (``AVIDistributedXWT`` and
     ``AVIConvTranspose2d``) is scaled by the size of ``channel_pg``, so that
@@ -85,12 +79,10 @@ def convert_jigsaw_vi(
     The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
 
     Every parameter is then marked replicated (``jigsaw.parallel``) over the
-    groups it was marked with before the conversion, plus ``up_pg``: ensemble
-    members share their parameters, and each Uncertainty Parallelism rank only
-    sees the gradient of its own members. Weight samples are drawn through
-    ``parallel.sync_grad``, so that partial gradient is summed over the replica
-    groups in the backward pass. Wrap the result in DDP over the data-parallel
-    axis only (:func:`beast.comm.wrap_ddp`).
+    spatial group. Weight samples are drawn through ``parallel.sync_grad``, so
+    that partial gradient is summed over the replica groups in the backward
+    pass. Wrap the result in DDP over ``DP`` x ``SP`` (:func:`beast.comm.wrap_ddp`);
+    the UP loss scales its data fit so that DDP's average sums it over ``SP``.
 
     Parameters
     ----------
@@ -117,14 +109,11 @@ def convert_jigsaw_vi(
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
-    if JIGSAW_TE_AVAILABLE:
-        vi.utils.convert.ban_convert(te.DotProductAttention)
-        vi.utils.convert.ban_convert(te.DotProductAttention, ban_mode="submodule")
 
     # The conversion replaces each parameter with fresh variational parameters,
-    # which carry none of the replica marks of the tensor they replace.
+    # which do not contain the replica marks.
     marks = {
-        m: {name: parallel.replica_groups(p) for name, p in m._parameters.items()}
+        m: {name: parallel.replica_groups(p) for name, p in m.named_parameters(recurse=False)}
         for m in module.modules()
     }
 
@@ -181,8 +170,6 @@ def convert_jigsaw_vi(
             if hasattr(type(m), "_fast_forward"):
                 m._fast_forward = types.MethodType(_fast_forward_synced, m)  # type: ignore[assignment]
 
-    for p in module.parameters():
-        parallel.mark_replicated(p, [up_pg], extend=True)
 
     if spatial_pg is not None and spatial_pg.size() > 1:
         spatial_ranks = dist.get_process_group_ranks(spatial_pg)

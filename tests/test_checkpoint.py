@@ -98,7 +98,6 @@ class TestCheckpoint:
         channel_group = get_process_group("JChannel")
         spatial_group = get_process_group("JSpatial")
         dtp_group = get_process_group("DTP")
-        up_group = get_process_group("SP")
 
         config = small_beast_config()
         model = get_model(
@@ -112,14 +111,14 @@ class TestCheckpoint:
             spatial_group=spatial_group,
         ).to(device)
         if bayesian:
-            convert_jigsaw_vi(model, channel_group, spatial_group, up_group)
+            convert_jigsaw_vi(model, channel_group, spatial_group)
             model.return_log_probs = False
 
         dist.barrier()
         model = wrap_ddp(
             model,
             device_id=device.index,
-            ddp_group=get_process_group("DP" if bayesian else "DDP"),
+            ddp_group=get_process_group("DDP"),
         )
 
         input_beastling = torch.rand(

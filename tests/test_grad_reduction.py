@@ -14,12 +14,15 @@ replica axes (every non-DP axis on which ranks hold the same copy):
 * prior matching: each replica computes the identical, full KL gradient, which
   must be **averaged**.
 
-One process group with one reduction op cannot do both. So the parameters are
+One process group with one reduction op cannot do both. The model-parallel
+axes (``JSpatial``, ``JChannel``) are handled by jigsaw: the parameters are
 marked replicated (``jigsaw.parallel.mark_replicated``) and only the
 data-fitting path goes through ``jigsaw.parallel.sync_grad``, which sums it
 over the replica axes (or, under the joint comm hook, scales it so that the
 hook's average amounts to that sum). The prior-matching path reads the raw
-parameters. DDP spans ``DP`` only and averages.
+parameters. ``SP`` is handled by the UP loss: its backward scales the sample
+gradient by the ``SP`` size, so that DDP's average over ``DP`` x ``SP`` sums
+the data fit over the ensemble members. DDP spans ``DP`` x ``SP``.
 
 Run with exactly 4 ranks::
 
@@ -76,9 +79,9 @@ def _layout_id(mesh_dims: list[int]) -> str:
 
 # Replica axes of each toy parameter pair, by name suffix.
 _REPLICA_AXES = {
-    "": (_SP, _JSPATIAL, _JCHANNEL),
-    "_ch": (_SP, _JSPATIAL),
-    "_sp": (_SP, _JCHANNEL),
+    "": (_JSPATIAL, _JCHANNEL),
+    "_ch": (_JSPATIAL,),
+    "_sp": (_JCHANNEL,),
 }
 
 
@@ -115,12 +118,14 @@ class ToyUPModel(torch.nn.Module):
     enters the KL (prior matching), as in torch_blue, and each has a different
     replica set, so a layout with ``JChannel`` > 1 mixes them:
 
-    * ``mu``/``logs``: one value per feature, replicated over SP x JSpatial x
+    * ``mu``/``logs``: one value per feature, replicated over JSpatial x
       JChannel; every spatial rank reads only its features.
     * ``mu_ch``/``logs_ch``: one value per channel, sharded over JChannel and
-      replicated over SP x JSpatial (a channel-sharded weight).
+      replicated over JSpatial (a channel-sharded weight).
     * ``mu_sp``/``logs_sp``: one value per feature, sharded over JSpatial and
-      replicated over SP x JChannel.
+      replicated over JChannel.
+
+    The ensemble members are split over SP, which is not a replica axis.
 
     Parameters
     ----------
@@ -263,6 +268,8 @@ def _relative_errors(
     reference: dict[str, Tensor],
 ) -> dict[str, float]:
     """Return ``max|g - g_ref| / max|g_ref|`` per parameter, maximised over ranks."""
+    if mode == "no_ddp" and mesh_dims[_SP] > 1:
+        pytest.skip("SP is only summed by DDP's average")
     key = (tuple(mesh_dims), mode, kl_through_sync)
     if key in _ERROR_CACHE:
         return _ERROR_CACHE[key]
@@ -279,7 +286,7 @@ def _relative_errors(
         forward = wrap_ddp(
             model,
             device_id=device.index if device.type == "cuda" else None,
-            ddp_group=get_process_group("DP"),
+            ddp_group=get_process_group("DDP"),
             joint_hook=mode == "joint_hook",
         )
     # Two steps: DDP's first iteration uses a single fused bucket, later ones
@@ -315,7 +322,8 @@ def test_grad_invariant_to_mesh_layout(
     ``DP=4`` is the control: data-parallel averaging of an identical batch
     reproduces the serial gradient, so a failure there means the harness is
     wrong rather than the reduction semantics. Every DP rank sees the same
-    batch, so ``no_ddp`` (nothing averages over DP) is exact too.
+    batch, so ``no_ddp`` (nothing averages over DP) is exact too, except
+    with SP > 1, whose sum needs DDP.
     """
     errors = _relative_errors(device, mesh_dims, mode, False, serial_reference)
     bad = {name: e for name, e in errors.items() if not e < TOL}
@@ -370,9 +378,8 @@ class _Container(torch.nn.Module):
 def _bayesian_container(
     device: torch.device,
     spatial_group: dist.ProcessGroup,
-    up_group: dist.ProcessGroup | None,
 ) -> torch.nn.Module:
-    """A converted model whose linear layer is replicated over JSpatial (and SP).
+    """A converted model whose linear layer is replicated over JSpatial.
 
     The spatial mark is set before the conversion, as beast's layers do, so it
     has to survive ``convert_jigsaw_vi`` replacing the parameters.
@@ -380,7 +387,7 @@ def _bayesian_container(
     model = _Container(device)
     for p in model.linear.parameters():
         parallel.mark_replicated(p, spatial_group)
-    convert_jigsaw_vi(model, _solo_group(), spatial_group, up_group)
+    convert_jigsaw_vi(model, _solo_group(), spatial_group)
     return model
 
 
@@ -393,7 +400,7 @@ def _bayesian_container(
 def test_sampled_forward_sums_data_fit_only(
     device: torch.device, mesh_dims: list[int], mode: str, fast_path: bool
 ) -> None:
-    """``convert_jigsaw_vi``'s synced sampling gives ``mean_DP(sum_R g_DF + g_KL)``.
+    """``convert_jigsaw_vi``'s synced sampling gives ``mean_DDP(sum_R g_DF + g_KL)``.
 
     Runs torch_blue's own ``sampled_forward`` (a ``vmap`` over the samples)
     and the UP loss on a converted ``torch.nn.Linear``. ``VILinear`` reads its
@@ -401,15 +408,16 @@ def test_sampled_forward_sums_data_fit_only(
     through ``sample_variable`` otherwise, so both are covered. The expectation
     comes from an unmarked copy run on the same samples: its data-fit gradient
     summed by hand over the replica axes R, plus its KL gradient once, then
-    averaged over DP by DDP.
+    averaged over DP x SP by DDP. Both losses scale the data fit by the SP
+    size, so that average sums it over SP.
     """
     create_process_mesh_dict(mesh_dims, device_type=device.type)
     up_group = get_process_group("SP")
     spatial_group = get_process_group("JSpatial")
-    dp_group = get_process_group("DP")
-    replicas = [g for g in (spatial_group, up_group) if g.size() > 1]
+    ddp_group = get_process_group("DDP")
+    replicas = [g for g in (spatial_group,) if g.size() > 1]
 
-    model = _bayesian_container(device, spatial_group, up_group)
+    model = _bayesian_container(device, spatial_group)
     assert parallel.replica_groups(model.linear._weight_mean) == tuple(replicas)
 
     forward: Callable[..., Tensor] = model
@@ -417,11 +425,11 @@ def test_sampled_forward_sums_data_fit_only(
         forward = wrap_ddp(
             model,
             device_id=device.index if device.type == "cuda" else None,
-            ddp_group=dp_group,
+            ddp_group=ddp_group,
             joint_hook=mode == "joint_hook",
         )
     # After the wrap, which broadcasts over DP.
-    reference = _bayesian_container(device, _solo_group(), None)
+    reference = _bayesian_container(device, _solo_group())
     reference.load_state_dict(model.state_dict())
 
     # The analytical KL loss switches log probs off on construction, so set
@@ -456,8 +464,8 @@ def test_sampled_forward_sums_data_fit_only(
             dist.all_reduce(expected, group=group)
         expected += kl
         if mode != "no_ddp":
-            dist.all_reduce(expected, group=dp_group)
-            expected /= dp_group.size()
+            dist.all_reduce(expected, group=ddp_group)
+            expected /= ddp_group.size()
         torch.testing.assert_close(
             p.grad, expected, rtol=TOL, atol=TOL, msg=lambda m: f"{name}: {m}"
         )
@@ -474,5 +482,4 @@ def test_convert_rejects_parameters_not_replicated_over_space(
             _Container(device),
             get_process_group("JChannel"),
             get_process_group("JSpatial"),
-            get_process_group("SP"),
         )
