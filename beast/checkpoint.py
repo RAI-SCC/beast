@@ -70,7 +70,6 @@ def save_checkpoint(
     """
     try:
         channel_group: dist.ProcessGroup | None = get_process_group("JChannel")
-        ddp_group: dist.ProcessGroup | None = get_process_group("DDP")
 
     except ValueError:
         channel_group = None

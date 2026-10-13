@@ -243,11 +243,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Log standard deviations of the variational distributions.
         feature_weights : Tensor, optional
             Weights applied to the samples before aggregation.
-        weight_synchronization_factor : int, default: 1
-            Size of the process group the parameter gradients are summed over,
-            usually the ``JSpatial`` process group. The prior matching gradient
-            is divided by it.
-
+        
         Returns
         -------
         mean : Tensor
@@ -393,8 +389,6 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Gradient with respect to the variational_log_stds.
         None
             No gradient for the feature_weights.
-        None
-            No gradient for the weight_synchronization_factor.
         """
         up_process_group = ctx.up_process_group
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
