@@ -7,6 +7,7 @@ import torch_blue
 from torch import permute, reshape
 from torch.utils.checkpoint import checkpoint
 from torch_blue.vi import VIModule, convert_to_vimodule
+import warnings
 
 from .downsampled_swin import (
     MLP,
