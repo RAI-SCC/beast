@@ -22,7 +22,7 @@ assignees: ''
 
 ## Run configuration
 
-- Model configuration ID (e.g. `BEASTLING`, `BEAST-LUMI-1.2B-1.8K`):
+- Model configuration ID (e.g. `BEASTLING`, `BEAST-LUMI-1.1B-64K`):
 - Process-mesh dimensions (`DP`, `SP`, `JSpatial`, `JChannel`):
 - Number of ranks:
 - Real ERA5 data, or the dummy dataset?
