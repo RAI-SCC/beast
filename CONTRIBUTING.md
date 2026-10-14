@@ -18,7 +18,7 @@ issue first and describe what you have in mind.
 
 3. **Install BEAST for development** in a new virtual environment, and set up the
    pre-commit hooks. They run ruff, mypy, numpydoc validation and the test suite
-   on every commit.
+   on every commit, and validate `CITATION.cff` whenever it changes.
 
    ```console
    python -m venv .venv
