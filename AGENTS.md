@@ -48,7 +48,8 @@ pre-commit install
 
 - Docstrings follow numpydoc: constructor arguments go in the class docstring,
   every function (including private ones) has a full docstring, and docstrings
-  describe what the code does, not its history.
+  describe what the code does, not its history. Attributes, module constants and
+  backticks follow the conventions in CONTRIBUTING.md.
 - Refer to process groups by their mesh names: `DP`, `SP`, `JSpatial`,
   `JChannel`, `DTP`, `DDP`.
 - If a change touches distributed code, run the tests with
