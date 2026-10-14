@@ -62,6 +62,16 @@ issue first and describe what you have in mind.
   are checked by numpydoc's validator. Every function has one, including private
   functions and methods. A class documents its constructor arguments in the class
   docstring; `__init__` has no docstring of its own.
+- **Attributes** of a class are listed in an `Attributes` section after
+  `Parameters`. Attributes that only store a constructor argument under the same
+  name are left out, since `Parameters` already describes them.
+- **Constants** at module level have a docstring directly below the assignment.
+- **Backticks:** names of parameters, attributes and other Python objects go in
+  single backticks, other code such as values, shapes and expressions in double
+  backticks, as in the example below. Names link to the object if it is
+  documented. If a name links to the wrong object, add its namespace, for
+  example `~beast.model.model_configs.CONFIGS`, or `.name` for an attribute of
+  the same class.
 - **Write docstrings for the reader.** Start with a one-line summary, then
   describe what the code does. Leave out its history and design discussions.
 - **Process groups** are referred to by their names in the process mesh: `DP`,
@@ -71,7 +81,7 @@ A class and a function documented this way:
 
 ```python
 class Downsample(nn.Module):
-    """Downsample by averaging over blocks of ``factor`` along each dimension.
+    """Downsample by averaging over blocks of `factor` along each dimension.
 
     Parameters
     ----------
@@ -83,7 +93,7 @@ class Downsample(nn.Module):
     Attributes
     ----------
     negative_dims : bool
-        Whether ``dims`` holds negative indices.
+        Whether `dims` holds negative indices.
     """
 
     def __init__(self, factor: int, dims: tuple[int, ...] = (-1,)) -> None: ...
@@ -97,14 +107,14 @@ def mse(prediction: Tensor, target: Tensor, batch_dimension: int = 0) -> Tensor:
     prediction : Tensor
         Model prediction.
     target : Tensor
-        Reference values, of the shape of ``prediction``.
+        Reference values, of the shape of `prediction`.
     batch_dimension : int, default: 0
         Dimension to average over.
 
     Returns
     -------
     Tensor
-        Squared error averaged over ``batch_dimension``.
+        Squared error averaged over `batch_dimension`.
     """
 ```
 
