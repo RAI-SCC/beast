@@ -1,13 +1,12 @@
 """The BEAST (Bayesian Exascale Atmospheric Swin Transformer) model."""
 
+import warnings
 from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
 from jigsaw import linear, parallel, roll  # type: ignore
 from jigsaw.modules.convolution import DistributedConv2d, DistributedConvTranspose2d
-
-import warnings
 
 from beast.layers import transformer
 
