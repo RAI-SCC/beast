@@ -1,6 +1,9 @@
 cff-version: 1.2.0
 title: "BEAST: Bayesian Exascale Atmospheric Swin Transformer"
-message: "If you use this software, please cite the paper given under preferred-citation."
+message: >-
+  If you use this software, please cite the paper "4D Parallelism Unlocks
+  Exascale Bayesian Neural Networks for High-Fidelity Atmospheric Modeling"
+  (Kieckhefen et al., 2026), https://doi.org/10.48550/arXiv.2609.12815.
 type: software
 license: MIT
 version: 0.0.1
