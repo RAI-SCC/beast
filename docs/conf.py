@@ -17,17 +17,20 @@ autoapi_python_class_content = "class"
 autoapi_member_order = "groupwise"
 autoapi_options = [
     "members",
-    "undoc-members",
     "show-inheritance",
     "show-module-summary",
     "imported-members",
 ]
 
-# Docstrings follow numpydoc
+# Docstrings follow numpydoc. Each entry of an Attributes section becomes an
+# attribute of the class, so autoapi does not list attributes separately.
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
-# Render Attributes sections as fields, since autoapi also lists the attributes
-napoleon_use_ivar = True
+
+# Single backticks mark names of parameters, attributes and other Python
+# objects, as numpydoc recommends. They link to the object if it is documented
+# and otherwise render as code.
+default_role = "py:obj"
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
