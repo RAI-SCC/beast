@@ -37,7 +37,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Validate CITATION.cff
-        run: uvx cffconvert==2.0.0 --validate
+        run: uvx cffconvert --validate
 
   typecheck:
     name: Type check
