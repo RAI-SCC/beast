@@ -1,4 +1,8 @@
-"""Implements loss function for Variational Inference BNNs with Uncertainty Parallelism."""
+"""KL loss for Bayesian neural networks with uncertainty parallelism (UP).
+
+With UP, the ensemble samples of a Bayesian model are spread over the ``SP``
+process group.
+"""
 
 from typing import Any, Optional, cast
 
@@ -10,8 +14,11 @@ from torch_blue.vi.distributions import MeanFieldNormal
 
 
 class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
-    """
-    Loss function for Unsupervised Prior matching with Gaussian distributions.
+    """KL loss with Gaussian predictive, variational and prior distributions.
+
+    The predictive mean and standard deviation are estimated from the samples of
+    all ranks in ``up_group``, and the prior matching term is computed while
+    those statistics are being communicated.
 
     Parameters
     ----------
@@ -19,17 +26,23 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         The variational inference model.
     dataset_size : int
         Size of the dataset.
-    up_group : dist.ProcessGroup, default: None
-        Process group for Uncertainty Parallelism aggregation. If None, defaults to dist.group.WORLD.
-    feature_weights : Tensor, default: None
-        Weights for the loss calculation.
+    up_group : dist.ProcessGroup, optional
+        Process group the ensemble samples are spread over, usually the ``SP``
+        process group. Defaults to all ranks.
+    sync_group : dist.ProcessGroup, optional
+        Process group the gradients of the variational parameters are summed
+        over, usually the ``JSpatial`` process group. The prior matching
+        gradient is divided by its size, so that the sum counts it once.
+    feature_weights : Tensor, optional
+        Weights applied to the model output and target, per variable or per
+        grid point.
     heat : float, default: 1.0
-        Heat / cold posterior parameter for the KL loss.
+        Heat / cold posterior parameter of the KL loss.
     track : bool, default: False
-        Whether to track loss components.
+        Whether to track the loss components.
     use_fmod : bool, default: False
-        If True apply fmod to predictive log probabilities before summing. This may
-        avoid accuracy loss due to float precision when summing and does not impact
+        Whether to apply ``fmod`` to the predictive log probabilities before
+        summing, which avoids float precision loss and does not affect
         gradients.
     """
 
@@ -76,27 +89,35 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
         self.use_fmod = use_fmod
 
-    def data_fitting(self, mean: Tensor, std: Tensor, target: Tensor) -> Tensor:
-        """
-        Calculate the data fitting loss part.
+        # Stored as a plain int: this loss always needs the dataset size
+        self._dataset_size: int = dataset_size
 
-        If ``self.use_fmod`` is True, the fmod is applied to the predictive
-        log probabilities to avoid accuracy loss due to float precision when summing.
+    def data_fitting(
+        self,
+        mean: Tensor,
+        std: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
+    ) -> Tensor:
+        """Compute the data fitting term.
 
         Parameters
         ----------
         mean : Tensor
-            The mean of the predictive distribution.
+            Mean of the predictive distribution.
         std : Tensor
-            The standard deviation of the predictive distribution.
+            Standard deviation of the predictive distribution.
         target : Tensor
-            The target values.
+            Target values.
+        dataset_size : int, optional
+            Overrides the dataset size given at construction.
 
         Returns
         -------
         Tensor
-            The calculated data fitting loss.
+            The negative log likelihood, scaled by the dataset size.
         """
+        n_data = self._dataset_size if dataset_size is None else dataset_size
         log_prob = self.predictive_distribution.log_prob_from_parameters(
             target, (mean, std)
         ).mean(dim=0)
@@ -104,76 +125,97 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         if self.use_fmod:
             log_prob = torch.fmod(log_prob, 1.0)
 
-        data_fit = -self.dataset_size * log_prob.sum()
+        data_fit = -n_data * log_prob.sum()
 
         return cast(Tensor, data_fit)
 
     def split_forward(
-        self, model_output: Tensor, target: Tensor
+        self,
+        model_output: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
     ) -> tuple[Tensor, Tensor]:
-        """
-        Calculate the data fitting and prior matching losses in a communication-overlapped fashion.
+        """Compute the data fitting and prior matching terms separately.
+
+        The prior matching term is computed while the sample statistics are
+        being communicated.
 
         Parameters
         ----------
         model_output : Tensor
-            The output from the Bayesian model.
+            Output of the Bayesian model, with a leading sample dimension.
         target : Tensor
-            The ground truth targets.
+            Ground truth targets.
+        dataset_size : int, optional
+            Overrides the dataset size given at construction.
 
         Returns
         -------
-        Tensor
-            The data fitting loss term. Captures how well the model fits the data.
-        Tensor
-            The prior matching loss term. Captures how well the variational distribution matches the prior distribution.
+        data_fit : Tensor
+            How well the model fits the data.
+        prior_matching : Tensor
+            How well the variational distribution matches the prior.
         """
         if self.feature_weights is not None:
-            expert_output = model_output * self.feature_weights
-            expert_target = target * self.feature_weights[0]
+            weighted_output = model_output * self.feature_weights
+            weighted_target = target * self.feature_weights[0]
         else:
-            expert_output = model_output
-            expert_target = target
+            weighted_output = model_output
+            weighted_target = target
 
         mean, std, prior_matching, _, _ = self.aggregate_statistics(
-            expert_output,
+            weighted_output,
             self.up_group,
             *self._get_flat_params(),
             self.feature_weights,
             self.sync_group_size,
         )
 
-        data_fit = self.data_fitting(mean, std, expert_target)
+        data_fit = self.data_fitting(mean, std, weighted_target, dataset_size)
 
         if self._track and self.log is not None:
-            self.log["data_fitting"].append(data_fit.item())
-            self.log["prior_matching"].append(prior_matching.item())
+            # torch_blue annotates self.log as Dict[str, List[Tensor]] but appends
+            # the result of .item() to it, i.e. a float. Mirroring the base class's
+            # behaviour means mirroring its annotation mismatch.
+            self.log["data_fitting"].append(data_fit.item())  # type: ignore[arg-type]
+            self.log["prior_matching"].append(prior_matching.item())  # type: ignore[arg-type]
 
         return data_fit, prior_matching
 
-    def forward(self, model_output: Tensor, target: Tensor) -> Tensor:
-        """
-        Compute the total loss.
+    def forward(
+        self,
+        model_output: Tensor,
+        target: Tensor,
+        dataset_size: Optional[int] = None,
+    ) -> Tensor:
+        """Compute the total loss, ``data_fit + heat * prior_matching``.
 
         Parameters
         ----------
         model_output : Tensor
-            The output from the model.
+            Output of the Bayesian model, with a leading sample dimension.
         target : Tensor
-            The ground truth targets.
+            Ground truth targets.
+        dataset_size : int, optional
+            Overrides the dataset size given at construction.
 
         Returns
         -------
         Tensor
-            The combined KL loss consisting of the data fitting and prior matching terms.
+            The combined loss.
         """
-        data_fit, prior_matching = self.split_forward(model_output, target)
+        data_fit, prior_matching = self.split_forward(
+            model_output, target, dataset_size
+        )
 
         return data_fit + cast(float, self.heat) * prior_matching
 
 
 class MeanStdPriorMatchingAggregation(torch.autograd.Function):
-    """Autograd function to aggregate statistics and compute prior matching in parallel to the communication."""
+    """Autograd function that aggregates sample statistics over the ``SP`` process group.
+
+    The prior matching loss is computed while the second all-reduce is in flight.
+    """
 
     @staticmethod
     def forward(
@@ -186,15 +228,15 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         feature_weights: Optional[Tensor] = None,
         weight_synchronization_factor: Optional[int] = 1,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        """
-        Forward pass for mean-std / prior matching aggregation.
+        """Compute the sample mean and standard deviation and the prior matching loss.
 
         Parameters
         ----------
         samples : Tensor
-            The samples to aggregate.
+            Local samples, along dimension 0.
         up_process_group : dist.ProcessGroup
-            The process group corresponding to Uncertainty Parallelism.
+            Process group the samples are spread over, usually the ``SP``
+            process group.
         prior_means : Tensor
             Means of the prior distributions.
         prior_log_stds : Tensor
@@ -203,26 +245,39 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Means of the variational distributions.
         variational_log_stds : Tensor
             Log standard deviations of the variational distributions.
-        feature_weights : Tensor, default: None
-            Feature weights to apply to the aggregation.
-        weight_synchronization_factor: int, default: 1
-            Size of the ProcessGroup that gradients are summed over (typically jspatial)
+        feature_weights : Tensor, optional
+            Weights applied to the samples before aggregation.
+        weight_synchronization_factor : int, default: 1
+            Size of the process group the parameter gradients are summed over,
+            usually the ``JSpatial`` process group. The prior matching gradient
+            is divided by it.
 
         Returns
         -------
-        Tensor
-            The aggregated mean across the UP group.
-        Tensor
-            The aggregated standard deviation across the UP group.
-        Tensor
-            The computed prior matching loss.
-        Tensor
-            The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
-        Tensor
-            The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+        mean : Tensor
+            Mean over the samples of all ranks in ``up_process_group``.
+        std : Tensor
+            Standard deviation over the samples of all ranks in
+            ``up_process_group``.
+        prior_matching : Tensor
+            The prior matching loss.
+        variance_ratio : Tensor
+            Ratio of variational to prior variance, kept for the backward pass.
+        mse_part_half : Tensor
+            Deviation of the variational from the prior means, scaled by the
+            prior variance. Kept for the backward pass.
+
+        Raises
+        ------
+        ValueError
+            If fewer than 2 samples are available in total across the UP group.
         """
         up_num = up_process_group.size()
         total_samples = samples.shape[0] * up_num
+        if total_samples < 2:
+            raise ValueError(
+                f"MeanStdPriorMatchingAggregation needs at least 2 samples in total to estimate the variance, got {total_samples}."
+            )
 
         # Pass 1: exact global mean. One field, blocking -- we need the result
         # before we can form deviations.
@@ -272,17 +327,16 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
     def setup_context(
         ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Any, ...]
     ) -> None:
-        """
-        Set up the context for the backward pass.
+        """Save the tensors needed by the backward pass.
 
         Parameters
         ----------
         ctx : Any
-            The autograd context.
+            Autograd context.
         inputs : tuple[Any, ...]
-            The inputs to the forward pass.
+            Arguments of :meth:`forward`.
         outputs : tuple[Any, ...]
-            The outputs from the forward pass.
+            Outputs of :meth:`forward`.
         """
         (
             samples,
@@ -310,13 +364,12 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_vr: None,
         grad_mse_half: None,
     ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None, None]:
-        """
-        Backward pass for mean-std / prior matching aggregation.
+        """Compute the gradients with respect to the samples and variational parameters.
 
         Parameters
         ----------
         ctx : Any
-            The autograd context.
+            Autograd context.
         grad_mean : Tensor
             Gradient with respect to the mean.
         grad_std : Tensor
@@ -324,9 +377,11 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_pm : Tensor
             Gradient with respect to the prior matching loss.
         grad_vr : None
-            Gradient with respect to variance ratio (unused but necessary for autograd).
+            Gradient with respect to the variance ratio. Ignored, since the
+            variance ratio is not differentiable.
         grad_mse_half : None
-            Gradient with respect to mse part half (unused but necessary for autograd).
+            Gradient with respect to ``mse_part_half``. Ignored, since
+            ``mse_part_half`` is not differentiable.
 
         Returns
         -------
@@ -345,7 +400,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         None
             No gradient for the feature_weights.
         None
-            No gradient for the weight_synchronization_factor
+            No gradient for the weight_synchronization_factor.
         """
         up_process_group = ctx.up_process_group
         weight_synchronization_factor = ctx.weight_synchronization_factor
@@ -386,8 +441,7 @@ def gaussian_prior_matching(
     variational_means: Tensor,
     variational_log_stds: Tensor,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """
-    Compute of the KL divergence between two Gaussian distributions for prior matching.
+    """Compute the KL divergence of the variational from the prior Gaussians.
 
     Parameters
     ----------
@@ -402,12 +456,13 @@ def gaussian_prior_matching(
 
     Returns
     -------
-    Tensor
-        The computed prior matching loss.
-    Tensor
-        The variance ratio used for the calculation of the prior matching loss. This is returned for use in the backward pass.
-    Tensor
-        The rescaled deviation of the samples members from the mean used for the calculation of the prior matching loss. This is returned for use in the backward pass.
+    prior_matching : Tensor
+        The KL divergence, summed over all parameters.
+    variance_ratio : Tensor
+        Ratio of variational to prior variance, clamped to ``[1e-6, 1e6]``.
+    mse_part_half : Tensor
+        Deviation of the variational from the prior means, scaled by the prior
+        variance.
     """
     variational_variance = torch.exp(2 * variational_log_stds)
     prior_variance = torch.exp(

@@ -1,4 +1,4 @@
-"""Custom GB Dataloaders and Dataloader factory."""
+"""Timing data loader and a config-driven dataloader factory."""
 
 import os
 import time
@@ -23,25 +23,23 @@ from beast.utils import set_dtype
 DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
 
 
-class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
-    """
-    Custom Data Loader Iter, that tracks the start and stop time of the ``__next__`` functionality.
+class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):  # numpydoc ignore=PR02
+    """Multiprocessing data loader iterator that also times each batch fetch.
 
-    Inherits from PyTorchs ``_MultiProcessingDataLoaderIter``
+    Parameters
+    ----------
+    loader : DataLoader
+        The data loader to iterate over.
     """
 
     def __next__(self) -> tuple[Any, float, float]:
-        """
-        Get the next item of the Iterator.
+        """Fetch the next batch and time the fetch.
 
         Returns
         -------
-        *data : torch.Tensor
-            The next data item
-        start : float
-            The time stamp before fetching the next data item in ns
-        stop : float
-            The time stamp after fetching the next data item in ns
+        tuple
+            The items of the batch, followed by the ``time.perf_counter_ns``
+            timestamps taken before and after the fetch.
         """
         start = time.perf_counter_ns()
 
@@ -51,15 +49,27 @@ class GBDataLoaderIter(_MultiProcessingDataLoaderIter):
         return *data, start, end
 
 
-class GBDataLoader(DataLoader):
-    """
-    Custom Data Loader, that tracks the start and stop time of the ``__next__`` functionality.
+class BeastDataLoader(DataLoader):
+    """Data loader that also reports how long each batch took to fetch.
 
-    Calls GBDataLoaderIter.
+    It takes the same arguments as :class:`torch.utils.data.DataLoader`. Each
+    batch is followed by the ``time.perf_counter_ns`` timestamps taken before
+    and after fetching it.
+
+    See Also
+    --------
+    torch.utils.data.DataLoader : The data loader this class extends.
     """
 
     def _get_iterator(self) -> _BaseDataLoaderIter:
-        return GBDataLoaderIter(self)
+        """Create the iterator that times each batch fetch.
+
+        Returns
+        -------
+        _BaseDataLoaderIter
+            A :class:`BeastDataLoaderIter` over this data loader.
+        """
+        return BeastDataLoaderIter(self)
 
 
 def get_dataloader(
@@ -71,39 +81,47 @@ def get_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-    **kwargs: dict,
-) -> GBDataLoader:
-    """
-    Create a GBDataLoader instance from config specifications.
+    **kwargs: Any,
+) -> BeastDataLoader:
+    """Create a :class:`BeastDataLoader` from a configuration dictionary.
 
+<<<<<<< HEAD
     If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
     If no valid path is given (i.e. if the path doesn't exist), it will throw an error.
+=======
+    If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
+    from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
+    dataset of random numbers is used for the configured time range. In
+    ``"train"`` and ``"validation"`` mode the dataset is cut to the first
+    ``train_subset`` or ``valid_subset`` samples if that value is positive.
+>>>>>>> main
 
     Parameters
     ----------
-    config_dict : Dict
-        The configuration dictionary, that contains information on the dataset, i.e. the path to all relevant files, specifications of the time frame to be used, etc.
+    config_dict : dict[str, Any]
+        Configuration with the sections ``data`` and ``training``, described
+        in the configuration reference of the documentation.
     dtp_rank : int
-        The rank in the domain-tensor-parallel process group, that shares a model and a data item
+        Rank in the ``DTP`` process group, the ranks that share one data item.
     dtp_size : int
-        The size of the domain-tensor-parallel process group, that shares a model and a data item
+        Size of the ``DTP`` process group.
     dp_rank : int
-        The rank in the data-parallel process group, that shares a model and a data item
+        Rank in the ``DP`` process group.
     dp_size : int
-        The size of the data-parallel process group (torch.DistributedDataParallel)
-    mode : str
-        The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    **kwargs:
-        Additional options that can be forwarded to the Dataset object.
+        Size of the ``DP`` process group.
+    mode : {"train", "validation"}, default: "train"
+        Selects the time range and subset size.
+    transform : Callable, optional
+        Transformation applied to the input data.
+    target_transform : Callable, optional
+        Transformation applied to the target data. Defaults to ``transform``.
+    **kwargs
+        Passed on to the dataset.
 
     Returns
     -------
-    dataloader : GBDataLoader
-        The dataloader instance
+    BeastDataLoader
+        The dataloader, sampling with a :class:`ResumableDistributedSampler`.
     """
     data_path = config_dict["data"]["data_path"]
 
@@ -119,7 +137,6 @@ def get_dataloader(
 
     dataset: torch.utils.data.Dataset
     if os.path.exists(data_path):
-        # print(f'kwargs {kwargs}')
         dataset = ERA5Distributed(
             pg_rank=dtp_rank,
             pg_size=dtp_size,
@@ -168,7 +185,7 @@ def get_dataloader(
         resume_idx=0,  # set from checkpoint on resume
     )
 
-    dataloader = GBDataLoader(
+    dataloader = BeastDataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=(sampler is None),

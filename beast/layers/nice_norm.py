@@ -1,4 +1,4 @@
-"""Definition of NICE Norms."""
+"""NICE normalization layers, single-process and distributed."""
 
 import torch
 import torch.distributed as dist
@@ -7,20 +7,20 @@ from beast.layers import mlp
 
 
 class NiceNorm(torch.nn.Module):
-    """NICE normalization layer.
+    """Layer norm whose scale and shift are computed from a noise vector.
 
     Parameters
     ----------
     normalized_dim : int
-        Shape of the normalized dimension.
+        Size of the normalized dimension.
     noise_dim : int
-        Noise dimension.
-    eps : float, optional
-        Small value for numerical stability, by default 1e-5.
-    device : torch.device | None, optional
-        Device to place tensors on, by default None.
-    dtype : torch.dtype | None, optional
-        Data type of parameters, by default None.
+        Size of the noise vector.
+    eps : float, default: 1e-5
+        Added to the variance for numerical stability.
+    device : torch.device, optional
+        Device to place parameters on.
+    dtype : torch.dtype, optional
+        Data type of the parameters.
     """
 
     def __init__(
@@ -31,22 +31,6 @@ class NiceNorm(torch.nn.Module):
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
-        """
-        Initialize Nice Norm module.
-
-        Parameters
-        ----------
-        normalized_dim: int
-            Size of dimension that should be normalized over.
-        noise_dim: int
-            Dimension of noise.
-        eps: float
-            Epsilon for stability.
-        device: torch.device
-            Device to compute on.
-        dtype: torch.dtype
-            Optional data type.
-        """
         super().__init__()
 
         self.norm = torch.nn.LayerNorm(
@@ -63,19 +47,19 @@ class NiceNorm(torch.nn.Module):
         self.shift_scale_mlp = mlp.MLP(self.noise_dim, self.shape, self.shape * 2)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """Forward pass of NICE normalization.
+        """Normalize ``x`` and apply the noise-conditioned scale and shift.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor.
+            Input of shape ``(B, N, normalized_dim)``.
         noise : torch.Tensor
-            Noise tensor.
+            Noise of shape ``(B, noise_dim)``.
 
         Returns
         -------
         torch.Tensor
-            Normalized and scaled tensor.
+            Tensor of the same shape as ``x``.
         """
         x = self.norm(x)
 
@@ -87,7 +71,29 @@ class NiceNorm(torch.nn.Module):
 
 
 class DistributedNICENorm(torch.nn.Module):
-    """NICE Norm inspired by FGN."""
+    """Noise-conditioned layer norm for a channel-sharded model, inspired by FGN.
+
+    Each rank normalizes its own channel shard, so no communication is needed
+    for the statistics. The scale and shift are computed from the noise vector
+    by a :class:`~beast.layers.mlp.DistributedMLPNICE`.
+
+    Parameters
+    ----------
+    dim : int
+        Global number of channels.
+    noise_dim : int
+        Size of the noise vector.
+    rank : int
+        Rank of this process in the ``DTP`` process group.
+    device : torch.device
+        Device to place parameters on.
+    model_group : dist.ProcessGroup
+        Passed on to the :class:`~beast.layers.mlp.DistributedMLPNICE`.
+    spatial_group : dist.ProcessGroup
+        The ``JSpatial`` process group, over which the parameters are replicated.
+    channel_group : dist.ProcessGroup
+        The ``JChannel`` process group, over which the channels are sharded.
+    """
 
     def __init__(
         self,
@@ -99,22 +105,6 @@ class DistributedNICENorm(torch.nn.Module):
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
     ):
-        """
-        Initialize Distributed NICE Norm.
-
-        Inputs
-        ------
-        dim: int
-            Dimension of channels.
-        noise_dim: int
-            Dimension of noise.
-        rank: int
-            Local rank.
-        device: torch.device
-        paralellism: int
-        spatial_group: dist.ProcessGroup
-        channel_group: dist.ProcessGroup
-        """
         super().__init__()
 
         self.global_dim = dim
@@ -125,7 +115,7 @@ class DistributedNICENorm(torch.nn.Module):
         self.spatial_group = spatial_group
         self.channel_group = channel_group
 
-        # To limit communication, we do grouped layer norm on the local shard
+        # Normalize each local channel shard separately
         self.ln = torch.nn.LayerNorm(
             self.global_dim // self.channel_group.size(), elementwise_affine=False
         )
@@ -146,6 +136,21 @@ class DistributedNICENorm(torch.nn.Module):
     def _calc_shift_scale(
         self, x: torch.Tensor, scale_shift: torch.Tensor
     ) -> torch.Tensor:
+        """Normalize ``x`` and apply the scale and shift.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Local channel shard of shape ``(B, N, channels)``.
+        scale_shift : torch.Tensor
+            Scale and shift concatenated along the last dimension, of shape
+            ``(B, 2 * channels)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of the same shape as ``x``.
+        """
         x = self.ln(x)
         scale_shift = scale_shift.unsqueeze(1)
         scale, shift = torch.chunk(scale_shift, 2, dim=-1)
@@ -153,7 +158,21 @@ class DistributedNICENorm(torch.nn.Module):
         return x
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """Forward pass of distributed NICE norm."""
+        """Normalize the local channel shard and apply the noise-conditioned scale and shift.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Local shard of the input, with ``dim // channel_group.size()``
+            channels.
+        noise : torch.Tensor
+            Noise of shape ``(B, noise_dim)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor of the same shape as ``x``.
+        """
         scale_shift = self.scale_shift(noise)
         x = self._calc_shift_scale(x, scale_shift)
 

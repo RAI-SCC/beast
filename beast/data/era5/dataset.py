@@ -1,9 +1,9 @@
-"""Dataset definitions."""
+"""ERA5 datasets: zarr-backed, dummy and event-based for evaluation."""
 
 import dataclasses as dc
 import os
 from datetime import datetime, timedelta
-from typing import Callable, List, Tuple
+from typing import Callable, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -17,97 +17,78 @@ SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
 
 
 class ERA5Distributed(Dataset):
-    """
-    Genaralized ERA5 dataset for native and domain-parallel data.
+    """Genaralized ERA5 dataset for native and domain-parallel data.
+     
+    Returns  ``(input, target)`` pairs read from a zarr directory.
+    Inputs and targets stack one or more timesteps along the channel dimension,
+    and inputs are followed by the constant masks. Values are normalized with
+    the stored per-variable mean and standard deviation.
 
-    Loads data from a zarr directory, to return an (input, target) pair for model training.
-    Assumes that zarr data is chunked along the time domain, as each time-step marks a fundamental data sampel unit.
-    In a distributed (domain-parallel) setting, each process loads only it's shard of the channels and spatial latitude.
-    Works only on 2-way channel splitting.
-    Both input and target consist of one or more timesteps, which are concatenated in the channel dimension.
-
-    Attributes
-    ----------
-    dtype : torch.dtype
-        dtype of the input and target tensors to be generated
-    world_size : int
-        The size of the domain-parallel process group.
-    local_rank : int
-        The rank withing the domain-parallel process group.
-    datapath : str
-        The path to the zarr directory.
-    norm_values: dict
-        A dictionary holding the "mean" and "std" numpy arrays with normalization values
-    zarr_data :
-        The handle to the zarr data directory from which data will be loaded
-    years : Tuple(str,st)
-        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
-    in_timesteps : int
-        Number of timesteps to be concatenated for the input; concatenation will be done along the channel dimension
-    out_timesteps : int
-        Number of timesteps to be concatenated for the target; concatenation will be done along the channel dimension
-    dt : int
-        The temporal subsampling timestep in hours
-    n_data_items:
-        Number of data samples (time steps) in self.zarr_data
-    xlat : int
-        Global size of data samples in self.zarr_data in the latitude dimension; if this is an odd number, the last value will be clipped.
-    xlon : int
-        Global size of data samples in self.zarr_data in the longitude dimension; if this is an odd number, the last value will be clipped.
-    num_vars: int
-        Global number of variables (channels) in self.zarr_data
-    constant_masks: torch.Tensor
-        Tensor with the local shard of the constant masks (chunked in channels and longitude)
-    n_masks : int
-        Number of constant masks
-    in_var : Tuple(int, int)
-        The start and stop value of the range of channels for this particluar rank
-    in_masks: Tuple(int, int)
-        The start and stop value of the range of masks for this particluar rank
-    in_out_xlon : Tuple(int, int)
-        The start and stop value of the spatial range (in the longitude) for this particluar rank
-    input_pad_oddrank: int
-        The number of channels that need to be padded on odd ranks for
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    rollout: int
-        The number of rollout steps to be performed
-
+    If the ``DTP`` group has more than one rank, each rank loads only its
+    shard: one of two channel halves and a slice of the longitudes. With an odd
+    number of channels, constant masks are moved between the halves and the
+    second half is zero-padded, so that both halves have the same size.
 
     Parameters
     ----------
     pg_rank : int
-        The domain-parallel process group rank.
+        Rank in the ``DTP`` process group.
     pg_size : int
-        The size of the domain-parallel process group.
+        Size of the ``DTP`` process group.
     data_path : str
-        The path to the zarr directory.
+        Path to the zarr directory.
     constant_masks_path : str
-        The path to the constant mask files
-    constant_masks : List(str)
-        The file names of the constant masks to be used
+        Directory containing the constant mask files.
+    constant_masks : List[str]
+        File names of the constant masks to use.
     normalization_dir : str
-        The path to the .npy files containing normalization values `norm_mean.npy` and `norm_std.npy`
-    dt : int
-        The temporal subsampling timestep in hours
-    n_in_timesteps : int
-        The number of input time setps
-    n_out_timesteps : int
-        The number of output time setps
-    dtype : torch.dtype
-        The dtype for input and target tensors
-    dsync_access: bool
-        Switch for waved (grouped) accessing of the zarr directory, for desynchronized file system access at scale. Recommended to use when going beyond 512 nodes.
-    time_range : Tuple(str, str)
-        The temporal range to be included into the dataset, in the format`%Y-%m-%d`
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    rollout: int
-        The number of rollout steps to be performed
+        Directory containing ``norm_mean.npy`` and ``norm_std.npy``.
+    dt : int, default: 6
+        Time between timesteps, in hours.
+    n_in_timesteps : int, default: 1
+        Number of input timesteps.
+    n_out_timesteps : int, default: 1
+        Number of output timesteps.
+    dtype : torch.dtype, default: torch.float32
+        Data type of inputs and targets.
+    dsync_access : bool, default: False
+        Whether to open the data in waves, to spread out file system access.
+        Recommended beyond 512 nodes.
+    time_range : Tuple[str, str], optional
+        Start (inclusive) and end (exclusive) of the samples to use, formatted
+        ``%Y-%m-%d``.
+    transform : Callable, optional
+        Transformation applied to the input.
+    target_transform : Callable, optional
+        Transformation applied to the target. Defaults to ``transform``.
+    rollout : int, default: 1
+        Number of rollout steps. The target holds ``n_out_timesteps * rollout``
+        timesteps.
+
+    Attributes
+    ----------
+    zarr_data : xarray.Dataset
+        The opened data, restricted to ``time_range``.
+    norm_values : dict[str, np.ndarray]
+        Normalization ``"mean"`` and ``"std"`` per variable.
+    n_data_items : int
+        Number of timesteps in ``zarr_data``.
+    xlat, xlon : int
+        Global grid size, rounded down to an even number.
+    n_variables : int
+        Global number of variables.
+    constant_masks : np.ndarray
+        Constant masks, of shape ``(n_masks, xlat, xlon)``.
+    n_masks : int
+        Number of constant masks.
+    in_var : Tuple[int, int]
+        Range of variables loaded by this rank.
+    in_masks : Tuple[int, int]
+        Range of constant masks used by this rank.
+    in_out_xlon : Tuple[int, int]
+        Range of longitudes loaded by this rank.
+    input_pad_oddrank, output_pad_oddrank : int
+        Channels of zero padding appended to inputs and targets on odd ranks.
     """
 
     def __init__(
@@ -142,10 +123,10 @@ class ERA5Distributed(Dataset):
         self.rollout = rollout
         mask_list = constant_masks
 
-        self.norm_values: dict[str, np.array] = {}
+        self.norm_values: dict[str, np.ndarray] = {}
 
         def load_data() -> None:
-            """Inline utility function for initial data access."""
+            """Open the zarr data, restrict it to ``time_range`` and load masks and normalization."""
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
             except Exception:
@@ -295,7 +276,13 @@ class ERA5Distributed(Dataset):
             self.output_pad_oddrank = 0
 
     def __len__(self) -> int:
-        """Return total number of samples."""
+        """Return the number of samples that have a complete input and target.
+
+        Returns
+        -------
+        int
+            The number of samples.
+        """
         return int(
             self.n_data_items
             - (self.in_timesteps + self.rollout * self.out_timesteps - 1)
@@ -303,7 +290,22 @@ class ERA5Distributed(Dataset):
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
-        sample_list = []
+        """Load and normalize consecutive timesteps of this rank's shard.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the first timestep.
+        steps : int
+            Number of timesteps to load, ``dt`` hours apart.
+
+        Returns
+        -------
+        list[torch.Tensor]
+            One tensor of shape ``(channel shard, xlat, longitude shard)`` per
+            timestep.
+        """
+        sample_list: list[torch.Tensor] = []
         for i in range(steps):
             sample = self.zarr_data.isel(
                 time=(idx + i * (self.dt // SUBSAMPLING_FACTOR)),
@@ -326,30 +328,43 @@ class ERA5Distributed(Dataset):
         return sample_list
 
     def _padsample(self, sample: torch.Tensor, inbalance: int) -> torch.Tensor:
-        # For distributed dataset, we may create inbalances in the variables
+        """Zero-pad the channels on ranks that hold the second channel half.
+
+        Parameters
+        ----------
+        sample : torch.Tensor
+            Sample with channels in the third-to-last dimension, of shape
+            ``(..., channels, xlat, longitude shard)``.
+        inbalance : int
+            Number of zero channels to append.
+
+        Returns
+        -------
+        torch.Tensor
+            The padded sample on odd ranks of a distributed dataset, otherwise
+            ``sample`` unchanged.
+        """
         if self.world_size > 1:
-            # Odd ranks load second half of variables, so they might have less masks
+            # Odd ranks hold the second half of the channels
             if (inbalance != 0) and (self.local_rank % 2 == 1):
-                # IS THIS ACTUALLY THE RIGHT DIMENSION??? We concatenate time and features in dim=0, but we pad in dim=2...
+                # Pads the channel dimension (third from last) at the end
                 sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
         return sample
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Return single input, target.
+        """Return one normalized ``(input, target)`` pair.
 
         Parameters
         ----------
-        idx: int
-            Global index of item
+        idx : int
+            Global index of the first input timestep.
 
         Returns
         -------
         input : torch.Tensor
-            The input sample of shape [channel shard * number of input timesteps, xlat, longitudinal shard].
-
+            Shape ``(channel shard * n_in_timesteps + masks, xlat, longitude shard)``.
         target : torch.Tensor
-            The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
+            Shape ``(channel shard * n_out_timesteps * rollout, xlat, longitude shard)``.
         """
         input_list = self._get_sample_list(idx, steps=self.in_timesteps)
         input_list.append(self._get_constant_masks().to(self.dtype))
@@ -359,7 +374,6 @@ class ERA5Distributed(Dataset):
         # Output data
         target_idx = idx + self.in_timesteps * (self.dt // SUBSAMPLING_FACTOR)
 
-        # TODO: THIS ONLY WORKS BECAUSE OF THE CHANNEL AND SPATIAL DIMS WE ARE USING. Needs to be generalized later.
         target_list = self._get_sample_list(
             target_idx, steps=self.out_timesteps * self.rollout
         )
@@ -381,7 +395,7 @@ class ERA5Distributed(Dataset):
         Returns
         -------
         torch.Tensor
-            The rank local shard of the constant masks; has shape [number of masks //2, xlat, longitudinal shard].
+            Shape ``(masks of this rank, xlat, longitude shard)``.
         """
         return torch.tensor(
             self.constant_masks[
@@ -392,15 +406,21 @@ class ERA5Distributed(Dataset):
         )
 
     def get_feature_weights(self, channel_rank: int, sst_idx: int = 4) -> torch.Tensor:
-        """
-        Return feature weights with SST being masked over land.
+        """Return per-feature loss weights that mask SST over land.
 
         Parameters
         ----------
         channel_rank : int
-            The Jigsaw channel rank of the process.
-        sst_idx : int
-            The index along the feature dimension at which SST is stored, default: 4.
+            Rank in the ``JChannel`` process group. SST is masked only on
+            rank 0, which holds the first channel half.
+        sst_idx : int, default: 4
+            Index of SST among the variables.
+
+        Returns
+        -------
+        torch.Tensor
+            Weights of shape ``(channel shard * n_out_timesteps, xlat, longitude
+            shard)``, 1 everywhere except 0 for SST over land.
         """
         feature_weights = torch.ones(
             (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
@@ -413,13 +433,25 @@ class ERA5Distributed(Dataset):
                     1 - self._get_land_sea_mask(folder_path=self.mask_path)
                 )
 
-        # modify the correct index
         return feature_weights
 
     def _get_land_sea_mask(
         self, folder_path: str, sst_mask_name: str = "sst_mask.npy"
     ) -> torch.Tensor:
-        """Return the local shard of the sst mask."""
+        """Return the land-sea mask of this rank, 1 over land.
+
+        Parameters
+        ----------
+        folder_path : str
+            Directory containing the mask file.
+        sst_mask_name : str, default: "sst_mask.npy"
+            Name of the mask file.
+
+        Returns
+        -------
+        torch.Tensor
+            Float32 mask of shape ``(xlat, longitude shard)``.
+        """
         return torch.tensor(
             np.load(os.path.join(folder_path, sst_mask_name))[
                 : self.xlat, self.in_out_xlon[0] : self.in_out_xlon[1]
@@ -428,19 +460,20 @@ class ERA5Distributed(Dataset):
 
     def _load_constant_mask_2d(
         self, folder_path: str, mask_list: List[str]
-    ) -> np.array:
-        """
-        Load the constant masks applied in the patch embedding layer.
+    ) -> np.ndarray:
+        """Load the constant masks that are appended to the input.
 
-        folder_path: String
-            Path to directory containing constant masks
-        mask_list: List[str]
-            List of constant masks
+        Parameters
+        ----------
+        folder_path : str
+            Directory containing the mask files.
+        mask_list : List[str]
+            File names of the masks.
 
         Returns
         -------
-        mask: numpy.array
-            of shape (n_masks, n_lat, n_lon)
+        np.ndarray
+            Masks stacked to shape ``(n_masks, n_lat, n_lon)``.
         """
         # Load data from numpy files
 
@@ -452,17 +485,21 @@ class ERA5Distributed(Dataset):
         return masks
 
     def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
-        """
-        Format an input tensor out of a list of timesteps. Applies masks and padding. The last n timesteps in the list are used, based on the dataset argument `in_timesteps`.
+        """Build a model input from a list of timesteps.
+
+        The last ``in_timesteps`` entries are concatenated along the channel
+        dimension, followed by the constant masks, and padded as in
+        :meth:`__getitem__`.
 
         Parameters
         ----------
-        sample_list: list[torch.Tensor]
-            The list of timesteps
+        sample_list : list[torch.Tensor]
+            Batched timesteps, each ``(batch, channel shard, xlat, longitude shard)``.
 
         Returns
         -------
-        input: torch.Tensor
+        torch.Tensor
+            The model input.
         """
         input_samples = sample_list[-self.in_timesteps :]
         batch_dim = input_samples[0].shape[0]
@@ -506,11 +543,49 @@ class ERA5Distributed(Dataset):
         return target_list
 
 class ERA5Dummy(ERA5Distributed):
-    """
-    Generates a dummy dataset, returning tensors (input, target) for a specified shape.
+    """Dataset of random or constant ``(input, target)`` pairs of a given shape.
 
-    In a distributed (domain-parallel) setting, each process generates only it's shard of the channels and spatial latitude.
-    Both input and target can consist of one or more timesteps, which are concatenated in the channel dimension.
+    Inputs and targets stack one or more timesteps along the channel dimension.
+    If the ``DTP`` group has more than one rank, each rank generates only its
+    shard: one of two channel halves and a slice of the longitudes.
+
+    Parameters
+    ----------
+    pg_rank : int
+        Rank in the ``DTP`` process group.
+    pg_size : int
+        Size of the ``DTP`` process group.
+    global_shape : Tuple[int, int, int]
+        Global ``(channel, latitude, longitude)`` shape of one timestep.
+    fill_value : float, optional
+        Value to fill inputs and targets with. If None or 0, they are random.
+    time_range : Tuple[str, str], optional
+        Start and end of the time range, formatted ``%Y-%m-%d``. Defaults to
+        the year 2000.
+    dt : int, default: 6
+        Time between timesteps, in hours.
+    n_in_timesteps : int, default: 1
+        Number of input timesteps.
+    n_out_timesteps : int, default: 1
+        Number of output timesteps.
+    dtype : torch.dtype, default: torch.float32
+        Data type of inputs and targets.
+    transform : Callable, optional
+        Transformation applied to the input.
+    target_transform : Callable, optional
+        Transformation applied to the target. Defaults to ``transform``.
+
+    Attributes
+    ----------
+    n_data_items : int
+        Number of hourly timesteps in the time range.
+    num_vars, xlat, xlon : int
+        Global channel and grid sizes, with the grid rounded down to an even
+        number.
+    in_var : List[int]
+        Range of channels generated by this rank.
+    in_out_xlat, in_out_xlon : List[int]
+        Ranges of latitudes and longitudes generated by this rank.
     """
 
     def __init__(
@@ -591,7 +666,21 @@ class ERA5Dummy(ERA5Distributed):
 
 @dc.dataclass
 class Event:
-    """Dataclass with event data from EWB."""
+    """An extreme weather event from EWB, with its time window and bounding box.
+
+    Attributes
+    ----------
+    id : str
+        Event identifier.
+    event_type : str
+        Type of the event.
+    title : str
+        Event title.
+    start_date, end_date : datetime
+        Start and end of the event.
+    lat_min, lat_max, lon_min, lon_max : float
+        Latitude and longitude bounds of the event region.
+    """
 
     id: str
     event_type: str
@@ -605,12 +694,59 @@ class Event:
 
 
 class EWBEra5(ERA5Distributed):
-    """Dataset class to forecast EWB events, with Era5 as ground truth."""
+    """ERA5 initial conditions for forecasting ExtremeWeatherBench (EWB) events.
+
+    Each item is one event at one lead time, together with the input timesteps
+    to start the forecast from. Data is read, normalized and sharded as in
+    :class:`ERA5Distributed`.
+
+    Parameters
+    ----------
+    event_list : Sequence[Event]
+        Events to forecast.
+    lead_times : Sequence[int]
+        Lead times to forecast each event at, in hours.
+    pg_rank : int
+        Rank in the ``DTP`` process group.
+    pg_size : int
+        Size of the ``DTP`` process group.
+    data_path : str
+        Path to the zarr directory.
+    constant_masks_path : str
+        Directory containing the constant mask files.
+    constant_masks : List[str]
+        File names of the constant masks to use.
+    normalization_dir : str
+        Directory containing ``norm_mean.npy`` and ``norm_std.npy``.
+    dt : int, default: 6
+        Time between timesteps, in hours.
+    n_in_timesteps : int, default: 1
+        Number of input timesteps.
+    n_out_timesteps : int, default: 1
+        Number of output timesteps per model step.
+    dtype : torch.dtype, default: torch.float32
+        Data type of the inputs.
+    dsync_access : bool, default: False
+        Whether to open the data in waves, to spread out file system access.
+        Recommended beyond 512 nodes.
+    time_range : Tuple[str, str], optional
+        Start (inclusive) and end (exclusive) of the samples to use, formatted
+        ``%Y-%m-%d``.
+    transform : Callable, optional
+        Transformation applied to the input.
+    target_transform : Callable, optional
+        Transformation applied to the target. Defaults to ``transform``.
+
+    Attributes
+    ----------
+    event_lead_list : list[tuple[Event, int]]
+        Every combination of event and lead time, in item order.
+    """
 
     def __init__(
         self,
-        event_list: list[Event],
-        lead_times: list[int],
+        event_list: Sequence["Event"],
+        lead_times: Sequence[int],
         pg_rank: int,
         pg_size: int,
         data_path: str,
@@ -625,7 +761,7 @@ class EWBEra5(ERA5Distributed):
         time_range: Tuple[str, str] | None = None,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
-    ):
+    ) -> None:
         # Setup event list
         self.event_lead_list: list[tuple[Event, int]] = [
             (event, lead_time) for event in event_list for lead_time in lead_times
@@ -649,24 +785,28 @@ class EWBEra5(ERA5Distributed):
         )
 
     def __len__(self) -> int:
-        """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
+        """Return the number of events times the number of lead times.
+
+        Returns
+        -------
+        int
+            The number of items.
+        """
         return len(self.event_lead_list)
 
     def _input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
         """
         Return the input timestamps of one forecast, oldest first.
 
-        The forecast is initialized at ``start_date - lead_time``: that is the
-        *last* input, preceded by ``in_timesteps - 1`` steps spaced ``dt`` hours
-        apart. Consumers advance their own clock from ``start_date - lead_time``
-        in ``dt`` steps, so the last entry has to land exactly there -- if it
-        does not, every forecast field is labelled with the wrong valid time.
+        The forecast is initialized at ``start_date - lead_time``. That is the
+        last input, preceded by ``in_timesteps - 1`` earlier inputs spaced ``dt``
+        hours apart.
 
         Parameters
         ----------
-        start_date: datetime
+        start_date : datetime
             Start of the event being forecast.
-        lead_time: int
+        lead_time : int
             Lead time in hours. May be negative, which initializes the forecast
             after the event has started.
 
@@ -683,7 +823,23 @@ class EWBEra5(ERA5Distributed):
         ]
 
     def __getitem__(self, idx: int) -> tuple[Event, int, list[torch.Tensor]]:  # type:ignore[override]
-        """Return a datset item. The item is a tuple with an event, the target lead time, a list of initial input timesteps, and two functions two quickly format the inputs and outputs for rollout."""
+        """Return one event, its lead time and the input timesteps to forecast from.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the item.
+
+        Returns
+        -------
+        event : Event
+            The event to forecast.
+        lead_time : int
+            Lead time of the forecast, in hours.
+        inputs : list[torch.Tensor]
+            The normalized input timesteps of this rank's shard, oldest first,
+            each of shape ``(1, channel shard, xlat, longitude shard)``.
+        """
         event, lead_time = self.event_lead_list[idx]
 
         samples = []

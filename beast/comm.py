@@ -1,9 +1,8 @@
-"""Utilities for distributed communication and process mesh management in beast.
+"""Process mesh and process group management for distributed execution.
 
-This module provides helpers to create and manage process meshes and
-process groups for distributed training. It supports a fallback
-CustomDeviceMesh implementation when the native torch.device_mesh
-functionality is not available or suitable.
+The 4-D mesh is built on :func:`torch.distributed.device_mesh.init_device_mesh`
+and its groups are kept in module-level state, retrievable by name through
+:func:`get_process_group`.
 """
 
 import os
@@ -24,31 +23,38 @@ def create_process_mesh_dict(
     mesh_dims: Sequence[int],
     device_type: str = "cuda",
 ) -> dict[str, dist.ProcessGroup]:
-    """Create a dictionary of process groups for a logical device mesh.
+    """Create the 4-D process mesh and its named process groups.
 
-    The function expects a 4-D process mesh corresponding to the logical
-    dimensions (DP, SP, JSpatial, JChannel).
+    The four mesh dimensions and the two combined groups are:
+
+    * ``DP``: data parallelism, each rank group sees different data items.
+    * ``SP``: sample parallelism, the ensemble members of a Bayesian model.
+    * ``JSpatial``: spatial parallelism, each rank holds a tile of the grid.
+    * ``JChannel``: channel parallelism, each rank holds a slice of the channels.
+    * ``DTP``: ``JSpatial`` x ``JChannel``, the ranks that share one data item.
+    * ``DDP``: ``DP`` x ``SP`` x ``JSpatial``, the ranks gradients are averaged over.
 
     Parameters
     ----------
     mesh_dims : Sequence[int]
-        Sizes for each mesh dimension, in the order (DP, SP, JSpatial,
-        JChannel). The product of the sizes must equal the distributed world
-        size.
-    device_type : str, optional
-        Device type string passed to the device mesh initializer
-        (default ``"cuda"``).
+        Sizes of the mesh dimensions in the order ``(DP, SP, JSpatial,
+        JChannel)``. Their product must equal the world size.
+    device_type : str, default: "cuda"
+        Device type passed to ``init_device_mesh``.
 
     Returns
     -------
     dict[str, dist.ProcessGroup]
-        Mapping from logical names to :class:`torch.distributed.ProcessGroup`.
+        The process groups, keyed ``DP``, ``SP``, ``JSpatial``, ``JChannel``,
+        ``DTP`` and ``DDP``.
 
-    Notes
-    -----
-    The returned dictionary contains groups for the following keys:
-    ``DP``, ``SP``, ``JSpatial``, ``JChannel``, plus combined
-    groups ``DTP`` and ``DDP`` used for different parallelism strategies.
+    Raises
+    ------
+    RuntimeError
+        If the default process group is not initialized.
+    ValueError
+        If ``mesh_dims`` does not have four entries or its product differs from
+        the world size.
     """
     if not dist.is_initialized():
         raise RuntimeError("Distributed process group is not initialized.")
@@ -57,9 +63,8 @@ def create_process_mesh_dict(
 
     mesh_dim_names = ["DP", "SP", "JSpatial", "JChannel"]
 
-    # Checked before the product so a stale 5-D layout (which used to carry a
-    # leading Expert dimension) reports the arity rather than failing later
-    # inside init_device_mesh with a mesh_shape/mesh_dim_names mismatch.
+    # Check the number of dimensions first, for a clearer error than the one
+    # init_device_mesh raises.
     if len(mesh_dims) != len(mesh_dim_names):
         raise ValueError(
             f"mesh_dims must be of length {len(mesh_dim_names)} "
@@ -93,22 +98,22 @@ def create_process_mesh_dict(
 
 
 def get_process_group(name: str) -> dist.ProcessGroup:
-    """Return a previously created process group by name.
+    """Return a process group created by :func:`create_process_mesh_dict`.
 
     Parameters
     ----------
     name : str
-        Key name of the process group to retrieve.
+        Group name, e.g. ``"DP"`` or ``"DDP"``.
 
     Returns
     -------
-    torch.distributed.ProcessGroup
+    dist.ProcessGroup
         The requested process group.
 
     Raises
     ------
     ValueError
-        If no process group exists for the provided name.
+        If no group with that name exists.
     """
     if name not in _process_group_dict:
         raise ValueError(f"Process group '{name}' not found.")
@@ -116,21 +121,22 @@ def get_process_group(name: str) -> dist.ProcessGroup:
 
 
 def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
-    """Execute a function across distributed ranks in waves to reduce contention.
+    """Run ``func`` on all ranks, ``wave_size`` ranks at a time.
+
+    Staggering the calls reduces contention on shared resources such as the
+    filesystem. This is a collective call: every rank must reach it.
 
     Parameters
     ----------
     func : Callable
-        The function to execute on each rank. Should contain the logic that
-        needs to be executed in a distributed manner.
-    wave_size : int, optional
-        The number of ranks to execute the function in each wave (default is 128).
+        Zero-argument callable to run on each rank.
+    wave_size : int, default: 128
+        Number of ranks that run ``func`` concurrently.
 
     Returns
     -------
     Any
-        The result of the function execution on the current rank, or None if
-        the rank is not part of the current wave.
+        The return value of ``func`` on this rank.
     """
     world_size = dist.get_world_size(group=None)
     num_groups = (world_size + wave_size - 1) // wave_size
@@ -156,20 +162,15 @@ def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
 
 
 def visualize_process_mesh() -> None:
-    """Print a visual representation of the generated process mesh.
+    """Print a table of every rank's host, GPU and rank within each group.
 
-    Each rank gathers its identity (hostname, local GPU id and global rank)
-    together with its rank within every logical/combined process group. The
-    information is collected on rank 0 and printed as a table so the user can
-    see how ranks are distributed across the mesh and its groups.
+    The table has one row per global rank with the columns ``host``, ``gpu``,
+    ``global`` and one column per process group. Rank 0 prints it.
 
-    The output contains, for every global rank:
-
-    * ``host``      -- the hostname the rank runs on
-    * ``gpu``       -- the local device (GPU) id of the rank
-    * ``global``    -- the global rank in the default process group
-    * one column per group (``DP``, ``SP``, ``JSpatial``, ``JChannel``,
-      ``DTP``, ``DDP``) showing the rank *within* that group.
+    Raises
+    ------
+    RuntimeError
+        If the default process group is not initialized or no mesh exists yet.
 
     Notes
     -----
@@ -219,6 +220,18 @@ def visualize_process_mesh() -> None:
     }
 
     def fmt_row(values: Sequence[Any]) -> str:
+        """Format one table row.
+
+        Parameters
+        ----------
+        values : Sequence[Any]
+            One value per column.
+
+        Returns
+        -------
+        str
+            The values, right-aligned to the column widths and separated by ``|``.
+        """
         return " | ".join(f"{str(v):>{widths[col]}}" for col, v in zip(columns, values))
 
     header = fmt_row(columns)
@@ -235,19 +248,9 @@ def visualize_process_mesh() -> None:
 def shutdown_comm() -> None:
     """Destroy the process groups created by :func:`create_process_mesh_dict`.
 
-    The default (``WORLD``) group is left intact, so the caller can keep using
-    plain collectives and build a fresh mesh afterwards.
-
-    Two cases are guarded defensively, because whether they occur depends on the
-    torch version and the backend rather than on anything here:
-
-    * A mesh dimension may be *backed by* the default process group when it
-      spans the whole world. Destroying that would take down every later
-      collective, including the ``all_gather_object`` in
-      :func:`visualize_process_mesh`. On torch 2.14 ``init_device_mesh`` hands
-      out a distinct group per dimension, so the skip is a no-op there.
-    * ``DTP`` and ``DDP`` are flattened views and may alias a dimension group,
-      so the same object can appear under more than one key.
+    Each group is destroyed once, even if it is stored under several names. The
+    default (``WORLD``) group is kept, so collectives keep working and a new mesh
+    can be created afterwards.
     """
     global _mesh, _process_group_dict
 
@@ -272,21 +275,19 @@ def wrap_ddp(
 ) -> DistributedDataParallel:
     """Wrap a model in DistributedDataParallel over the given process group.
 
-    Note that DDP *averages* gradients over ``ddp_group``. Whether that is the
-    correct reduction depends on which mesh axes the group spans, so this
-    belongs next to :func:`create_process_mesh_dict`, which decides that.
+    Gradients are averaged over ``ddp_group``, usually the ``DDP`` group of
+    :func:`create_process_mesh_dict`.
 
     Parameters
     ----------
     model : torch.nn.Module
         Model to wrap.
-    device_id : int | None
+    device_id : int or None
         CUDA device index the model lives on, or None for CPU.
     ddp_group : dist.ProcessGroup
         Process group to synchronize gradients over.
     reduction_size_mb : int, default: 100
-        Gradient bucket size in MiB, applied both to the first bucket and to
-        all subsequent ones.
+        Size of every gradient bucket, including the first, in MiB.
 
     Returns
     -------
@@ -295,18 +296,13 @@ def wrap_ddp(
 
     Notes
     -----
-    The wrap is built with ``gradient_as_bucket_view=True`` and
-    ``static_graph=True``. The latter is a promise about the model: the autograd
-    graph must not change between iterations, and no parameter may be unused in
-    some steps but used in others. A model taking data-dependent branches will
-    mis-reduce under it.
-
-    ``bucket_cap_mb`` only sizes the buckets after the first. torch exposes no
-    public setter for the first one, so the private
-    ``dist._DEFAULT_FIRST_BUCKET_BYTES`` is patched for the duration of the
-    constructor and restored afterwards. Leaving it patched would resize the
-    first bucket of every other DDP instance built later in the same process.
+    The model is wrapped with ``static_graph=True``, so its autograd graph must
+    be the same in every iteration and every parameter must be used in every
+    step.
     """
+    # DDP only exposes a setting for the size of the buckets after the first, so
+    # the first bucket size is set through the private module default for the
+    # duration of the constructor and then restored.
     previous_first_bucket_bytes = dist._DEFAULT_FIRST_BUCKET_BYTES  # type: ignore[attr-defined]
     dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
     try:

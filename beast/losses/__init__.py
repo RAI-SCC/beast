@@ -1,1 +1,1 @@
-"""Loss functions for BEAST."""
+"""Loss functions."""

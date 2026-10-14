@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from typing import List
+from typing import Callable, List, cast
 
 import numpy as np
 import pandas as pd
@@ -71,6 +71,38 @@ def generate_mock_zarr_data(
     return zarr_path
 
 
+@pytest.fixture(scope="session")
+def cached_mock_zarr(tmp_path_factory: TempPathFactory) -> Callable[..., str]:
+    """Build mock zarr stores once per shape and reuse them across tests.
+
+    ``generate_mock_zarr_data`` reseeds numpy per timestep, so a store is fully
+    determined by ``(n_time, n_features, n_lat, n_lon)`` -- regenerating it for
+    every parametrisation produced byte-identical copies. Twenty-two of those
+    copies is roughly a gigabyte of scratch space, which is what made the suite
+    fail on a tmpfs ``/tmp``.
+
+    The stores are read-only as far as the tests are concerned: ``ERA5Distributed``
+    opens them for reading, and masks and normalization files still go to each
+    test's own directory, so nothing is shared that a test could mutate.
+
+    Returns
+    -------
+    Callable[..., str]
+        ``get(n_time, n_features, n_lat, n_lon)`` returning the store's path.
+    """
+    root = tmp_path_factory.mktemp("zarr_cache")
+    cache: dict[tuple[int, int, int, int], str] = {}
+
+    def get(n_time: int, n_features: int, n_lat: int, n_lon: int) -> str:
+        key = (n_time, n_features, n_lat, n_lon)
+        if key not in cache:
+            path = root / f"mock_{n_time}_{n_features}_{n_lat}_{n_lon}.zarr"
+            cache[key] = generate_mock_zarr_data(path, *key)
+        return cache[key]
+
+    return get
+
+
 def generate_mock_masks(path: str, xlat: int, xlon: int, n_masks: int) -> List[str]:
     """Utility function that creates mock masks in .npy format, filled with ones."""
 
@@ -115,8 +147,13 @@ test_array = [
 
 
 class TestDataset:
+    # The full ERA5 grid (721x1440, odd latitude count) is the point of the first
+    # case -- it checks that the generator gets the coordinate bookkeeping right at
+    # production resolution. The feature count is not: the assertion below only
+    # looks at the latitude size, and 84 features at full resolution wrote 597 MB
+    # of random floats per run. Eight keeps the grid and drops the store to ~57 MB.
     @pytest.mark.parametrize(
-        "n_time, n_features, n_lat, n_lon", [(2, 84, 721, 1440), (2, 84, 120, 240)]
+        "n_time, n_features, n_lat, n_lon", [(2, 8, 721, 1440), (2, 84, 120, 240)]
     )
     def test_mock_dataset(
         self,
@@ -151,7 +188,11 @@ class TestDataset:
 
     @pytest.mark.parametrize("n_masks, n_features", test_array_mask_features)
     def test_era5_dataset_distributed_mask_features(
-        self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
+        self,
+        tmp_path_factory: TempPathFactory,
+        cached_mock_zarr: Callable[..., str],
+        n_masks: int,
+        n_features: int,
     ) -> None:
         """Test for class ERA5Distributed, for different numbers of masks and features to evaluate channel splitting functionality."""
         data_path = tmp_path_factory.mktemp("data")
@@ -167,9 +208,7 @@ class TestDataset:
         if n_vars % 2 == 1:
             n_vars += 1
 
-        zarr_path = generate_mock_zarr_data(
-            (data_path / "test_data.zarr"), n_time, n_features, xlat, xlon
-        )
+        zarr_path = cached_mock_zarr(n_time, n_features, xlat, xlon)
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
@@ -247,7 +286,11 @@ class TestDataset:
 
     @pytest.mark.parametrize("lat, lon", test_array_xlat_xlon)
     def test_era5_dataset_distributed_spatial(
-        self, tmp_path_factory: TempPathFactory, lat: int, lon: int
+        self,
+        tmp_path_factory: TempPathFactory,
+        cached_mock_zarr: Callable[..., str],
+        lat: int,
+        lon: int,
     ) -> None:
         """Test for class ERA5Distributed, for different spatial input sizes, to test automatic size derivation from the dataset."""
         data_path = tmp_path_factory.mktemp("data")
@@ -259,9 +302,7 @@ class TestDataset:
         n_features = 8
         n_vars = n_masks + 1 + n_features
 
-        zarr_path = generate_mock_zarr_data(
-            (data_path / "test_data.zarr"), n_time, n_features, lat, lon
-        )
+        zarr_path = cached_mock_zarr(n_time, n_features, lat, lon)
         mask_list = generate_mock_masks(data_path, lat, lon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
@@ -347,7 +388,11 @@ class TestDataset:
 
     @pytest.mark.parametrize("in_timesteps, out_timesteps", test_array_timesteps)
     def test_era5_dataset_distributed_timesteps(
-        self, tmp_path_factory: TempPathFactory, in_timesteps: int, out_timesteps: int
+        self,
+        tmp_path_factory: TempPathFactory,
+        cached_mock_zarr: Callable[..., str],
+        in_timesteps: int,
+        out_timesteps: int,
     ) -> None:
         """Test for class ERA5Distributed, for different number of input and output timesteps, to evaluate temporal concatenation."""
         data_path = tmp_path_factory.mktemp("data")
@@ -360,9 +405,7 @@ class TestDataset:
         n_in_vars = 2 + 4 * in_timesteps
         n_out_vars = 4 * out_timesteps
 
-        zarr_path = generate_mock_zarr_data(
-            (data_path / "test_data.zarr"), n_time, n_features, xlat, xlon
-        )
+        zarr_path = cached_mock_zarr(n_time, n_features, xlat, xlon)
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
@@ -483,7 +526,11 @@ class TestDataset:
 
     @pytest.mark.parametrize("n_masks, n_features", test_array_mask_features)
     def test_era5_dataset_distributed_transform_integration(
-        self, tmp_path_factory: TempPathFactory, n_masks: int, n_features: int
+        self,
+        tmp_path_factory: TempPathFactory,
+        cached_mock_zarr: Callable[..., str],
+        n_masks: int,
+        n_features: int,
     ) -> None:
         """Test for class ERA5Distributed, for different numbers of masks and features to evaluate transformation functionality."""
         data_path = tmp_path_factory.mktemp("data")
@@ -499,9 +546,7 @@ class TestDataset:
         if n_vars % 2 == 1:
             n_vars += 1
 
-        zarr_path = generate_mock_zarr_data(
-            (data_path / "test_data.zarr"), n_time, n_features, xlat, xlon
-        )
+        zarr_path = cached_mock_zarr(n_time, n_features, xlat, xlon)
         mask_list = generate_mock_masks(data_path, xlat, xlon, n_masks)
         generate_mock_normalization(data_path, n_features)
 
@@ -518,7 +563,6 @@ class TestDataset:
             n_out_timesteps=out_timesteps,
             dtype=torch.float32,
             dsync_access=False,
-            transform=trf.Identity(),
         )
 
         dataset_r1 = ERA5Distributed(
@@ -608,7 +652,11 @@ class TestEWBEra5:
         dataset = SimpleNamespace(dt=dt, in_timesteps=in_timesteps)
         start_date = datetime(2022, 1, 10, 0)
 
+<<<<<<< HEAD
         dates = EWBEra5._input_dates(dataset, start_date, lead_time)
+=======
+        dates = EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, lead_time)
+>>>>>>> main
 
         assert len(dates) == in_timesteps
         # The forecast is initialized at start_date - lead_time.
@@ -625,14 +673,24 @@ class TestEWBEra5:
         dataset = SimpleNamespace(dt=12, in_timesteps=1)
         start_date = datetime(2022, 1, 10, 0)
 
+<<<<<<< HEAD
         assert EWBEra5._input_dates(dataset, start_date, 48) == [datetime(2022, 1, 8, 0)]
+=======
+        assert EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, 48) == [
+            datetime(2022, 1, 8, 0)
+        ]
+>>>>>>> main
 
     def test_ewb_input_dates_spans_history(self) -> None:
         """Multiple inputs reach back before the initialization time, never past it."""
         dataset = SimpleNamespace(dt=12, in_timesteps=2)
         start_date = datetime(2022, 1, 10, 0)
 
+<<<<<<< HEAD
         assert EWBEra5._input_dates(dataset, start_date, 48) == [
+=======
+        assert EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, 48) == [
+>>>>>>> main
             datetime(2022, 1, 7, 12),
             datetime(2022, 1, 8, 0),
         ]

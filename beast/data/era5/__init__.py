@@ -1,4 +1,4 @@
-"""ERA5 Dataset and utilities."""
+"""ERA5 datasets."""
 
 from beast.data.era5.dataset import ERA5Distributed, ERA5Dummy, Event, EWBEra5
 

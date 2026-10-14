@@ -1,10 +1,5 @@
-"""Layers for BEAST model.
+"""Transformer, MLP and normalization layers."""
 
-This package provides neural network layers for the BEAST model,
-including expert layers and transformer components.
-"""
-
-from beast.layers.expert import Expert, ExpertWeightingLayer
 from beast.layers.transformer import (
     DistributedNICETransformer,
     DistributedTransformer,
@@ -13,8 +8,6 @@ from beast.layers.transformer import (
 )
 
 __all__ = [
-    "ExpertWeightingLayer",
-    "Expert",
     "NiceTransformer",
     "TransformerBlock",
     "DistributedNICETransformer",

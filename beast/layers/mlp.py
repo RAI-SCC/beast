@@ -1,4 +1,4 @@
-"""Definition of MLPs."""
+"""Single-process and distributed MLP blocks."""
 
 from typing import Callable
 
@@ -8,7 +8,7 @@ from jigsaw import hooks, linear  # type: ignore
 
 
 class MLP(torch.nn.Module):
-    """Multi-layer perceptron.
+    """Two-layer perceptron with GELU activation and dropout.
 
     Parameters
     ----------
@@ -18,10 +18,15 @@ class MLP(torch.nn.Module):
         Hidden dimension.
     output_dim : int
         Output dimension.
-    device : torch.device | None, optional
-        Device to place tensors on, by default None.
-    dtype : torch.dtype | None, optional
-        Data type of parameters, by default None.
+    bias : bool, default: True
+        Whether the linear layers have a bias.
+    dropout : float, default: 0.0
+        Dropout probability, applied after the activation and after the
+        second layer.
+    device : torch.device, optional
+        Device to place parameters on.
+    dtype : torch.dtype, optional
+        Data type of the parameters.
     """
 
     def __init__(
@@ -34,7 +39,6 @@ class MLP(torch.nn.Module):
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
-        """Initialize MLP."""
         super().__init__()
 
         self.linear1 = torch.nn.Linear(
@@ -51,17 +55,17 @@ class MLP(torch.nn.Module):
         self.activation = torch.nn.GELU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of MLP.
+        """Apply the MLP to the last dimension of ``x``.
 
         Parameters
         ----------
         x : torch.Tensor
-            Input tensor.
+            Input of shape ``(..., input_dim)``.
 
         Returns
         -------
         torch.Tensor
-            Output tensor.
+            Output of shape ``(..., output_dim)``.
         """
         x = self.linear1(x)
         x = self.activation(x)
@@ -72,9 +76,34 @@ class MLP(torch.nn.Module):
 
 
 def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
-    """All-reduce grad_input (activation grad) across the channel group."""
+    """Create a tensor hook that sums the gradient over ``group``.
+
+    Parameters
+    ----------
+    group : dist.ProcessGroup
+        Process group to sum the gradient over, usually the ``JChannel`` process
+        group.
+
+    Returns
+    -------
+    Callable
+        Hook for :meth:`torch.Tensor.register_hook`, returning the reduced
+        gradient in place of the original.
+    """
 
     def hook(grad: torch.Tensor) -> torch.Tensor:
+        """Sum a gradient over ``group``.
+
+        Parameters
+        ----------
+        grad : torch.Tensor
+            Gradient of the hooked tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            The gradient summed over all ranks of ``group``.
+        """
         grad = grad.contiguous()
         dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
         return grad  # replaces grad
@@ -83,7 +112,36 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
 
 
 class DistributedMLPNICE(torch.nn.Module):
-    """Distributed MLP across n processes."""
+    """MLP for the noise input of :class:`~beast.layers.nice_norm.DistributedNICENorm`.
+
+    The first layer is sharded over the ``JChannel`` process group and the second
+    is a :class:`jigsaw.linear.DistributedXWT`. The parameters are replicated
+    over the ``JSpatial`` process group: they are broadcast at construction and
+    their gradients are synchronized.
+
+    Parameters
+    ----------
+    in_dim : int
+        Global input dimension of the noise.
+    hidden_dim : int
+        Global hidden dimension. Must be divisible by the size of
+        ``channel_group``.
+    out_dim : int
+        Global output dimension.
+    bias : bool
+        Whether the linear layers have a bias.
+    local_rank : int
+        Rank of this process in the ``DTP`` process group.
+    device : torch.device
+        Device to place parameters on.
+    model_group : dist.ProcessGroup
+        Stored on the module. The linear layers use ``channel_group`` as their
+        model-parallel group.
+    spatial_group : dist.ProcessGroup
+        The ``JSpatial`` process group, over which the parameters are replicated.
+    channel_group : dist.ProcessGroup
+        The ``JChannel`` process group, over which the layers are sharded.
+    """
 
     def __init__(
         self,
@@ -97,30 +155,6 @@ class DistributedMLPNICE(torch.nn.Module):
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
     ):
-        """
-        Initialize the MLP module for NICE Norm.
-
-        Parameters
-        ----------
-        in_dim : int
-            Global input dimension of noise.
-        hidden_dim : int
-            Global hidden dimension of MLP.
-        out_dim : int
-            Global output dimension of MLP.
-        bias : bool, optional
-            If True, adds a learnable bias to the output (default is True).
-        local_rank : int
-            Model local_rank.
-        device : torch.device
-            Device to perform computation on.
-        model_group: torch.ProcessGroup
-            Process group of the model. Union of the spatial and channel groups.
-        spatial_group: torch.ProcessGroup
-            Process group of the spatial ranks.
-        channel_group: torch.ProcessGroup
-            Process group of the channel ranks.
-        """
         super().__init__()
         self.local_rank = local_rank
         self.device = device
@@ -159,15 +193,19 @@ class DistributedMLPNICE(torch.nn.Module):
         self.activation = torch.nn.GELU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of MLP distributed across two or four processes.
+        """Apply the MLP to the local input.
 
         Parameters
         ----------
         x : torch.Tensor
-            Local input tensor of shape (B, x_in, in_dim).
+            Local input of shape ``(B, x_in, in_dim)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Local output.
         """
-        # hook ensures the grad_input is synchronized across the channels in the backward pass
+        # Sum the input gradient over the channel ranks in the backward pass
         if x.requires_grad:
             x.register_hook(make_grad_input_hook(self.channel_group))
         x = self.linear1(x)
@@ -177,10 +215,37 @@ class DistributedMLPNICE(torch.nn.Module):
 
 
 class DistributedSynchronizedMLP(torch.nn.Module):
-    """Distributed MLP across channels and synchronized across space.
+    """MLP sharded across channels and synchronized across space.
 
-    Parameters are synchronized upon initialization. Hooks are used to keep
-    weights synchronized as training proceeds.
+    The parameters are replicated over the ``JSpatial`` process group: they are
+    broadcast at construction and their gradients are synchronized.
+
+    Parameters
+    ----------
+    in_dim : int
+        Global input dimension.
+    hidden_dim : int
+        Global hidden dimension.
+    out_dim : int
+        Global output dimension.
+    bias : bool
+        Whether the linear layers have a bias.
+    dropout : float
+        Dropout probability, applied after the activation and after the
+        second layer.
+    local_rank : int
+        Rank of this process in the ``DTP`` process group.
+    device : torch.device
+        Device to place parameters on.
+    model_group : dist.ProcessGroup
+        Model-parallel process group of the linear layers, passed to
+        :class:`jigsaw.linear.DistributedXWT`.
+    spatial_group : dist.ProcessGroup
+        The ``JSpatial`` process group, over which the parameters are replicated.
+    channel_group : dist.ProcessGroup
+        The ``JChannel`` process group, over which the layers are sharded.
+    bayesian : bool, default: False
+        Whether the linear layers are Bayesian.
     """
 
     def __init__(
@@ -197,34 +262,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         channel_group: dist.ProcessGroup,
         bayesian: bool = False,
     ):
-        """
-        Initialize DistributedSynchronizedMLP Module.
-
-        Parameters
-        ----------
-        in_dim: int
-            input dimension of the data.
-        hidden_dim: int
-            hidden dimesion of the mlp.
-        out_dim: int
-            output dimension of the mlp.
-        bias: bool
-            Flag for whether to use bias.
-        dropout: float
-            Dropout fraction.
-        local_rank: int
-            Rank within channel group.
-        device: torch.device
-            Device to perform computations on.
-        model_group: dist.ProcessGroup
-            Channel group, where model is sharded.
-        spatial_group: dist.ProcessGroup,
-            Spatial group, where model is domain-but-not-tensor parallel.
-        channel_group: dist.ProcessGroup
-            Channel group, where model is tensor parallel.
-        bayesian: bool
-            Flag for whether the model is Bayesian.
-        """
         super().__init__()
         self.local_rank = local_rank
         self.device = device
@@ -269,15 +306,17 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.local_rank = local_rank
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of MLP distributed across two or four processes.
+        """Apply the MLP to the local input.
 
         Parameters
         ----------
         x : torch.Tensor
-            Local input tensor of shape (B, x_in, in_dim).
-        model_group : torch.distributed.ProcessGroup, optional
-            Process group for an individual model-parallel instance.
+            Local input of shape ``(B, x_in, in_dim)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Local output.
         """
         x = self.linear1(x)
         x = self.activation(x)
