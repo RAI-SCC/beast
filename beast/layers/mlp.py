@@ -27,6 +27,17 @@ class MLP(torch.nn.Module):
         Device to place parameters on.
     dtype : torch.dtype, optional
         Data type of the parameters.
+
+    Attributes
+    ----------
+    linear1 : torch.nn.Linear
+        First layer, from `input_dim` to `hidden_dim`.
+    linear2 : torch.nn.Linear
+        Second layer, from `hidden_dim` to `output_dim`.
+    dropout : torch.nn.Dropout
+        Dropout after the activation and after `linear2`.
+    activation : torch.nn.GELU
+        Activation after `linear1`.
     """
 
     def __init__(
@@ -55,7 +66,7 @@ class MLP(torch.nn.Module):
         self.activation = torch.nn.GELU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the MLP to the last dimension of ``x``.
+        """Apply the MLP to the last dimension of `x`.
 
         Parameters
         ----------
@@ -76,7 +87,7 @@ class MLP(torch.nn.Module):
 
 
 def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
-    """Create a tensor hook that sums the gradient over ``group``.
+    """Create a tensor hook that sums the gradient over `group`.
 
     Parameters
     ----------
@@ -92,7 +103,7 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
     """
 
     def hook(grad: torch.Tensor) -> torch.Tensor:
-        """Sum a gradient over ``group``.
+        """Sum a gradient over `group`.
 
         Parameters
         ----------
@@ -102,7 +113,7 @@ def make_grad_input_hook(group: dist.ProcessGroup) -> Callable:
         Returns
         -------
         torch.Tensor
-            The gradient summed over all ranks of ``group``.
+            The gradient summed over all ranks of `group`.
         """
         grad = grad.contiguous()
         dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=group)  # sync
@@ -125,7 +136,7 @@ class DistributedMLPNICE(torch.nn.Module):
         Global input dimension of the noise.
     hidden_dim : int
         Global hidden dimension. Must be divisible by the size of
-        ``channel_group``.
+        `channel_group`.
     out_dim : int
         Global output dimension.
     bias : bool
@@ -135,12 +146,21 @@ class DistributedMLPNICE(torch.nn.Module):
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Stored on the module. The linear layers use ``channel_group`` as their
+        Stored on the module. The linear layers use `channel_group` as their
         model-parallel group.
     spatial_group : dist.ProcessGroup
         The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
         The ``JChannel`` process group, over which the layers are sharded.
+
+    Attributes
+    ----------
+    linear1 : torch.nn.Linear
+        First layer, from `in_dim` to this rank's slice of `hidden_dim`.
+    linear2 : jigsaw.linear.DistributedXWT
+        Second layer, from `hidden_dim` to `out_dim`.
+    activation : torch.nn.GELU
+        Activation after `linear1`.
     """
 
     def __init__(
@@ -246,6 +266,19 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         The ``JChannel`` process group, over which the layers are sharded.
     bayesian : bool, default: False
         Whether the linear layers are Bayesian.
+
+    Attributes
+    ----------
+    linear1 : jigsaw.linear.DistributedXWT
+        First layer, from `in_dim` to `hidden_dim`.
+    linear2 : jigsaw.linear.DistributedXWT
+        Second layer, from `hidden_dim` to `out_dim`.
+    activation : torch.nn.GELU
+        Activation after `linear1`.
+    drop : torch.nn.Dropout
+        Dropout after the activation.
+    drop2 : torch.nn.Dropout
+        Dropout after `linear2`.
     """
 
     def __init__(

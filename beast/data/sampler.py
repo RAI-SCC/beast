@@ -10,8 +10,8 @@ from torch.utils.data.distributed import DistributedSampler
 class ResumableDistributedSampler(DistributedSampler):
     """Distributed sampler that can resume part-way through an epoch.
 
-    The index order of an epoch depends only on ``seed`` and the epoch, so a
-    resumed run skips the first ``resume_idx`` indices of this rank's shard and
+    The index order of an epoch depends only on `seed` and the epoch, so a
+    resumed run skips the first `resume_idx` indices of this rank's shard and
     continues where it stopped.
 
     Parameters
@@ -22,7 +22,7 @@ class ResumableDistributedSampler(DistributedSampler):
         Number of ranks to split the data over, usually the size of the ``DP``
         process group. Defaults to the world size.
     rank : int, optional
-        Rank of this process among the ``num_replicas`` ranks. Defaults to the
+        Rank of this process among the `num_replicas` ranks. Defaults to the
         global rank.
     shuffle : bool, default: True
         Whether to shuffle the indices every epoch.
@@ -60,7 +60,7 @@ class ResumableDistributedSampler(DistributedSampler):
         -------
         Iterator[int]
             The indices of this rank's shard after skipping the first
-            ``resume_idx``. Unless ``drop_last`` is set, they are repeated
+            `resume_idx`. Unless `drop_last` is set, they are repeated
             until there are as many as in a full epoch.
         """
         if self.shuffle:
@@ -84,7 +84,7 @@ class ResumableDistributedSampler(DistributedSampler):
         return iter(indices)
 
     def __len__(self) -> int:
-        """Return the number of indices left after skipping ``resume_idx``.
+        """Return the number of indices left after skipping `resume_idx`.
 
         Returns
         -------

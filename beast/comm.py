@@ -40,7 +40,7 @@ def create_process_mesh_dict(
         Sizes of the mesh dimensions in the order ``(DP, SP, JSpatial,
         JChannel)``. Their product must equal the world size.
     device_type : str, default: "cuda"
-        Device type passed to ``init_device_mesh``.
+        Device type passed to `~torch.distributed.device_mesh.init_device_mesh`.
 
     Returns
     -------
@@ -53,7 +53,7 @@ def create_process_mesh_dict(
     RuntimeError
         If the default process group is not initialized.
     ValueError
-        If ``mesh_dims`` does not have four entries or its product differs from
+        If `mesh_dims` does not have four entries or its product differs from
         the world size.
     """
     if not dist.is_initialized():
@@ -121,7 +121,7 @@ def get_process_group(name: str) -> dist.ProcessGroup:
 
 
 def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
-    """Run ``func`` on all ranks, ``wave_size`` ranks at a time.
+    """Run `func` on all ranks, `wave_size` ranks at a time.
 
     Staggering the calls reduces contention on shared resources such as the
     filesystem. This is a collective call: every rank must reach it.
@@ -131,12 +131,12 @@ def execute_in_waves(func: Callable, wave_size: int = 128) -> Any:
     func : Callable
         Zero-argument callable to run on each rank.
     wave_size : int, default: 128
-        Number of ranks that run ``func`` concurrently.
+        Number of ranks that run `func` concurrently.
 
     Returns
     -------
     Any
-        The return value of ``func`` on this rank.
+        The return value of `func` on this rank.
     """
     world_size = dist.get_world_size(group=None)
     num_groups = (world_size + wave_size - 1) // wave_size
@@ -249,8 +249,8 @@ def shutdown_comm() -> None:
     """Destroy the process groups created by :func:`create_process_mesh_dict`.
 
     Each group is destroyed once, even if it is stored under several names. The
-    default (``WORLD``) group is kept, so collectives keep working and a new mesh
-    can be created afterwards.
+    default (`~torch.distributed.group.WORLD`) group is kept, so collectives keep
+    working and a new mesh can be created afterwards.
     """
     global _mesh, _process_group_dict
 
@@ -275,7 +275,7 @@ def wrap_ddp(
 ) -> DistributedDataParallel:
     """Wrap a model in DistributedDataParallel over the given process group.
 
-    Gradients are averaged over ``ddp_group``, usually the ``DDP`` group of
+    Gradients are averaged over `ddp_group`, usually the ``DDP`` group of
     :func:`create_process_mesh_dict`.
 
     Parameters

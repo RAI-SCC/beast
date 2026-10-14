@@ -21,7 +21,7 @@ class Beast(torch.nn.Module):
     and shifted windows.
 
     The model is sharded over the ``JSpatial`` and ``JChannel`` process groups
-    if ``dtp_group`` has more than one rank. Its inputs and outputs are then the
+    if `dtp_group` has more than one rank. Its inputs and outputs are then the
     local shards.
 
     Parameters
@@ -56,11 +56,11 @@ class Beast(torch.nn.Module):
         Number of plain-and-shifted block pairs in each of the three sets.
     noise_dim : int
         Size of the noise vector for the NICE normalization. Required even if
-        ``nice_norm`` is False.
+        `nice_norm` is False.
     device : torch.device
         Device to place the model on.
     dropout : float, default: 0.1
-        Dropout probability of the distributed model, set to 0 if ``bayesian``.
+        Dropout probability of the distributed model, set to 0 if `bayesian`.
         The single-process model always uses a dropout of 1e-3.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
@@ -82,6 +82,57 @@ class Beast(torch.nn.Module):
     **kwargs
         Accepted and ignored, so unknown keyword arguments do not raise an
         error.
+
+    Attributes
+    ----------
+    dropout : float
+        Dropout probability of the distributed model: 0 if `bayesian`,
+        otherwise the `dropout` argument.
+    activation : torch.nn.GELU
+        Activation applied before `upsample_mix`.
+    channel_group_size : int
+        Size of `channel_group`, or 1 if it is None.
+    spatial_group_size : int
+        Size of `spatial_group`, or 1 if it is None.
+    dtp_group_size : int
+        Size of `dtp_group`, or 1 if it is None.
+    up_group_size : int
+        Size of `up_group`, or 1 if it is None.
+    local_rank : int
+        Rank of this process in `dtp_group`, or 0 if it is None.
+    patch_embedding : torch.nn.Module
+        Convolution from `in_channels` to `embed_dim` channels.
+    downsample : torch.nn.Module
+        Convolution with stride 2 from `embed_dim` to ``2 * embed_dim``
+        channels, before the second set of blocks.
+    upsample : torch.nn.Module
+        Transposed convolution with stride 2 from ``2 * embed_dim`` to
+        `embed_dim` channels, after the second set of blocks.
+    upsample_mix : torch.nn.Module
+        Linear layer over the channels, applied after `upsample`.
+    patch_recovery : torch.nn.Module
+        Transposed convolution from the output of the third set of blocks,
+        concatenated with the patch embedding, to `out_channels` channels.
+    transformer_1 : torch.nn.ModuleList
+        Transformer blocks of the first set, at full resolution.
+    transformer_down : torch.nn.ModuleList
+        Transformer blocks of the second set, after `downsample`.
+    transformer_2 : torch.nn.ModuleList
+        Transformer blocks of the third set, after `upsample`.
+    roll_out : torch.nn.Module
+        Shifts the field by half of `window_size_outer`, for the shifted-window
+        blocks of the first and third sets.
+    unroll_out : torch.nn.Module
+        Reverts the shift of `roll_out`.
+    roll_in : torch.nn.Module
+        Shifts the field by half of `window_size_inner`, for the shifted-window
+        blocks of the second set.
+    unroll_in : torch.nn.Module
+        Reverts the shift of `roll_in`.
+    params : torch.nn.ModuleDict
+        The layers, grouped for separate learning rates: ``"low_lr"`` holds the
+        convolutions and `upsample_mix`, ``"normal_lr"`` the transformer
+        blocks.
     """
 
     def __init__(
@@ -171,7 +222,7 @@ class Beast(torch.nn.Module):
         ------
         AssertionError
             If a window size is odd, or the width is not divisible by the size
-            of ``spatial_group`` times the patch and window sizes.
+            of `spatial_group` times the patch and window sizes.
         """
         assert self.window_size_outer[0] % 2 == 0, (
             "window_outer[0] size must be divisible by 2"
@@ -257,7 +308,7 @@ class Beast(torch.nn.Module):
         Raises
         ------
         AssertionError
-            If ``channel_group``, ``spatial_group`` or ``dtp_group`` is None.
+            If `channel_group`, `spatial_group` or `dtp_group` is None.
         """
         assert self.channel_group is not None, (
             "channel_group must not be None for distributed model"
@@ -739,7 +790,7 @@ class Beast(torch.nn.Module):
         """Predict the output fields from the input fields.
 
         A new noise vector for the NICE normalization is drawn on every call,
-        also if ``nice_norm`` is False.
+        also if `nice_norm` is False.
 
         Parameters
         ----------
