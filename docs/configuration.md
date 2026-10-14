@@ -98,9 +98,9 @@ model = get_model("BEASTLING", device=torch.device("cpu"), nice_norm=True)
 
 | Name | Intended for |
 |------|--------------|
-| `BEAST-JUPITER-2.6B-64K` | The largest run, on JUPITER |
+| `BEAST-JUPITER-2.4B-64K` | The largest run, on JUPITER |
 | `BEAST-JUPITER-0.7B-1.8K` | JUPITER |
-| `BEAST-LUMI-1.2B-1.8K` | LUMI |
+| `BEAST-LUMI-1.1B-64K` | LUMI |
 | `BEASTLING` | Development and tests on one device |
 
 The presets are the configurations of the BEAST runs on JUPITER and LUMI: 88
