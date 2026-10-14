@@ -15,6 +15,13 @@ from torch.utils.data import Dataset
 from beast.comm import execute_in_waves
 
 SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
+"""Hours between the timesteps that the dataset uses.
+
+Set with the environment variable ``BEAST_DS_HOURLY_SUBSAMPLING``; 1 by default.
+When a time range is set, only timesteps whose hour is a multiple of this value
+are kept. The time step `dt` advances the time index by
+``dt // SUBSAMPLING_FACTOR``, so the data must have hourly timesteps.
+"""
 
 
 class ERA5Distributed(Dataset):
@@ -60,19 +67,33 @@ class ERA5Distributed(Dataset):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to ``transform``.
+        Transformation applied to the target. Defaults to `transform`.
     rollout : int, default: 1
         Number of rollout steps. The target holds ``n_out_timesteps * rollout``
         timesteps.
 
     Attributes
     ----------
+    in_timesteps : int
+        Number of input timesteps, `n_in_timesteps`.
+    out_timesteps : int
+        Number of output timesteps, `n_out_timesteps`.
+    world_size : int
+        Size of the ``DTP`` process group, `pg_size`.
+    local_rank : int
+        Rank in the ``DTP`` process group, `pg_rank`.
+    datapath : str
+        Path to the zarr directory, `data_path`.
+    years : Tuple[str, str] or None
+        Time range of the samples, `time_range`.
+    mask_path : str
+        Directory containing the constant mask files, `constant_masks_path`.
     zarr_data : xarray.Dataset
-        The opened data, restricted to ``time_range``.
+        The opened data, restricted to `time_range`.
     norm_values : dict[str, np.ndarray]
         Normalization ``"mean"`` and ``"std"`` per variable.
     n_data_items : int
-        Number of timesteps in ``zarr_data``.
+        Number of timesteps in `zarr_data`.
     xlat, xlon : int
         Global grid size, rounded down to an even number.
     n_variables : int
@@ -126,7 +147,7 @@ class ERA5Distributed(Dataset):
         self.norm_values: dict[str, np.ndarray] = {}
 
         def load_data() -> None:
-            """Open the zarr data, restrict it to ``time_range`` and load masks and normalization."""
+            """Open the zarr data, restrict it to `time_range` and load masks and normalization."""
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
             except Exception:
@@ -294,7 +315,7 @@ class ERA5Distributed(Dataset):
         idx : int
             Index of the first timestep.
         steps : int
-            Number of timesteps to load, ``dt`` hours apart.
+            Number of timesteps to load, `dt` hours apart.
 
         Returns
         -------
@@ -339,7 +360,7 @@ class ERA5Distributed(Dataset):
         -------
         torch.Tensor
             The padded sample on odd ranks of a distributed dataset, otherwise
-            ``sample`` unchanged.
+            `sample` unchanged.
         """
         if self.world_size > 1:
             # Odd ranks hold the second half of the channels
@@ -483,7 +504,7 @@ class ERA5Distributed(Dataset):
     def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
         """Build a model input from a list of timesteps.
 
-        The last ``in_timesteps`` entries are concatenated along the channel
+        The last `in_timesteps` entries are concatenated along the channel
         dimension, followed by the constant masks, and padded as in
         :meth:`__getitem__`.
 
@@ -536,10 +557,20 @@ class ERA5Dummy(Dataset):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to ``transform``.
+        Transformation applied to the target. Defaults to `transform`.
 
     Attributes
     ----------
+    in_timesteps : int
+        Number of input timesteps, `n_in_timesteps`.
+    out_timesteps : int
+        Number of output timesteps, `n_out_timesteps`.
+    world_size : int
+        Size of the ``DTP`` process group, `pg_size`.
+    local_rank : int
+        Rank in the ``DTP`` process group, `pg_rank`.
+    years : Tuple[str, str] or None
+        Time range, `time_range`. If None, the year 2000 is used.
     n_data_items : int
         Number of hourly timesteps in the time range.
     num_vars, xlat, xlon : int
@@ -739,7 +770,7 @@ class EWBEra5(ERA5Distributed):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to ``transform``.
+        Transformation applied to the target. Defaults to `transform`.
 
     Attributes
     ----------
@@ -802,7 +833,7 @@ class EWBEra5(ERA5Distributed):
         """Return the input timestamps of one forecast, oldest first.
 
         The forecast is initialized at ``start_date - lead_time``. That is the
-        last input, preceded by ``in_timesteps - 1`` earlier inputs spaced ``dt``
+        last input, preceded by ``in_timesteps - 1`` earlier inputs spaced `dt`
         hours apart.
 
         Parameters
@@ -816,7 +847,7 @@ class EWBEra5(ERA5Distributed):
         Returns
         -------
         list[datetime]
-            The ``in_timesteps`` input timestamps, in ascending order.
+            The `in_timesteps` input timestamps, in ascending order.
         """
         first_date = start_date - timedelta(
             hours=(lead_time + self.dt * (self.in_timesteps - 1))
@@ -881,7 +912,7 @@ class EWBEra5(ERA5Distributed):
             Model output of shape ``(batch, channel shard * out_timesteps, xlat, longitude shard)``.
         feature_weights : torch.Tensor
             Loss weights, see :meth:`ERA5Distributed.get_feature_weights`.
-            Output where they are 0 is replaced by ``fill``.
+            Output where they are 0 is replaced by `fill`.
         fill : float
             Value for the masked output.
 

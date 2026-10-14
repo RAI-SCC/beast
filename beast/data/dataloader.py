@@ -21,6 +21,11 @@ from beast.data.sampler import ResumableDistributedSampler
 from beast.utils import set_dtype
 
 DSYNC_INIT = os.getenv("BEAST_DL_DSYNC_INIT", "False") in ["True", "1"]
+"""Whether the ranks open the dataset in waves, to spread out file system access.
+
+Set with the environment variable ``BEAST_DL_DSYNC_INIT`` (``1`` or ``True``); off
+by default. Recommended beyond 512 nodes.
+"""
 
 
 class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):  # numpydoc ignore=PR02
@@ -38,7 +43,7 @@ class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):  # numpydoc ignore=PR
         Returns
         -------
         tuple
-            The items of the batch, followed by the ``time.perf_counter_ns``
+            The items of the batch, followed by the `time.perf_counter_ns`
             timestamps taken before and after the fetch.
         """
         start = time.perf_counter_ns()
@@ -53,7 +58,7 @@ class BeastDataLoader(DataLoader):
     """Data loader that also reports how long each batch took to fetch.
 
     It takes the same arguments as :class:`torch.utils.data.DataLoader`. Each
-    batch is followed by the ``time.perf_counter_ns`` timestamps taken before
+    batch is followed by the `time.perf_counter_ns` timestamps taken before
     and after fetching it.
 
     See Also
@@ -109,7 +114,7 @@ def get_dataloader(
     transform : Callable, optional
         Transformation applied to the input data.
     target_transform : Callable, optional
-        Transformation applied to the target data. Defaults to ``transform``.
+        Transformation applied to the target data. Defaults to `transform`.
     **kwargs
         Passed on to the dataset.
 

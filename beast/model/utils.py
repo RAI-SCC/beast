@@ -32,10 +32,10 @@ def convert_jigsaw_vi(
 
     Linear and convolution layers become torch_blue variational layers.
     Normalization layers and Transformer Engine attention keep deterministic
-    weights. The variational parameters are replicated over ``spatial_pg``:
+    weights. The variational parameters are replicated over `spatial_pg`:
     they are broadcast from its first rank and their gradients are synchronized.
-    The fan-in of the channel-sharded layers (``AVIDistributedXWT`` and
-    ``AVIConvTranspose2d``) is scaled by the size of ``channel_pg``, so that
+    The fan-in of the channel-sharded layers (`AVIDistributedXWT` and
+    `AVIConvTranspose2d`) is scaled by the size of `channel_pg`, so that
     they are initialized like the full layer.
 
     The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
@@ -97,7 +97,7 @@ def convert_jigsaw_vi(
         Returns
         -------
         int
-            The fan-in of the local shard times the size of ``channel_pg``.
+            The fan-in of the local shard times the size of `channel_pg`.
         """
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
@@ -129,7 +129,7 @@ def count_model_parameters(
     ----------
     model : torch.nn.Module
         Model to count. With ``parallelism > 1`` only submodules that provide
-        ``get_parameter_count()`` contribute.
+        `get_parameter_count` contribute.
     parallelism : int
         The degree of parallelism.
     bayesian : bool

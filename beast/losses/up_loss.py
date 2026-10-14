@@ -17,7 +17,7 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     """KL loss with Gaussian predictive, variational and prior distributions.
 
     The predictive mean and standard deviation are estimated from the samples of
-    all ranks in ``up_group``, and the prior matching term is computed while
+    all ranks in `up_group`, and the prior matching term is computed while
     those statistics are being communicated.
 
     Parameters
@@ -41,9 +41,22 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     track : bool, default: False
         Whether to track the loss components.
     use_fmod : bool, default: False
-        Whether to apply ``fmod`` to the predictive log probabilities before
+        Whether to apply `torch.fmod` to the predictive log probabilities before
         summing, which avoids float precision loss and does not affect
         gradients.
+
+    Attributes
+    ----------
+    sync_group_size : int
+        Size of `sync_group`, or 1 if it is None.
+    feature_weights : Tensor or None
+        `feature_weights`, reshaped to ``(1, 1, variables, lat, lon)`` so that
+        they broadcast over the samples and the batch. Per-variable weights
+        have ``lat`` and ``lon`` of size 1.
+    aggregate_statistics : Callable
+        :meth:`MeanStdPriorMatchingAggregation.apply`, which computes the
+        predictive mean and standard deviation over `up_group` and the prior
+        matching term.
     """
 
     def __init__(
@@ -255,10 +268,10 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         Returns
         -------
         mean : Tensor
-            Mean over the samples of all ranks in ``up_process_group``.
+            Mean over the samples of all ranks in `up_process_group`.
         std : Tensor
             Standard deviation over the samples of all ranks in
-            ``up_process_group``.
+            `up_process_group`.
         prior_matching : Tensor
             The prior matching loss.
         variance_ratio : Tensor
@@ -380,8 +393,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Gradient with respect to the variance ratio. Ignored, since the
             variance ratio is not differentiable.
         grad_mse_half : None
-            Gradient with respect to ``mse_part_half``. Ignored, since
-            ``mse_part_half`` is not differentiable.
+            Gradient with respect to `mse_part_half`. Ignored, since
+            `mse_part_half` is not differentiable.
 
         Returns
         -------

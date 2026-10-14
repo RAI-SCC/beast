@@ -17,7 +17,7 @@ def crps(
 ) -> Tensor:
     """Compute the continuous ranked probability score (CRPS) of an ensemble.
 
-    If ``up_group`` has more than one rank, the ensemble is spread over its
+    If `up_group` has more than one rank, the ensemble is spread over its
     ranks, and the pairwise sample differences are computed by passing the
     samples around the ranks in a ring.
 
@@ -32,9 +32,9 @@ def crps(
         size 1, only the local
         ensemble is used.
     sample_dim : int, default: 0
-        Dimension of ``prediction`` holding the ensemble samples.
+        Dimension of `prediction` holding the ensemble samples.
     batch_dim : int, default: 1
-        Dimension of ``prediction`` holding the batch, averaged over.
+        Dimension of `prediction` holding the batch, averaged over.
 
     Returns
     -------
@@ -123,9 +123,9 @@ def _calculate_crps_locally(
     target : Tensor
         True values, without a sample dimension.
     sample_dim : int, default: 0
-        Dimension of ``prediction`` holding the ensemble samples.
+        Dimension of `prediction` holding the ensemble samples.
     batch_dim : int, default: 1
-        Dimension of ``prediction`` holding the batch, averaged over.
+        Dimension of `prediction` holding the batch, averaged over.
 
     Returns
     -------
