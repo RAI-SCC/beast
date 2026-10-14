@@ -1,5 +1,6 @@
 """The BEAST (Bayesian Exascale Atmospheric Swin Transformer) model."""
 
+import warnings
 from typing import Any, Sequence
 
 import torch
