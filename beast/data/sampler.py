@@ -59,9 +59,9 @@ class ResumableDistributedSampler(DistributedSampler):
         Returns
         -------
         Iterator[int]
-            The indices of this rank's shard after skipping the first
-            ``resume_idx``. Unless ``drop_last`` is set, they are repeated
-            until there are as many as in a full epoch.
+            The ``num_samples`` indices of this rank's shard for a full epoch,
+            without the first ``resume_idx``. Unless ``drop_last`` is set, the
+            shard is filled up to ``num_samples`` by repeating its indices.
         """
         if self.shuffle:
             g = torch.Generator()
@@ -73,15 +73,13 @@ class ResumableDistributedSampler(DistributedSampler):
         # Apply rank sharding (DistributedSampler's logic)
         indices = indices[self.rank :: self.num_replicas]
 
-        # Skip to resume point
-        indices = indices[self.resume_idx :]
-
         if not self.drop_last:
             while len(indices) < self.num_samples:
                 indices += indices
-            indices = indices[: self.num_samples]
+        indices = indices[: self.num_samples]
 
-        return iter(indices)
+        # Skip to resume point
+        return iter(indices[self.resume_idx :])
 
     def __len__(self) -> int:
         """Return the number of indices left after skipping ``resume_idx``.
