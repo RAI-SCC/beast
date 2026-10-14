@@ -18,7 +18,7 @@ SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
 
 class ERA5Distributed(Dataset):
     """Genaralized ERA5 dataset for native and domain-parallel data.
-     
+
     Returns  ``(input, target)`` pairs read from a zarr directory.
     Inputs and targets stack one or more timesteps along the channel dimension,
     and inputs are followed by the constant masks. Values are normalized with
@@ -542,6 +542,7 @@ class ERA5Distributed(Dataset):
 
         return target_list
 
+
 class ERA5Dummy(ERA5Distributed):
     """Dataset of random or constant ``(input, target)`` pairs of a given shape.
 
@@ -866,5 +867,3 @@ class EWBEra5(ERA5Distributed):
             samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
 
         return event, lead_time, samples
-
-

@@ -98,7 +98,7 @@ class TestDataLoader:
         assert len(dummy_loader) == int(n_time - config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
         )
-    
+
     def test_dataloader_noEra5(
         self,
     ) -> None:
@@ -123,7 +123,6 @@ class TestDataLoader:
                 dp_size,
                 mode="train",
             )
-
 
     @pytest.mark.parametrize(
         "n_time, n_features, n_lat, n_lon, n_masks",

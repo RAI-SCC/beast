@@ -2,7 +2,6 @@
 
 import os
 import time
-import warnings
 from typing import Any, Callable
 
 import torch
@@ -85,16 +84,16 @@ def get_dataloader(
 ) -> BeastDataLoader:
     """Create a :class:`BeastDataLoader` from a configuration dictionary.
 
-<<<<<<< HEAD
+    <<<<<<< HEAD
     If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
     If no valid path is given (i.e. if the path doesn't exist), it will throw an error.
-=======
+    =======
     If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
     from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
     dataset of random numbers is used for the configured time range. In
     ``"train"`` and ``"validation"`` mode the dataset is cut to the first
     ``train_subset`` or ``valid_subset`` samples if that value is positive.
->>>>>>> main
+    >>>>>>> main
 
     Parameters
     ----------
@@ -156,9 +155,7 @@ def get_dataloader(
         )
     else:
         if dist.get_rank(group=None) == 0:
-            raise FileNotFoundError(
-                f"`{data_path}` not found. "
-            )
+            raise FileNotFoundError(f"`{data_path}` not found. ")
     # if train_subset <=0, the entire dataset will be used for training
     if (
         mode == "train"
@@ -242,7 +239,6 @@ def get_dummy_dataloader(
     dataloader : GBDataLoader
         The dataloader instance
     """
-
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
     elif mode == "validation":
@@ -255,12 +251,12 @@ def get_dummy_dataloader(
 
     dataset: torch.utils.data.Dataset
 
-    #Hardcode shapes to original ERA5 data sizes
+    # Hardcode shapes to original ERA5 data sizes
     if "xlat" in config_dict["data"]:
         xlat = config_dict["data"]["xlat"]
     else:
         xlat = 721
-    
+
     if "xlon" in config_dict["data"]:
         xlon = config_dict["data"]["xlon"]
     else:
@@ -276,11 +272,7 @@ def get_dummy_dataloader(
     else:
         dt = 6
 
-    shape = (
-        n_variables,
-        xlat,
-        xlon
-    )
+    shape = (n_variables, xlat, xlon)
 
     dataset = ERA5Dummy(
         pg_rank=dtp_rank,
