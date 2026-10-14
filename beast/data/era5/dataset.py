@@ -352,7 +352,7 @@ class ERA5Distributed(Dataset):
             The target sample of shape [channel shard * number of output timesteps, xlat, longitudinal shard].
         """
         input_list = self._get_sample_list(idx, steps=self.in_timesteps)
-        input_list.append(self.get_constant_masks().to(self.dtype))
+        input_list.append(self._get_constant_masks().to(self.dtype))
         input = torch.cat(input_list, dim=0)
         input = self._padsample(input, self.input_pad_oddrank)
 
@@ -374,7 +374,7 @@ class ERA5Distributed(Dataset):
 
         return input, target
 
-    def get_constant_masks(self) -> torch.Tensor:
+    def _get_constant_masks(self) -> torch.Tensor:
         """
         Return the rank local shard of the constant masks.
 
@@ -410,13 +410,13 @@ class ERA5Distributed(Dataset):
         if channel_rank == 0:
             for i in range(self.out_timesteps):
                 feature_weights[i * (self.in_var[1] - self.in_var[0]) + sst_idx] = (
-                    1 - self.get_land_sea_mask(folder_path=self.mask_path)
+                    1 - self._get_land_sea_mask(folder_path=self.mask_path)
                 )
 
         # modify the correct index
         return feature_weights
 
-    def get_land_sea_mask(
+    def _get_land_sea_mask(
         self, folder_path: str, sst_mask_name: str = "sst_mask.npy"
     ) -> torch.Tensor:
         """Return the local shard of the sst mask."""
@@ -466,11 +466,44 @@ class ERA5Distributed(Dataset):
         """
         input_samples = sample_list[-self.in_timesteps :]
         batch_dim = input_samples[0].shape[0]
-        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        cmasks = self._get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
         input_samples.append(cmasks.to(self.dtype))
         input = torch.cat(input_samples, dim=-3)
         return self._padsample(input, self.input_pad_oddrank)
 
+    def list_from_output(
+        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
+    ) -> list[torch.Tensor]:
+        """
+        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
+
+        The resulting target_list will reside on CPU, because GPU memory is more constraint.
+
+        Parameters
+        ----------
+        output: torch.Tensor
+            Model output.
+        feature_weights: torch.Tensor
+            Outputs need to get masked. This tells us which values.
+        fill: float
+            What to put on the masked values.
+
+        Returns
+        -------
+        outputs: list[torch.Tensors]
+            List of output timesteps.
+        """
+        # Output shape: LSN, LBS, C, lat, lon
+
+        target_list = []
+        n_vars = self.in_var[1] - self.in_var[0]
+        output = torch.where(feature_weights == 0, fill, output)
+        for i in range(self.out_timesteps):
+            target_list.append(
+                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
+            )
+
+        return target_list
 
 class ERA5Dummy(ERA5Distributed):
     """
@@ -537,13 +570,6 @@ class ERA5Dummy(ERA5Distributed):
             self.target_transform = transform
         else:
             self.target_transform = target_transform
-
-    def __len__(self) -> int:
-        """Return total number of samples."""
-        return int(
-            self.n_data_items
-            - (self.in_timesteps + self.rollout * self.out_timesteps - 1) * self.dt
-        )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
         shape = (
@@ -626,7 +652,7 @@ class EWBEra5(ERA5Distributed):
         """Lenght of the dataset. Number of events times the different lead times to be evaluated."""
         return len(self.event_lead_list)
 
-    def input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
+    def _input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
         """
         Return the input timestamps of one forecast, oldest first.
 
@@ -661,7 +687,7 @@ class EWBEra5(ERA5Distributed):
         event, lead_time = self.event_lead_list[idx]
 
         samples = []
-        for date in self.input_dates(event.start_date, lead_time):
+        for date in self._input_dates(event.start_date, lead_time):
             sample = (
                 self.zarr_data.sel(time=date)
                 .isel(
@@ -685,34 +711,4 @@ class EWBEra5(ERA5Distributed):
 
         return event, lead_time, samples
 
-    def list_from_output(
-        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
-    ) -> list[torch.Tensor]:
-        """
-        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
 
-        Parameters
-        ----------
-        output: torch.Tensor
-            Model output.
-        feature_weights: torch.Tensor
-            Outputs need to get masked. This tells us which values.
-        fill: float
-            What to put on the masked values.
-
-        Returns
-        -------
-        outputs: list[torch.Tensors]
-            List of output timesteps.
-        """
-        # Output shape: LSN, LBS, C, lat, lon
-
-        target_list = []
-        n_vars = self.in_var[1] - self.in_var[0]
-        output = torch.where(feature_weights == 0, fill, output)
-        for i in range(self.out_timesteps):
-            target_list.append(
-                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
-            )
-
-        return target_list
