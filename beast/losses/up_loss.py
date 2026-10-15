@@ -29,10 +29,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     up_group : dist.ProcessGroup, optional
         Process group the ensemble samples are spread over, usually the ``SP``
         process group. Defaults to all ranks.
-    sync_group : dist.ProcessGroup, optional
-        Process group the gradients of the variational parameters are summed
-        over, usually the ``JSpatial`` process group. The prior matching
-        gradient is divided by its size, so that the sum counts it once.
     feature_weights : Tensor, optional
         Weights applied to the model output and target, per variable or per
         grid point.
@@ -243,7 +239,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Log standard deviations of the variational distributions.
         feature_weights : Tensor, optional
             Weights applied to the samples before aggregation.
-        
+
         Returns
         -------
         mean : Tensor
@@ -353,7 +349,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_pm: Tensor,
         grad_vr: None,
         grad_mse_half: None,
-    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None, None]:
+    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None]:
         """Compute the gradients with respect to the samples and variational parameters.
 
         Parameters

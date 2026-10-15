@@ -19,6 +19,18 @@ def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | 
     fitting gradient is summed over their replica groups. The prior matching
     term reads the raw parameters (``get_variational_parameters``, from the
     loss) and keeps its full, replicated gradient, which DDP then averages.
+
+    Parameters
+    ----------
+    self : vi.VIModule
+        The module the sample is drawn for.
+    variable : str
+        Name of the variable to sample.
+
+    Returns
+    -------
+    torch.Tensor or None
+        The sample, or ``None`` if the variable has no variational distribution.
     """
     if self.variational_distribution[variable] is None:
         return None
@@ -26,7 +38,9 @@ def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | 
     variational_parameters = parallel.sync_grad(
         *self.get_variational_parameters(variable)
     )
-    sample = self.variational_distribution[variable].sample(*variational_parameters)
+    sample: torch.Tensor = self.variational_distribution[variable].sample(
+        tuple(variational_parameters)
+    )
 
     if self.return_log_probs:
         log_probs = self.get_log_probs(sample, variable)
@@ -46,6 +60,18 @@ def _fast_forward_synced(self: vi.VIModule, input_: torch.Tensor) -> torch.Tenso
     call. Inside that call they carry no mark, so the re-entered fast path finds
     nothing left to sync. Must not be used on the outermost module, whose
     forward samples.
+
+    Parameters
+    ----------
+    self : vi.VIModule
+        The module to run.
+    input_ : torch.Tensor
+        Input to the module.
+
+    Returns
+    -------
+    torch.Tensor
+        Output of the module's fast path.
     """
     synced = parallel.synced_parameters(self)
     if not synced:
@@ -113,7 +139,10 @@ def convert_jigsaw_vi(
     # The conversion replaces each parameter with fresh variational parameters,
     # which do not contain the replica marks.
     marks = {
-        m: {name: parallel.replica_groups(p) for name, p in m.named_parameters(recurse=False)}
+        m: {
+            name: parallel.replica_groups(p)
+            for name, p in m.named_parameters(recurse=False)
+        }
         for m in module.modules()
     }
 
@@ -169,7 +198,6 @@ def convert_jigsaw_vi(
             m.sample_variable = types.MethodType(_sample_variable_synced, m)  # type: ignore[method-assign]
             if hasattr(type(m), "_fast_forward"):
                 m._fast_forward = types.MethodType(_fast_forward_synced, m)  # type: ignore[assignment]
-
 
     if spatial_pg is not None and spatial_pg.size() > 1:
         spatial_ranks = dist.get_process_group_ranks(spatial_pg)

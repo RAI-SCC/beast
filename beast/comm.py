@@ -311,7 +311,7 @@ def wrap_ddp(
     # duration of the constructor and then restored.
     previous_first_bucket_bytes = dist._DEFAULT_FIRST_BUCKET_BYTES  # type: ignore[attr-defined]
     dist._DEFAULT_FIRST_BUCKET_BYTES = reduction_size_mb * 1048576  # type: ignore[attr-defined]
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         device_ids=[device_id] if device_id is not None else None,
         output_device=device_id,
         gradient_as_bucket_view=True,

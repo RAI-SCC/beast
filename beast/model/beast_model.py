@@ -6,7 +6,10 @@ from typing import Any, Sequence
 import torch
 import torch.distributed as dist
 from jigsaw import linear, parallel, roll  # type: ignore
-from jigsaw.modules.convolution import DistributedConv2d, DistributedConvTranspose2d
+from jigsaw.modules.convolution import (  # type: ignore[import-not-found]
+    DistributedConv2d,
+    DistributedConvTranspose2d,
+)
 
 from beast.layers import transformer
 

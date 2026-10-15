@@ -7,7 +7,9 @@ import warnings
 import torch
 import torch.distributed as dist
 from jigsaw import attention, parallel  # type: ignore
-from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
+from jigsaw.modules.attention.attention import (  # type: ignore[import-not-found]
+    JIGSAW_TE_AVAILABLE,
+)
 
 from beast.layers import mlp, nice_norm
 
@@ -399,7 +401,6 @@ class DistributedNICETransformer(torch.nn.Module):
             channel_group=channel_group,
             bayesian=bayesian,
         ).to(device)
-
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Apply attention and the MLP, each with a residual connection.

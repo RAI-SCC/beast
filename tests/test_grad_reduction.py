@@ -40,6 +40,7 @@ from typing import cast
 import pytest
 import torch
 import torch.distributed as dist
+import torch_blue.vi as vi
 from jigsaw import parallel  # type: ignore[import-not-found]
 from torch import Tensor
 
@@ -378,7 +379,7 @@ class _Container(torch.nn.Module):
 def _bayesian_container(
     device: torch.device,
     spatial_group: dist.ProcessGroup,
-) -> torch.nn.Module:
+) -> vi.VIModule:
     """A converted model whose linear layer is replicated over JSpatial.
 
     The spatial mark is set before the conversion, as beast's layers do, so it
@@ -388,7 +389,7 @@ def _bayesian_container(
     for p in model.linear.parameters():
         parallel.mark_replicated(p, spatial_group)
     convert_jigsaw_vi(model, _solo_group(), spatial_group)
-    return model
+    return cast(vi.VIModule, model)
 
 
 @pytest.mark.dist(4)
@@ -418,7 +419,9 @@ def test_sampled_forward_sums_data_fit_only(
     replicas = [g for g in (spatial_group,) if g.size() > 1]
 
     model = _bayesian_container(device, spatial_group)
-    assert parallel.replica_groups(model.linear._weight_mean) == tuple(replicas)
+    assert parallel.replica_groups(
+        cast(vi.VIModule, model.linear)._weight_mean
+    ) == tuple(replicas)
 
     forward: Callable[..., Tensor] = model
     if mode != "no_ddp":
@@ -440,7 +443,7 @@ def test_sampled_forward_sums_data_fit_only(
     )
     for m in (model, reference):
         m.return_log_probs = not fast_path
-        assert m.linear._return_log_probs is not fast_path
+        assert cast(vi.VIModule, m.linear)._return_log_probs is not fast_path
 
     # Different data on every rank: each holds a different share of the work.
     generator = torch.Generator().manual_seed(100 + dist.get_rank())
