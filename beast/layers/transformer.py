@@ -13,15 +13,14 @@ from jigsaw.modules.attention.attention import (  # type: ignore[import-not-foun
 
 from beast.layers import mlp, nice_norm
 
-USE_TE_DPA = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
-if USE_TE_DPA and not JIGSAW_TE_AVAILABLE:
-    if os.getenv("RANK", "0") == "0":
-        warnings.warn(
-            "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
-            "Falling back to torch SDPA.",
-            UserWarning,
-        )
-    USE_TE_DPA = False
+_TE_DPA_REQUESTED = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
+if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE and os.getenv("RANK", "0") == "0":
+    warnings.warn(
+        "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
+        "Falling back to torch SDPA.",
+        UserWarning,
+    )
+USE_TE_DPA = _TE_DPA_REQUESTED and JIGSAW_TE_AVAILABLE
 
 
 class TransformerBlock(torch.nn.Module):
