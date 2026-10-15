@@ -32,12 +32,13 @@ class ResumableDistributedSampler(DistributedSampler):
         Whether to drop the tail of the data so that every rank gets the same
         number of indices. If False, indices are repeated instead.
     resume_idx : int, default: 0
-        Number of leading indices of this rank's shard to skip.
+        Number of leading indices of this rank's shard to skip in the first pass.
 
     Attributes
     ----------
     resume_idx : int
-        Number of leading indices of this rank's shard to skip.
+        Number of leading indices of this rank's shard to skip in the next pass.
+        Reset to 0 when a pass returns its last index.
     """
 
     def __init__(
@@ -56,12 +57,15 @@ class ResumableDistributedSampler(DistributedSampler):
     def __iter__(self) -> Iterator[int]:
         """Iterate over this rank's indices for the current epoch.
 
-        Returns
-        -------
-        Iterator[int]
-            The indices of this rank's shard after skipping the first
-            ``resume_idx``. Unless ``drop_last`` is set, they are repeated
-            until there are as many as in a full epoch.
+        ``resume_idx`` is reset to 0 when the last index is returned, so that
+        only this pass resumes.
+
+        Yields
+        ------
+        int
+            The ``num_samples`` indices of this rank's shard for a full epoch,
+            without the first ``resume_idx``. Unless ``drop_last`` is set, the
+            shard is filled up to ``num_samples`` by repeating its indices.
         """
         if self.shuffle:
             g = torch.Generator()
@@ -73,22 +77,24 @@ class ResumableDistributedSampler(DistributedSampler):
         # Apply rank sharding (DistributedSampler's logic)
         indices = indices[self.rank :: self.num_replicas]
 
-        # Skip to resume point
-        indices = indices[self.resume_idx :]
-
         if not self.drop_last:
             while len(indices) < self.num_samples:
                 indices += indices
-            indices = indices[: self.num_samples]
+        indices = indices[: self.num_samples]
 
-        return iter(indices)
+        # Skip to resume point.
+        indices = indices[self.resume_idx :]
+        yield from indices[:-1]
+        self.resume_idx = 0
+        yield from indices[-1:]
 
     def __len__(self) -> int:
-        """Return the number of indices left after skipping ``resume_idx``.
+        """Return the number of indices that a pass over the sampler yields.
 
         Returns
         -------
         int
-            The number of remaining indices of this rank.
+            The number of indices of this rank for a full epoch, without the
+            first ``resume_idx``.
         """
         return max(0, self.num_samples - self.resume_idx)

@@ -167,7 +167,7 @@ def load_state_dict(
     model_state_dict: dict,
     optimizer_state_dict: dict,
     last_epoch: int,
-) -> torch.nn.Module | Tuple[torch.nn.Module, torch.optim.Optimizer | None, int]:
+) -> Tuple[torch.nn.Module, torch.optim.Optimizer | None, int]:
     """Load model and optimizer state, adapting to DDP-wrapped models.
 
     A ``module.`` key prefix is added or stripped as needed to match ``model``.

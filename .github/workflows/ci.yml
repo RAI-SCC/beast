@@ -28,6 +28,17 @@ jobs:
       - name: numpydoc
         run: uvx --from numpydoc==1.11.0 numpydoc lint $(git ls-files 'beast/*.py')
 
+  citation:
+    name: Citation metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Validate CITATION.cff
+        run: uvx cffconvert --validate
+
   typecheck:
     name: Type check
     runs-on: ubuntu-latest
