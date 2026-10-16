@@ -53,6 +53,8 @@ def get_spatial_weights(
     """
     Calculate spatial weights based on latitude for loss weighting.
 
+    This assumes even spacing along the latitude dimension, starting from 90°N, and crops latitude values from starting from the south.
+
     Parameters
     ----------
     n_lat: int

@@ -333,6 +333,8 @@ def latitude_weighted_average(
     """
     Compute the latitude-weighted average of the input data.
 
+    This makes the same assumptions as beast.utils.get_spatial_weights with a fixed cropping of one.
+
     Parameters
     ----------
     data: torch.Tensor
