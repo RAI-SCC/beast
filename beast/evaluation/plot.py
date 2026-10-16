@@ -1,4 +1,4 @@
-"""Plotting functionality."""
+"""Plots for evaluating predictions."""
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -11,35 +11,36 @@ def pred_target_bias_plot(
     target: Tensor,
     label: str,
 ) -> Figure:
-    """
-    Core plotting function.
+    """Plot a prediction, its target and the bias ``target - prediction``.
 
-    Plot prediction, target, and bias.
+    Prediction and target share a color scale; the bias uses a symmetric one.
 
     Parameters
     ----------
-    prediction: Tensor
-        Prediction to plot.
-    target: Tensor
-        Target to plot.
-    label: str
-        Plot label.
+    prediction : Tensor
+        2-D prediction to plot.
+    target : Tensor
+        2-D target, of the shape of ``prediction``.
+    label : str
+        Appended to the title of each panel.
 
     Returns
     -------
     Figure
-        A plot as Figure object.
+        Figure with the three panels side by side.
     """
-    prediction = prediction.cpu().numpy()
-    target = target.cpu().numpy()
+    # Bind to new names rather than rebinding the Tensor parameters: matplotlib
+    # needs arrays, but the signature promises Tensors.
+    prediction_np = prediction.cpu().numpy()
+    target_np = target.cpu().numpy()
 
     # bias calculation
-    bias_map = target - prediction
+    bias_map = target_np - prediction_np
 
     # shared scale for prediction and target
     state_lim = (
-        min(prediction.min(), target.min()),
-        max(prediction.max(), target.max()),
+        min(prediction_np.min(), target_np.min()),
+        max(prediction_np.max(), target_np.max()),
     )
 
     # symmetrical scale for bias
@@ -50,7 +51,7 @@ def pred_target_bias_plot(
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
     data_name = ("Prediction", "Target", "Bias")
-    data_list = (prediction, target, bias_map)
+    data_list = (prediction_np, target_np, bias_map)
     colormaps = ("viridis", "viridis", "RdBu_r")
     limits_list = (state_lim, state_lim, bias_lim)
 

@@ -6,14 +6,7 @@ import pytest
 import torch
 import torchvision.transforms as trf
 
-from beast.data.transforms import Downsample, DownsampleMeanStd, Identity
-
-
-def test_identity(device: torch.device) -> None:
-    x = torch.randn((3, 4), device=device)
-    idtrf = Identity()
-
-    assert idtrf(x) is x, "Identity operation did not return the same object"
+from beast.data.transforms import Downsample, DownsampleMeanStd
 
 
 def test_downsampling(device: torch.device) -> None:

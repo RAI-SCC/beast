@@ -1,4 +1,4 @@
-"""Functions to calculate simple metrics."""
+"""Elementwise error metrics."""
 
 import torch
 from torch.nn.functional import l1_loss, mse_loss
@@ -7,23 +7,21 @@ from torch.nn.functional import l1_loss, mse_loss
 def mse(
     prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
 ) -> torch.Tensor:
-    """
-    Calculate mean squared error.
+    """Compute the mean squared error over the batch dimension.
 
     Parameters
     ----------
-    prediction: Tensor
-        The model prediction.
-    target: Tensor
-        The reference result.
-    batch_dimension: int, default: 0
-        Batch dimension to reduce over.
+    prediction : Tensor
+        Model prediction.
+    target : Tensor
+        Reference values, of the shape of ``prediction``.
+    batch_dimension : int, default: 0
+        Dimension to average over.
 
     Returns
     -------
     Tensor
-        The squared error averaged over the specified batch dimension.
-
+        Squared error averaged over ``batch_dimension``.
     """
     return mse_loss(prediction, target, reduction="none").mean(dim=batch_dimension)
 
@@ -31,21 +29,20 @@ def mse(
 def mae(
     prediction: torch.Tensor, target: torch.Tensor, batch_dimension: int = 0
 ) -> torch.Tensor:
-    """
-    Calculate mean absolute error.
+    """Compute the mean absolute error over the batch dimension.
 
     Parameters
     ----------
-    prediction: Tensor
-        The model prediction.
-    target: Tensor
-        The reference result.
-    batch_dimension: int, default: 0
-        Batch dimension to reduce over.
+    prediction : Tensor
+        Model prediction.
+    target : Tensor
+        Reference values, of the shape of ``prediction``.
+    batch_dimension : int, default: 0
+        Dimension to average over.
 
     Returns
     -------
     Tensor
-        The absolute error averaged over the specified batch dimension.
+        Absolute error averaged over ``batch_dimension``.
     """
     return l1_loss(prediction, target, reduction="none").mean(dim=batch_dimension)

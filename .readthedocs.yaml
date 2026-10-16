@@ -1,0 +1,17 @@
+# Read the Docs configuration, see https://docs.readthedocs.io/en/stable/config-file/v2.html
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+
+sphinx:
+  configuration: docs/conf.py
+  fail_on_warning: true
+
+# The API reference is generated without importing beast, so only the
+# documentation tools are installed, not the package and its GPU dependencies.
+python:
+  install:
+    - requirements: docs/requirements.txt

@@ -8,11 +8,37 @@ from torch.utils.data.distributed import DistributedSampler
 
 
 class ResumableDistributedSampler(DistributedSampler):
-    """
-    Custom sampler that allows for restart part-way through epochs.
+    """Distributed sampler that can resume part-way through an epoch.
 
-    The distributed sampler pre-generates the sequences of indices associated with an epoch.
-    It can restart halfway through an epoch by slicing the indices when necessary.
+    The index order of an epoch depends only on ``seed`` and the epoch, so a
+    resumed run skips the first ``resume_idx`` indices of this rank's shard and
+    continues where it stopped.
+
+    Parameters
+    ----------
+    dataset : Dataset
+        Dataset to sample from.
+    num_replicas : int, optional
+        Number of ranks to split the data over, usually the size of the ``DP``
+        process group. Defaults to the world size.
+    rank : int, optional
+        Rank of this process among the ``num_replicas`` ranks. Defaults to the
+        global rank.
+    shuffle : bool, default: True
+        Whether to shuffle the indices every epoch.
+    seed : int, default: 0
+        Shuffling seed. Must be identical on all ranks.
+    drop_last : bool, default: False
+        Whether to drop the tail of the data so that every rank gets the same
+        number of indices. If False, indices are repeated instead.
+    resume_idx : int, default: 0
+        Number of leading indices of this rank's shard to skip in the first pass.
+
+    Attributes
+    ----------
+    resume_idx : int
+        Number of leading indices of this rank's shard to skip in the next pass.
+        Reset to 0 when a pass returns its last index.
     """
 
     def __init__(
@@ -25,36 +51,22 @@ class ResumableDistributedSampler(DistributedSampler):
         drop_last: bool = False,
         resume_idx: int = 0,
     ) -> None:
-        """
-        Initialize ResumableDistributedSampler.
-
-        Inputs
-        ------
-        dataset: Dataset
-            Dataset that we are sampling from
-        num_replicas: Optional[int]
-            Number of processes participating in distributed training per shard.
-            i.e., size of dp group.
-        rank: Optional[int]
-            data-parallel rank.
-        shuffle: bool
-            Boolean flag for shuffling.
-        seed: int
-            Random seed. Should be fixed and same for all ranks in process mesh.
-        drop_last: bool
-            If True, the sampler will drop the tail of the data to make it evenly divisible
-            across the number of replicas.
-            If False, the sampler will add extra indices to make the data evenly divisible
-            across the replicas.
-        resume_idx: int
-            Starting index for the indices. i.e., the global indices wlil be
-            sliced starting from resume_idx:
-        """
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
         self.resume_idx = resume_idx
 
     def __iter__(self) -> Iterator[int]:
-        """Generate permutation of dataset."""
+        """Iterate over this rank's indices for the current epoch.
+
+        ``resume_idx`` is reset to 0 when the last index is returned, so that
+        only this pass resumes.
+
+        Yields
+        ------
+        int
+            The ``num_samples`` indices of this rank's shard for a full epoch,
+            without the first ``resume_idx``. Unless ``drop_last`` is set, the
+            shard is filled up to ``num_samples`` by repeating its indices.
+        """
         if self.shuffle:
             g = torch.Generator()
             g.manual_seed(self.seed + self.epoch)
@@ -65,16 +77,24 @@ class ResumableDistributedSampler(DistributedSampler):
         # Apply rank sharding (DistributedSampler's logic)
         indices = indices[self.rank :: self.num_replicas]
 
-        # Skip to resume point
-        indices = indices[self.resume_idx :]
-
         if not self.drop_last:
             while len(indices) < self.num_samples:
                 indices += indices
-            indices = indices[: self.num_samples]
+        indices = indices[: self.num_samples]
 
-        return iter(indices)
+        # Skip to resume point.
+        indices = indices[self.resume_idx :]
+        yield from indices[:-1]
+        self.resume_idx = 0
+        yield from indices[-1:]
 
     def __len__(self) -> int:
-        """Length of the dataset, adjusted for the resume_idx index."""
+        """Return the number of indices that a pass over the sampler yields.
+
+        Returns
+        -------
+        int
+            The number of indices of this rank for a full epoch, without the
+            first ``resume_idx``.
+        """
         return max(0, self.num_samples - self.resume_idx)

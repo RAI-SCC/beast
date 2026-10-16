@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from beast.model.gb.beast_model import Beast
+from beast.model.beast_model import Beast
 from beast.model.model_configs import CONFIGS
 from beast.model.model_factory import get_model
 

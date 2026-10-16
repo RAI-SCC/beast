@@ -124,10 +124,9 @@ def dist_st(
 
 
 @pytest.fixture()
-def shared_tmp_path(tmp_path_factory) -> pathlib.Path:
+def shared_tmp_path(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
+    tmp_path: pathlib.Path | None = None
     if mpi_rank == 0:
         tmp_path = tmp_path_factory.mktemp("test_data")
-    else:
-        tmp_path = None
-    tmp_path = comm.bcast(tmp_path, root=0)
-    return tmp_path
+    shared_path: pathlib.Path = comm.bcast(tmp_path, root=0)
+    return shared_path

@@ -1,4 +1,4 @@
-"""Submodule containing evaluation functionality, i.e. metrics, plotting, documenting, etc."""
+"""Evaluation metrics, communication helpers and plotting."""
 
 from .comm import gather_along_dimension
 from .derived_metrics import rmse, spread_skill_ratio

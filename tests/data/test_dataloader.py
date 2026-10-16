@@ -3,7 +3,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-import torch
 from pytest import TempPathFactory
 from test_dataset import (
     generate_mock_masks,
@@ -37,7 +36,7 @@ def create_mock_config() -> dict[str, Any]:
         },
         "training": {
             "batch_size": 1,
-            "dtype": torch.float32,
+            "dtype": "float32",
         },
     }
 

@@ -1,6 +1,6 @@
 """Tests for beast.model.model_configs module."""
 
-from beast.model.gb import BEAST_CONFIGURATIONS
+from beast.model.beast_config import BEAST_CONFIGURATIONS
 from beast.model.model_configs import CONFIGS
 
 

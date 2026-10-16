@@ -1,30 +1,32 @@
 """Factory for creating model instances based on configuration."""
 
+from typing import Any
+
 import torch
 
 from beast.model.model_configs import CONFIGS
 
 
-def get_model(model_id: str, **kwargs: dict) -> torch.nn.Module:
-    """
-    Create a model based on a string id and a configuration dictionary. The string id can be used to specify a particular model architecture, while the configuration dictionary can contain hyperparameters and other settings for the model.
+def get_model(model_id: str, **kwargs: Any) -> torch.nn.Module:
+    """Instantiate a registered model configuration.
 
     Parameters
     ----------
     model_id : str
-        A string identifier for the model architecture to create. This should correspond to a key in the CONFIGS dictionary.
-    kwargs : dict
-        A dictionary of keyword arguments to pass to the model constructor. This can include hyperparameters and other settings for the model.
+        Key in ``CONFIGS``, e.g. a named configuration from ``beast_config``.
+    **kwargs
+        Overrides for the registered configuration's constructor arguments.
 
     Returns
     -------
     torch.nn.Module
-        An instance of the specified model architecture, initialized with the provided configuration.
+        The model, built from the registered configuration updated with
+        ``kwargs``.
 
     Raises
     ------
     ValueError
-        If the provided model_id does not correspond to any entry in the CONFIGS dictionary.
+        If ``model_id`` is not in ``CONFIGS``.
     """
     if model_id not in CONFIGS:
         raise ValueError(f"Model ID '{model_id}' not found in CONFIGS.")

@@ -1,1 +1,1 @@
-"""Submodule containing dataIO relevant functions, i.e. datasets, dataloaders, etc."""
+"""Datasets, samplers, transforms and dataloaders."""
