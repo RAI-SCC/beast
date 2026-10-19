@@ -4,7 +4,8 @@ from typing import Callable
 
 import torch
 import torch.distributed as dist
-from jigsaw import linear, parallel  # type: ignore
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import DistributedLinear  # type: ignore[import-not-found]
 
 
 class MLP(torch.nn.Module):
@@ -115,7 +116,7 @@ class DistributedMLPNICE(torch.nn.Module):
     """MLP for the noise input of :class:`~beast.layers.nice_norm.DistributedNICENorm`.
 
     The first layer is sharded over the ``JChannel`` process group and the second
-    is a :class:`jigsaw.linear.DistributedXWT`. The parameters are replicated
+    is a :class:`jigsaw.modules.DistributedLinear`. The parameters are replicated
     over the ``JSpatial`` process group: they are broadcast at construction and
     their gradients are synchronized.
 
@@ -170,7 +171,7 @@ class DistributedMLPNICE(torch.nn.Module):
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
 
-        self.linear2 = linear.DistributedLinear(
+        self.linear2 = DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,
@@ -237,7 +238,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         Device to place parameters on.
     model_group : dist.ProcessGroup
         Model-parallel process group of the linear layers, passed to
-        :class:`jigsaw.linear.DistributedXWT`.
+        :class:`jigsaw.modules.DistributedLinear`.
     spatial_group : dist.ProcessGroup
         The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
@@ -268,7 +269,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.channel_group = channel_group
 
         # pass in global dimensions for linear layers.
-        self.linear1 = linear.DistributedLinear(
+        self.linear1 = DistributedLinear(
             in_dim,
             hidden_dim,
             bias=bias,
@@ -280,7 +281,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             bayesian=bayesian,
         )
 
-        self.linear2 = linear.DistributedLinear(
+        self.linear2 = DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,

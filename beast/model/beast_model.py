@@ -5,10 +5,13 @@ from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import linear, parallel, roll  # type: ignore
-from jigsaw.modules.convolution import (  # type: ignore[import-not-found]
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import (  # type: ignore[import-not-found]
     DistributedConv2d,
     DistributedConvTranspose2d,
+    DistributedLinear,
+    DistributedRoll,
+    Roll,
 )
 
 from beast.layers import transformer
@@ -322,7 +325,7 @@ class Beast(torch.nn.Module):
         )
 
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix: torch.nn.Module = linear.DistributedLinear(
+        self.upsample_mix: torch.nn.Module = DistributedLinear(
             in_dim=self.embed_dim,
             out_dim=self.embed_dim,
             bias=True,
@@ -481,7 +484,7 @@ class Beast(torch.nn.Module):
                 ]
             )
 
-        self.roll_out: torch.nn.Module = roll.DistributedRoll(
+        self.roll_out: torch.nn.Module = DistributedRoll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -490,7 +493,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_out: torch.nn.Module = roll.DistributedRoll(
+        self.unroll_out: torch.nn.Module = DistributedRoll(
             shifts=(
                 -(self.window_size_outer[0] // 2),
                 -(self.window_size_outer[1] // 2),
@@ -501,7 +504,7 @@ class Beast(torch.nn.Module):
             device=self.device,
             dtype=self.dtype,
         )
-        self.roll_in: torch.nn.Module = roll.DistributedRoll(
+        self.roll_in: torch.nn.Module = DistributedRoll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -510,7 +513,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_in: torch.nn.Module = roll.DistributedRoll(
+        self.unroll_in: torch.nn.Module = DistributedRoll(
             shifts=(
                 -(self.window_size_inner[0] // 2),
                 -(self.window_size_inner[1] // 2),
@@ -646,19 +649,19 @@ class Beast(torch.nn.Module):
             ]
         )
 
-        self.roll_out = roll.Roll(
+        self.roll_out = Roll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-        self.unroll_out = roll.Roll(
+        self.unroll_out = Roll(
             shifts=(-self.window_size_outer[0] // 2, -self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-        self.roll_in = roll.Roll(
+        self.roll_in = Roll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
-        self.unroll_in = roll.Roll(
+        self.unroll_in = Roll(
             shifts=(-self.window_size_inner[0] // 2, -self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )

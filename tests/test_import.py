@@ -25,6 +25,6 @@ class TestBeastImport:
 
         assert jigsaw is not None
 
-        from jigsaw import normalization
+        from jigsaw.modules import DistributedLayerNorm
 
-        assert normalization is not None
+        assert DistributedLayerNorm is not None

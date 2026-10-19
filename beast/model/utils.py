@@ -6,7 +6,8 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
-from jigsaw import normalization, parallel  # type: ignore[import-not-found]
+from jigsaw import parallel  # type: ignore[import-not-found]
+from jigsaw.modules import DistributedLayerNorm  # type: ignore[import-not-found]
 from torch._C._functorch import get_unwrapped
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
@@ -131,7 +132,7 @@ def convert_jigsaw_vi(
     return_log_probs : bool, default: True
         Whether the converted module returns log probabilities.
     """
-    vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    vi.utils.convert.ban_convert(DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")

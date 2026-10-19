@@ -6,8 +6,12 @@ import warnings
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, parallel  # type: ignore
-from jigsaw.modules.attention.attention import (  # type: ignore[import-not-found]
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import (  # type: ignore[import-not-found]
+    Attention,
+    DistributedAttention,
+)
+from jigsaw.modules.attention import (  # type: ignore[import-not-found]
     JIGSAW_TE_AVAILABLE,
 )
 
@@ -63,7 +67,7 @@ class TransformerBlock(torch.nn.Module):
         self.device = device
 
         # QKV projection, scaled dot-product attention and output projection
-        self.attention_block = attention.Attention(
+        self.attention_block = Attention(
             self.in_dim,
             self.embed_dim,
             self.out_dim,
@@ -141,7 +145,7 @@ class NiceTransformer(torch.nn.Module):
         self.device = device
 
         # QKV projection, scaled dot-product attention and output projection
-        self.attention_block = attention.Attention(
+        self.attention_block = Attention(
             self.in_dim,
             self.embed_dim,
             self.out_dim,
@@ -236,7 +240,7 @@ class DistributedTransformer(torch.nn.Module):
     ):
         super().__init__()
 
-        self.attention_block = attention.DistributedAttention(
+        self.attention_block = DistributedAttention(
             in_dim,
             embed_dim,
             out_dim,
@@ -353,7 +357,7 @@ class DistributedNICETransformer(torch.nn.Module):
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
-        self.attention_block = attention.DistributedAttention(
+        self.attention_block = DistributedAttention(
             in_dim,
             embed_dim,
             out_dim,
