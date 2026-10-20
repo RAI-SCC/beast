@@ -214,8 +214,6 @@ class DistributedTransformer(torch.nn.Module):
         The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
         The ``JChannel`` process group.
-    bayesian : bool
-        Whether the layers are Bayesian.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
     dtype : torch.dtype, default: torch.float32
@@ -234,7 +232,6 @@ class DistributedTransformer(torch.nn.Module):
         model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
-        bayesian: bool,
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
@@ -250,7 +247,6 @@ class DistributedTransformer(torch.nn.Module):
             spatial_group=spatial_group,
             channel_group=channel_group,
             dropout_p=dropout,
-            bayesian=bayesian,
             qk_norm=qk_norm,
             ring=False,
             dtype=dtype,
@@ -274,7 +270,6 @@ class DistributedTransformer(torch.nn.Module):
             model_group=model_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
-            bayesian=bayesian,
         ).to(device)
 
         for p in itertools.chain(
@@ -331,8 +326,6 @@ class DistributedNICETransformer(torch.nn.Module):
         The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
         The ``JChannel`` process group.
-    bayesian : bool
-        Whether the layers are Bayesian.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
     dtype : torch.dtype, default: torch.float32
@@ -352,7 +345,6 @@ class DistributedNICETransformer(torch.nn.Module):
         model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
-        bayesian: bool,
         qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
@@ -367,7 +359,6 @@ class DistributedNICETransformer(torch.nn.Module):
             spatial_group=spatial_group,
             channel_group=channel_group,
             dropout_p=dropout,
-            bayesian=bayesian,
             qk_norm=qk_norm,
             attn_backend="te" if USE_TE_DPA else "sdpa",
             dtype=dtype,
@@ -402,7 +393,6 @@ class DistributedNICETransformer(torch.nn.Module):
             model_group=channel_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
-            bayesian=bayesian,
         ).to(device)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:

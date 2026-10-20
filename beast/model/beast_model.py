@@ -288,7 +288,6 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -304,7 +303,6 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -320,7 +318,6 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -334,7 +331,6 @@ class Beast(torch.nn.Module):
             model_group=self.channel_group,
             row_group=self.spatial_group,
             col_group=self.channel_group,
-            bayesian=self.bayesian,
         )
 
         self.patch_recovery: torch.nn.Module = DistributedConvTranspose2d(
@@ -349,7 +345,6 @@ class Beast(torch.nn.Module):
             dilation=self.dilation,
             groups=1,
             bias=True,
-            bayesian=self.bayesian,
             dtype=self.dtype,
         )
 
@@ -369,7 +364,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
@@ -391,7 +385,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
@@ -413,7 +406,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
@@ -434,7 +426,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
@@ -455,7 +446,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
@@ -476,7 +466,6 @@ class Beast(torch.nn.Module):
                         model_group=self.dtp_group,
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
-                        bayesian=self.bayesian,
                         qk_norm=self.qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)

@@ -180,7 +180,6 @@ class DistributedMLPNICE(torch.nn.Module):
             model_group=channel_group,
             row_group=spatial_group,
             col_group=channel_group,
-            bayesian=False,
         )
 
         # The second layer should only be parallel across the channel group
@@ -243,8 +242,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
         The ``JChannel`` process group, over which the layers are sharded.
-    bayesian : bool, default: False
-        Whether the linear layers are Bayesian.
     """
 
     def __init__(
@@ -259,7 +256,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         model_group: dist.ProcessGroup,
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
-        bayesian: bool = False,
     ):
         super().__init__()
         self.local_rank = local_rank
@@ -278,7 +274,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             model_group=model_group,
             row_group=spatial_group,
             col_group=channel_group,
-            bayesian=bayesian,
         )
 
         self.linear2 = DistributedLinear(
@@ -290,7 +285,6 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             model_group=model_group,
             row_group=spatial_group,
             col_group=channel_group,
-            bayesian=bayesian,
         )
 
         # DistributedLinear marks only its bias over row_group (the spatial group);

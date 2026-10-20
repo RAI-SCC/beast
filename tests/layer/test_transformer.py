@@ -100,7 +100,6 @@ class TestDistributedTransformer:
             model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
-            bayesian=False,
             qk_norm=False,
             dtype=torch.float32,
         )
@@ -141,7 +140,6 @@ class TestDistributedNiceTransformer:
             model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
-            bayesian=False,
             qk_norm=False,
             dtype=torch.float32,
         )
@@ -167,7 +165,6 @@ class TestDistributedNiceTransformer:
             model_group=process_mesh_dict["DTP"],
             spatial_group=process_mesh_dict["JSpatial"],
             channel_group=process_mesh_dict["JChannel"],
-            bayesian=False,
             qk_norm=False,
             dtype=torch.float32,
         )
