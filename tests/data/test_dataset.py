@@ -652,11 +652,7 @@ class TestEWBEra5:
         dataset = SimpleNamespace(dt=dt, in_timesteps=in_timesteps)
         start_date = datetime(2022, 1, 10, 0)
 
-<<<<<<< HEAD
-        dates = EWBEra5._input_dates(dataset, start_date, lead_time)
-=======
-        dates = EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, lead_time)
->>>>>>> main
+        dates = EWBEra5._input_dates(cast(EWBEra5, dataset), start_date, lead_time)
 
         assert len(dates) == in_timesteps
         # The forecast is initialized at start_date - lead_time.
@@ -673,24 +669,16 @@ class TestEWBEra5:
         dataset = SimpleNamespace(dt=12, in_timesteps=1)
         start_date = datetime(2022, 1, 10, 0)
 
-<<<<<<< HEAD
-        assert EWBEra5._input_dates(dataset, start_date, 48) == [datetime(2022, 1, 8, 0)]
-=======
-        assert EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, 48) == [
+        assert EWBEra5._input_dates(cast(EWBEra5, dataset), start_date, 48) == [
             datetime(2022, 1, 8, 0)
         ]
->>>>>>> main
 
     def test_ewb_input_dates_spans_history(self) -> None:
         """Multiple inputs reach back before the initialization time, never past it."""
         dataset = SimpleNamespace(dt=12, in_timesteps=2)
         start_date = datetime(2022, 1, 10, 0)
 
-<<<<<<< HEAD
-        assert EWBEra5._input_dates(dataset, start_date, 48) == [
-=======
-        assert EWBEra5.input_dates(cast(EWBEra5, dataset), start_date, 48) == [
->>>>>>> main
+        assert EWBEra5._input_dates(cast(EWBEra5, dataset), start_date, 48) == [
             datetime(2022, 1, 7, 12),
             datetime(2022, 1, 8, 0),
         ]

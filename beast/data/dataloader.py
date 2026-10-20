@@ -5,7 +5,6 @@ import time
 from typing import Any, Callable
 
 import torch
-import torch.distributed as dist
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
@@ -84,16 +83,10 @@ def get_dataloader(
 ) -> BeastDataLoader:
     """Create a :class:`BeastDataLoader` from a configuration dictionary.
 
-    <<<<<<< HEAD
-    If the config_dict contains a path to a valid zarr directory of ERA5, this function will instantiate a suitable dataset, perform potential subsetting and return an iterable Dataloader.
-    If no valid path is given (i.e. if the path doesn't exist), it will throw an error.
-    =======
-    If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
-    from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
-    dataset of random numbers is used for the configured time range. In
+    An :class:`ERA5Distributed` dataset is read from ``data.data_path``. In
     ``"train"`` and ``"validation"`` mode the dataset is cut to the first
     ``train_subset`` or ``valid_subset`` samples if that value is positive.
-    >>>>>>> main
+    Use :func:`get_dummy_dataloader` for random data without a zarr store.
 
     Parameters
     ----------
@@ -154,8 +147,8 @@ def get_dataloader(
             **kwargs,
         )
     else:
-        if dist.get_rank(group=None) == 0:
-            raise FileNotFoundError(f"`{data_path}` not found. ")
+        raise FileNotFoundError(f"`{data_path}` not found.")
+
     # if train_subset <=0, the entire dataset will be used for training
     if (
         mode == "train"
@@ -206,38 +199,42 @@ def get_dummy_dataloader(
     mode: str = "train",
     transform: Callable | None = None,
     target_transform: Callable | None = None,
-    **kwargs: dict,
-) -> GBDataLoader:
-    """
-    Create a GBDataLoader instance from config specifications, using the dummy dataset.
+    **kwargs: Any,
+) -> BeastDataLoader:
+    """Create a :class:`BeastDataLoader` over an :class:`ERA5Dummy` dataset.
 
-    The dataloader will create a dummy dataset for the time range specified in the config file, filled with random numbers. Details on how the data shape should be can be passed via the config. If not available, it will fall back to hard-coded default values from ERA5.
+    The dataset holds random numbers for the configured time range. The keys
+    ``data.n_variables``, ``data.xlat``, ``data.xlon`` and ``data.dt`` set its
+    shape and default to the ERA5 values 84, 721, 1440 and 6. In ``"train"``
+    and ``"validation"`` mode the dataset is cut to the first ``train_subset``
+    or ``valid_subset`` samples if that value is positive.
 
     Parameters
     ----------
-    config_dict : Dict
-        The configuration dictionary, that contains information on the dataset, i.e. the shapes of the data to be created, specifications of the time frame to be used, etc.
+    config_dict : dict[str, Any]
+        Configuration with the sections ``data`` and ``training``, described
+        in the configuration reference of the documentation.
     dtp_rank : int
-        The rank in the domain-tensor-parallel process group, that shares a model and a data item
+        Rank in the ``DTP`` process group, the ranks that share one data item.
     dtp_size : int
-        The size of the domain-tensor-parallel process group, that shares a model and a data item
+        Size of the ``DTP`` process group.
     dp_rank : int
-        The rank in the data-parallel process group, that shares a model and a data item
+        Rank in the ``DP`` process group.
     dp_size : int
-        The size of the data-parallel process group (torch.DistributedDataParallel)
-    mode : str
-        The type of dataset and corresponding loader. Can be either "train" or "validation". "test" is not supported yet
-    transform: Callable
-        The transformation to be applied to the input weather data
-    target_transform: Callable
-        The transformation to be applied to the output weather data. If None, defaults to the transformation given in transform argument
-    **kwargs:
-        Additional options that can be forwarded to the Dataset object.
+        Size of the ``DP`` process group.
+    mode : {"train", "validation"}, default: "train"
+        Selects the time range and subset size.
+    transform : Callable, optional
+        Transformation applied to the input data.
+    target_transform : Callable, optional
+        Transformation applied to the target data. Defaults to ``transform``.
+    **kwargs
+        Passed on to the dataset.
 
     Returns
     -------
-    dataloader : GBDataLoader
-        The dataloader instance
+    BeastDataLoader
+        The dataloader, sampling with a :class:`ResumableDistributedSampler`.
     """
     if mode == "train":
         years = config_dict["data"]["train_time_range"]
@@ -279,7 +276,7 @@ def get_dummy_dataloader(
         pg_size=dtp_size,
         global_shape=shape,
         time_range=years,
-        dt=config_dict["data"]["dt"],
+        dt=dt,
         n_in_timesteps=config_dict["data"]["n_in_timesteps"],
         n_out_timesteps=config_dict["data"]["n_out_timesteps"],
         dtype=dtype,
@@ -314,7 +311,7 @@ def get_dummy_dataloader(
         resume_idx=0,  # set from checkpoint on resume
     )
 
-    dataloader = GBDataLoader(
+    dataloader = BeastDataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=(sampler is None),

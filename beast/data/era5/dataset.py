@@ -17,9 +17,8 @@ SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
 
 
 class ERA5Distributed(Dataset):
-    """Genaralized ERA5 dataset for native and domain-parallel data.
+    """ERA5 dataset of ``(input, target)`` pairs read from a zarr directory.
 
-    Returns  ``(input, target)`` pairs read from a zarr directory.
     Inputs and targets stack one or more timesteps along the channel dimension,
     and inputs are followed by the constant masks. Values are normalized with
     the stored per-variable mean and standard deviation.
@@ -389,8 +388,7 @@ class ERA5Distributed(Dataset):
         return input, target
 
     def _get_constant_masks(self) -> torch.Tensor:
-        """
-        Return the rank local shard of the constant masks.
+        """Return the rank local shard of the constant masks.
 
         Returns
         -------
@@ -511,24 +509,23 @@ class ERA5Distributed(Dataset):
     def list_from_output(
         self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
     ) -> list[torch.Tensor]:
-        """
-        Extract individual output tensors from the beast model output, based on the out_timesteps arguments.
-
-        The resulting target_list will reside on CPU, because GPU memory is more constraint.
+        """Split the model output into timesteps and mask fixed values.
 
         Parameters
         ----------
-        output: torch.Tensor
-            Model output.
-        feature_weights: torch.Tensor
-            Outputs need to get masked. This tells us which values.
-        fill: float
-            What to put on the masked values.
+        output : torch.Tensor
+            Model output of shape ``(batch, channel shard * out_timesteps, xlat, longitude shard)``.
+        feature_weights : torch.Tensor
+            Loss weights, see :meth:`get_feature_weights`. Output where they
+            are 0 is replaced by ``fill``.
+        fill : float
+            Value for the masked output.
 
         Returns
         -------
-        outputs: list[torch.Tensors]
-            List of output timesteps.
+        list[torch.Tensor]
+            One tensor per output timestep, moved to the CPU so that long
+            rollouts do not fill up GPU memory.
         """
         # Output shape: LSN, LBS, C, lat, lon
 
@@ -575,12 +572,15 @@ class ERA5Dummy(ERA5Distributed):
         Transformation applied to the input.
     target_transform : Callable, optional
         Transformation applied to the target. Defaults to ``transform``.
+    rollout : int, default: 1
+        Number of rollout steps. The target holds ``n_out_timesteps * rollout``
+        timesteps.
 
     Attributes
     ----------
     n_data_items : int
         Number of hourly timesteps in the time range.
-    num_vars, xlat, xlon : int
+    n_variables, xlat, xlon : int
         Global channel and grid sizes, with the grid rounded down to an even
         number.
     in_var : List[int]
@@ -648,6 +648,24 @@ class ERA5Dummy(ERA5Distributed):
             self.target_transform = target_transform
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
+        """Generate the samples of ``steps`` consecutive timesteps.
+
+        Parameters
+        ----------
+        idx : int
+            Index of the first timestep. Samples are generated, so every index
+            returns equivalent data.
+        steps : int
+            Number of timesteps.
+
+        Returns
+        -------
+        list[torch.Tensor]
+            One tensor per timestep, of shape
+            ``(channel shard, xlat, longitude shard)``, filled with
+            ``fill_value`` or, if it is ``None`` or 0, with uniform random
+            numbers.
+        """
         shape = (
             self.in_var[1] - self.in_var[0],
             self.in_out_xlat[1] - self.in_out_xlat[0],
@@ -660,7 +678,7 @@ class ERA5Dummy(ERA5Distributed):
             else:
                 sample = torch.rand(shape, dtype=self.dtype)
 
-            sample_list.append(torch.tensor(sample, dtype=self.dtype))
+            sample_list.append(sample)
 
         return sample_list
 
@@ -796,8 +814,7 @@ class EWBEra5(ERA5Distributed):
         return len(self.event_lead_list)
 
     def _input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
-        """
-        Return the input timestamps of one forecast, oldest first.
+        """Return the input timestamps of one forecast, oldest first.
 
         The forecast is initialized at ``start_date - lead_time``. That is the
         last input, preceded by ``in_timesteps - 1`` earlier inputs spaced ``dt``

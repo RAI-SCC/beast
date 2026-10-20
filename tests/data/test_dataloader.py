@@ -99,7 +99,7 @@ class TestDataLoader:
             config_dict["training"]["batch_size"] * dp_size
         )
 
-    def test_dataloader_noEra5(
+    def test_dataloader_no_era5(
         self,
     ) -> None:
         """Test for function get_dataloader, when the path to the data does not exist."""
@@ -115,7 +115,7 @@ class TestDataLoader:
         config_dict["data"]["train_time_range"] = [time_coords[0], time_coords[-1]]
 
         with pytest.raises(FileNotFoundError):
-            dataloader = get_dataloader(
+            get_dataloader(
                 config_dict,
                 dtp_rank,
                 dtp_size,
