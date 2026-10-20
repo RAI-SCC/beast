@@ -10,7 +10,7 @@ from test_dataset import (
     generate_mock_zarr_data,
 )
 
-from beast.data.dataloader import get_dataloader
+from beast.data.dataloader import get_dataloader, get_dummy_dataloader
 
 
 def create_mock_config() -> dict[str, Any]:
@@ -66,7 +66,7 @@ class TestDataLoader:
         "n_time, n_features, n_lat, n_lon, n_masks",
         data_array,
     )
-    def test_dataloader_dummy(
+    def test_dummy_dataloader(
         self,
         tmp_path_factory: TempPathFactory,
         n_time: int,
@@ -86,7 +86,7 @@ class TestDataLoader:
         ).strftime("%Y-%m-%d")
         config_dict["data"]["train_time_range"] = [time_coords[0], time_coords[-1]]
 
-        dummy_loader = get_dataloader(
+        dummy_loader = get_dummy_dataloader(
             config_dict,
             dtp_rank,
             dtp_size,
@@ -98,6 +98,31 @@ class TestDataLoader:
         assert len(dummy_loader) == int(n_time - config_dict["data"]["dt"]) // (
             config_dict["training"]["batch_size"] * dp_size
         )
+
+    def test_dataloader_no_era5(
+        self,
+    ) -> None:
+        """Test for function get_dataloader, when the path to the data does not exist."""
+        config_dict = create_mock_config()
+        dtp_rank = 0
+        dtp_size = 4
+        dp_rank = 0
+        dp_size = 1
+        n_time = 48
+        time_coords = pd.date_range(
+            "2024-01-01", periods=n_time + 1, freq="h"
+        ).strftime("%Y-%m-%d")
+        config_dict["data"]["train_time_range"] = [time_coords[0], time_coords[-1]]
+
+        with pytest.raises(FileNotFoundError):
+            get_dataloader(
+                config_dict,
+                dtp_rank,
+                dtp_size,
+                dp_rank,
+                dp_size,
+                mode="train",
+            )
 
     @pytest.mark.parametrize(
         "n_time, n_features, n_lat, n_lon, n_masks",

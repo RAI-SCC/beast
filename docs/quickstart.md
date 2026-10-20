@@ -47,7 +47,9 @@ groups = create_process_mesh_dict([2, 2, 2, 2])
 {func}`~beast.data.dataloader.get_dataloader` reads its settings from a
 configuration dictionary, described in [Configuration](configuration.md). The
 `DTP` rank decides which shard of each sample a process loads, and the `DP` rank
-decides which samples it sees.
+decides which samples it sees. Without an ERA5 zarr store,
+{func}`~beast.data.dataloader.get_dummy_dataloader` takes the same arguments and
+returns random data.
 
 ```python
 loader = get_dataloader(

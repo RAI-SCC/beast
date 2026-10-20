@@ -2,11 +2,9 @@
 
 import os
 import time
-import warnings
 from typing import Any, Callable
 
 import torch
-import torch.distributed as dist
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.dataloader import (
     _BaseDataLoaderIter,
@@ -85,11 +83,10 @@ def get_dataloader(
 ) -> BeastDataLoader:
     """Create a :class:`BeastDataLoader` from a configuration dictionary.
 
-    If ``data.data_path`` exists, an :class:`ERA5Distributed` dataset is read
-    from it. Otherwise a warning is issued on rank 0 and an :class:`ERA5Dummy`
-    dataset of random numbers is used for the configured time range. In
+    An :class:`ERA5Distributed` dataset is read from ``data.data_path``. In
     ``"train"`` and ``"validation"`` mode the dataset is cut to the first
     ``train_subset`` or ``valid_subset`` samples if that value is positive.
+    Use :func:`get_dummy_dataloader` for random data without a zarr store.
 
     Parameters
     ----------
@@ -150,30 +147,143 @@ def get_dataloader(
             **kwargs,
         )
     else:
-        if dist.get_rank(group=None) == 0:
-            warnings.warn(
-                f"`{data_path}` not found. Running dummy dataset for time range {years}",
-                UserWarning,
-            )
+        raise FileNotFoundError(f"`{data_path}` not found.")
 
-        shape = (
-            config_dict["data"]["n_variables"],
-            config_dict["data"]["xlat"],
-            config_dict["data"]["xlon"],
-        )
-        dataset = ERA5Dummy(
-            pg_rank=dtp_rank,
-            pg_size=dtp_size,
-            global_shape=shape,
-            time_range=years,
-            dt=config_dict["data"]["dt"],
-            n_in_timesteps=config_dict["data"]["n_in_timesteps"],
-            n_out_timesteps=config_dict["data"]["n_out_timesteps"],
-            dtype=dtype,
-            transform=transform,
-            target_transform=target_transform,
-            **kwargs,
-        )
+    # if train_subset <=0, the entire dataset will be used for training
+    if (
+        mode == "train"
+        and config_dict["data"]["train_subset"] > 0
+        and (config_dict["data"]["train_subset"] < len(dataset))
+    ):
+        subset_indices = torch.arange(config_dict["data"]["train_subset"])
+        dataset = Subset(dataset, subset_indices.tolist())
+    # if valid_subset <=0, the entire dataset will be used for validation
+    elif (
+        mode == "validation"
+        and config_dict["data"]["valid_subset"] > 0
+        and (config_dict["data"]["valid_subset"] < len(dataset))
+    ):
+        subset_indices = torch.arange(config_dict["data"]["valid_subset"])
+        dataset = Subset(dataset, subset_indices.tolist())
+
+    sampler = ResumableDistributedSampler(
+        dataset,
+        shuffle=True,
+        rank=dp_rank,
+        num_replicas=dp_size,
+        seed=42,
+        resume_idx=0,  # set from checkpoint on resume
+    )
+
+    dataloader = BeastDataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        drop_last=True,
+        pin_memory=torch.cuda.is_available(),
+        prefetch_factor=config_dict["data"]["prefetch_factor"],
+        num_workers=config_dict["data"]["num_workers"],
+        persistent_workers=True,
+    )
+
+    return dataloader
+
+
+def get_dummy_dataloader(
+    config_dict: dict[str, Any],
+    dtp_rank: int,
+    dtp_size: int,
+    dp_rank: int,
+    dp_size: int,
+    mode: str = "train",
+    transform: Callable | None = None,
+    target_transform: Callable | None = None,
+    **kwargs: Any,
+) -> BeastDataLoader:
+    """Create a :class:`BeastDataLoader` over an :class:`ERA5Dummy` dataset.
+
+    The dataset holds random numbers for the configured time range. The keys
+    ``data.n_variables``, ``data.xlat``, ``data.xlon`` and ``data.dt`` set its
+    shape and default to the ERA5 values 84, 721, 1440 and 6. In ``"train"``
+    and ``"validation"`` mode the dataset is cut to the first ``train_subset``
+    or ``valid_subset`` samples if that value is positive.
+
+    Parameters
+    ----------
+    config_dict : dict[str, Any]
+        Configuration with the sections ``data`` and ``training``, described
+        in the configuration reference of the documentation.
+    dtp_rank : int
+        Rank in the ``DTP`` process group, the ranks that share one data item.
+    dtp_size : int
+        Size of the ``DTP`` process group.
+    dp_rank : int
+        Rank in the ``DP`` process group.
+    dp_size : int
+        Size of the ``DP`` process group.
+    mode : {"train", "validation"}, default: "train"
+        Selects the time range and subset size.
+    transform : Callable, optional
+        Transformation applied to the input data.
+    target_transform : Callable, optional
+        Transformation applied to the target data. Defaults to ``transform``.
+    **kwargs
+        Passed on to the dataset.
+
+    Returns
+    -------
+    BeastDataLoader
+        The dataloader, sampling with a :class:`ResumableDistributedSampler`.
+    """
+    if mode == "train":
+        years = config_dict["data"]["train_time_range"]
+    elif mode == "validation":
+        years = config_dict["data"]["valid_time_range"]
+    else:
+        years = None
+
+    batch_size = config_dict["training"]["batch_size"]
+    dtype = set_dtype(config_dict["training"]["dtype"])
+
+    dataset: torch.utils.data.Dataset
+
+    # Hardcode shapes to original ERA5 data sizes
+    if "xlat" in config_dict["data"]:
+        xlat = config_dict["data"]["xlat"]
+    else:
+        xlat = 721
+
+    if "xlon" in config_dict["data"]:
+        xlon = config_dict["data"]["xlon"]
+    else:
+        xlon = 1440
+
+    if "n_variables" in config_dict["data"]:
+        n_variables = config_dict["data"]["n_variables"]
+    else:
+        n_variables = 84
+
+    if "dt" in config_dict["data"]:
+        dt = config_dict["data"]["dt"]
+    else:
+        dt = 6
+
+    shape = (n_variables, xlat, xlon)
+
+    dataset = ERA5Dummy(
+        pg_rank=dtp_rank,
+        pg_size=dtp_size,
+        global_shape=shape,
+        time_range=years,
+        dt=dt,
+        n_in_timesteps=config_dict["data"]["n_in_timesteps"],
+        n_out_timesteps=config_dict["data"]["n_out_timesteps"],
+        dtype=dtype,
+        transform=transform,
+        target_transform=target_transform,
+        **kwargs,
+    )
 
     # if train_subset <=0, the entire dataset will be used for training
     if (
