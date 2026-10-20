@@ -70,6 +70,12 @@ class Beast(torch.nn.Module):
         The single-process model always uses a dropout of 1e-3.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
+    shard_qk_norm : bool, default: False
+        Give each ``JChannel`` shard of the distributed model its own query and
+        key norm instead of one shared by all heads. Needed to load models
+        trained with jigsaw before the norms were shared (e.g. the
+        ``BEAST-JUPITER-0.7B-1.8K`` checkpoints of August 2026), at the
+        ``JChannel`` size they were trained with.
     bayesian : bool, default: False
         Whether the distributed layers are Bayesian.
     nice_norm : bool, default: False
@@ -118,6 +124,7 @@ class Beast(torch.nn.Module):
         dropout: float | None = None,
         # Norm
         qk_norm: bool = False,
+        shard_qk_norm: bool = False,
         # Boolean flags
         bayesian: bool = False,
         nice_norm: bool = False,
@@ -160,6 +167,7 @@ class Beast(torch.nn.Module):
         self.dtype = dtype
         self.bayesian = bayesian
         self.qk_norm = qk_norm
+        self.shard_qk_norm = shard_qk_norm
         self.nice_norm = nice_norm
 
         self._build_model()
@@ -365,6 +373,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
@@ -386,6 +395,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
@@ -407,6 +417,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])
@@ -427,6 +438,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[0])
@@ -447,6 +459,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[1])
@@ -467,6 +480,7 @@ class Beast(torch.nn.Module):
                         spatial_group=self.spatial_group,
                         channel_group=self.channel_group,
                         qk_norm=self.qk_norm,
+                        shard_qk_norm=self.shard_qk_norm,
                         dtype=self.dtype,
                     ).to(self.device)
                     for _ in torch.arange(2 * self.n_full_blocks[2])

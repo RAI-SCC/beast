@@ -27,6 +27,39 @@ if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE and os.getenv("RANK", "0") == "
 USE_TE_DPA = _TE_DPA_REQUESTED and JIGSAW_TE_AVAILABLE
 
 
+def _shard_qk_norm(
+    attention: DistributedAttention, spatial_group: dist.ProcessGroup
+) -> None:
+    """Give each ``JChannel`` shard of ``attention`` its own query and key norm.
+
+    jigsaw shares one norm across all heads, replicated over the spatial and
+    the channel group. Models trained before jigsaw ``a1c16e9`` hold one norm
+    per channel shard instead, acting on that shard's heads only. Replace the
+    norms by unmarked copies and mark those over ``spatial_group`` only, so the
+    shards may differ and each gradient is summed over the spatial group alone.
+    This ties the model to the ``JChannel`` size it was trained with.
+
+    Parameters
+    ----------
+    attention : DistributedAttention
+        Attention built with ``qk_norm=True``, modified in place.
+    spatial_group : dist.ProcessGroup
+        The ``JSpatial`` process group.
+    """
+    for name in ("q_norm", "k_norm"):
+        shared = getattr(attention, name)
+        own = torch.nn.LayerNorm(
+            shared.normalized_shape,
+            eps=shared.eps,
+            device=shared.weight.device,
+            dtype=shared.weight.dtype,
+        )
+        own.load_state_dict(shared.state_dict())
+        for p in own.parameters():
+            parallel.mark_replicated(p, spatial_group)
+        setattr(attention, name, own)
+
+
 class TransformerBlock(torch.nn.Module):
     """Pre-norm transformer block with windowed attention.
 
@@ -216,6 +249,9 @@ class DistributedTransformer(torch.nn.Module):
         The ``JChannel`` process group.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
+    shard_qk_norm : bool, default: False
+        Give each ``JChannel`` shard its own query and key norm instead of one
+        shared by all heads, see :func:`_shard_qk_norm`.
     dtype : torch.dtype, default: torch.float32
         Data type passed to the attention.
     """
@@ -233,6 +269,7 @@ class DistributedTransformer(torch.nn.Module):
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
         qk_norm: bool = False,
+        shard_qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
@@ -251,6 +288,8 @@ class DistributedTransformer(torch.nn.Module):
             ring=False,
             dtype=dtype,
         ).to(device)
+        if qk_norm and shard_qk_norm:
+            _shard_qk_norm(self.attention_block, spatial_group)
 
         self.layer_norm1 = torch.nn.LayerNorm(
             out_dim // channel_group.size(), device=device
@@ -328,6 +367,9 @@ class DistributedNICETransformer(torch.nn.Module):
         The ``JChannel`` process group.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
+    shard_qk_norm : bool, default: False
+        Give each ``JChannel`` shard its own query and key norm instead of one
+        shared by all heads, see :func:`_shard_qk_norm`.
     dtype : torch.dtype, default: torch.float32
         Data type passed to the attention.
     """
@@ -346,6 +388,7 @@ class DistributedNICETransformer(torch.nn.Module):
         spatial_group: dist.ProcessGroup,
         channel_group: dist.ProcessGroup,
         qk_norm: bool = False,
+        shard_qk_norm: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
@@ -363,6 +406,8 @@ class DistributedNICETransformer(torch.nn.Module):
             attn_backend="te" if USE_TE_DPA else "sdpa",
             dtype=dtype,
         ).to(device)
+        if qk_norm and shard_qk_norm:
+            _shard_qk_norm(self.attention_block, spatial_group)
         self.layer_norm1 = nice_norm.DistributedNICENorm(
             out_dim,
             noise_dim,
