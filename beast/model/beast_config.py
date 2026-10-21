@@ -44,9 +44,10 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "window_size_inner": [20, 30],
             "n_full_blocks": [2, 3, 2],
             "noise_dim": 32,
-            "qk_norm": False,
+            "qk_norm": True,
             "bayesian": True,
             "nice_norm": True,
+            "shard_qk_norm": True
         },
     },
     "BEAST-LUMI-1.1B-64K": {
