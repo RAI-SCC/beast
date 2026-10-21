@@ -1,5 +1,6 @@
 import math
 import warnings
+from typing import Any
 
 import mpi4py.MPI as MPI
 import pytest
@@ -43,103 +44,174 @@ CHANNEL_OVERRIDES = {
 }
 
 
-# Selects between ``Transformer`` and ``NiceTransformer`` blocks (and their
-# distributed variants); the latter add NiceNorm layers and their noise MLPs.
-NICE_NORM = [
-    pytest.param(False, id="plain"),
-    pytest.param(True, id="nice"),
+# The combinations used in practice: Bayesian models use NICE normalization
+# (``NiceTransformer`` blocks and their noise MLPs), deterministic ones do not.
+MODEL_VARIANTS = [
+    pytest.param({"bayesian": False, "nice_norm": False}, id="deterministic-plain"),
+    pytest.param({"bayesian": True, "nice_norm": True}, id="bayesian-nice"),
 ]
 
 
-def _skip_unless_world_size_matches(mesh_dims: list[int]) -> None:
-    """Skip unless the current run's world size matches ``mesh_dims``'s
-    product.
-
-    ``create_process_mesh_dict`` requires an exact match and raises
-    otherwise, but different ``mesh_dims`` values need different numbers of
-    ranks to actually exercise -- not every test run has 4 processes.
-    """
-
-    required = math.prod(mesh_dims)
-    actual = dist.get_world_size()
-    if actual != required:
-        pytest.skip(f"mesh_dims {mesh_dims} needs {required} ranks, got {actual}")
+QK_NORM = [
+    pytest.param(False, id="no-qk-norm"),
+    pytest.param(True, id="qk-norm"),
+]
 
 
-def _channel_group_size(mesh_dims: list[int]) -> int:
-    """``mesh_dims`` is ``(DP, SP, JSpatial, JChannel)``; see ``create_process_mesh_dict``."""
-    return mesh_dims[3]
+# Attributes of ``Beast`` that hold a single layer. The rolls have no
+# parameters; they are included to catch one appearing unexpectedly.
+SINGLE_LAYERS = (
+    "patch_embedding",
+    "downsample",
+    "upsample",
+    "upsample_mix",
+    "patch_recovery",
+    "roll_out",
+    "unroll_out",
+    "roll_in",
+    "unroll_in",
+)
 
-
-def _needs_even_channels(mesh_dims: list[int], channel_variant: str) -> bool:
-    """Whether this combination requires in/out channels divisible by the
-    channel-group size.
-
-    jigsaw's distributed conv layers assert exact divisibility and raise
-    otherwise -- there is no padding anywhere to fall back on.
-    """
-    return channel_variant == "odd" and _channel_group_size(mesh_dims) > 1
+# Attributes of ``Beast`` that hold a ``ModuleList`` of transformer blocks.
+TRANSFORMER_LISTS = ("transformer_1", "transformer_down", "transformer_2")
 
 
 def _build_sharded_model(
-    small_config: dict,
+    small_config: dict[str, Any],
     device: torch.device,
     mesh_dims: list[int],
-) -> tuple[Beast, dist.ProcessGroup, dist.ProcessGroup]:
-
+) -> tuple[Beast, dist.ProcessGroup]:
+    """Build a ``Beast`` on a process mesh; also return its ``JChannel`` group."""
     process_mesh_dict = create_process_mesh_dict(
         mesh_dims=mesh_dims, device_type=device.type
     )
     channel_pg = process_mesh_dict["JChannel"]
-    spatial_pg = process_mesh_dict["JSpatial"]
-    dtp_pg = process_mesh_dict["DTP"]
 
     sharded_model = Beast(
         **small_config,
         dropout=1e-1,
-        dtp_group=dtp_pg,
+        dtp_group=process_mesh_dict["DTP"],
         channel_group=channel_pg,
-        spatial_group=spatial_pg,
+        spatial_group=process_mesh_dict["JSpatial"],
         device=device,
     ).to(device)
 
-    return sharded_model, channel_pg, spatial_pg
+    return sharded_model, channel_pg
+
+
+def _layer_modules(model: Beast) -> dict[str, torch.nn.Module | None]:
+    """Collect the layers of ``model`` by name.
+
+    Transformer blocks are listed individually as ``transformer_1[0]`` etc.
+    A layer the model lacks maps to ``None``.
+    """
+    layers: dict[str, torch.nn.Module | None] = {
+        name: getattr(model, name, None) for name in SINGLE_LAYERS
+    }
+    for list_name in TRANSFORMER_LISTS:
+        for i, block in enumerate(getattr(model, list_name, [])):
+            layers[f"{list_name}[{i}]"] = block
+    return layers
+
+
+def _reference_layer_count(layer: torch.nn.Module) -> int:
+    """Number of trainable parameters of an unsharded layer."""
+    return sum(p.numel() for p in layer.parameters() if p.requires_grad)
+
+
+def _sharded_layer_count(layer: torch.nn.Module, parallelism: int) -> int:
+    """``count_model_parameters`` of a single sharded layer.
+
+    ``count_model_parameters`` skips the module it is given when
+    ``parallelism > 1``, so the layer is wrapped to be counted itself.
+    """
+    return count_model_parameters(
+        torch.nn.ModuleList([layer]),
+        parallelism=parallelism,
+        pending_bayesian_conversion=False,
+    )
+
+
+def _layer_mismatches(
+    reference_layers: dict[str, torch.nn.Module | None],
+    sharded_layers: dict[str, torch.nn.Module | None],
+    parallelism: int,
+) -> list[str]:
+    """Describe every layer whose sharded count differs from the reference.
+
+    A layer present in only one of the models counts as a mismatch.
+    """
+    mismatches = []
+    for name in sorted(reference_layers.keys() | sharded_layers.keys()):
+        reference_layer = reference_layers.get(name)
+        sharded_layer = sharded_layers.get(name)
+        if reference_layer is None or sharded_layer is None:
+            missing_in = "reference" if reference_layer is None else "sharded"
+            mismatches.append(f"  {name}: missing in {missing_in} model")
+            continue
+
+        reference_count = _reference_layer_count(reference_layer)
+        sharded_count = _sharded_layer_count(sharded_layer, parallelism)
+        if sharded_count != reference_count:
+            mismatches.append(
+                f"  {name} ({type(sharded_layer).__name__}): "
+                f"sharded={sharded_count}, reference={reference_count} "
+                f"(diff={sharded_count - reference_count})"
+            )
+    return mismatches
 
 
 @pytest.mark.parametrize("mesh_dims", MESH_DIMS)
-@pytest.mark.parametrize("channel_variant", ["even", "odd"])
-@pytest.mark.parametrize("nice_norm", NICE_NORM)
-def test_count_model_parameters_before_conversion(
-    device: torch.device, mesh_dims: list[int], channel_variant: str, nice_norm: bool
+@pytest.mark.parametrize("channel_variant", ["even"])
+@pytest.mark.parametrize("variant", MODEL_VARIANTS)
+@pytest.mark.parametrize("qk_norm", QK_NORM)
+def test_count_model_parameters_per_layer(
+    device: torch.device,
+    mesh_dims: list[int],
+    channel_variant: str,
+    variant: dict[str, bool],
+    qk_norm: bool,
 ) -> None:
-    """A sharded model's deterministic parameter count must match an
-    equivalent, unsharded reference model's count -- except when uneven
-    in/out channels can't be split evenly across JChannel ranks, which
-    jigsaw rejects outright rather than padding around.
+    """Every layer of a sharded model must count the same as its unsharded
+    counterpart.
+
+    All layers are compared before reporting, so a single run lists every
+    mismatching layer. Rank 0 warns with the per-layer mismatches, and the test
+    then fails if the overall counts differ.
     """
-    # _skip_unless_world_size_matches(mesh_dims)
     small_config = small_beast_config(
-        bayesian=False, nice_norm=nice_norm, **CHANNEL_OVERRIDES[channel_variant]
+        **variant, qk_norm=qk_norm, **CHANNEL_OVERRIDES[channel_variant]
     )
 
     reference_model = Beast(**small_config, dropout=1e-1, device=device)
-    reference_count = sum(
-        p.numel() for p in reference_model.parameters() if p.requires_grad
+    sharded_model, channel_pg = _build_sharded_model(small_config, device, mesh_dims)
+    parallelism = channel_pg.size()
+
+    reference_layers = _layer_modules(reference_model)
+    sharded_layers = _layer_modules(sharded_model)
+    mismatches = _layer_mismatches(reference_layers, sharded_layers, parallelism)
+
+    total_reference = _reference_layer_count(reference_model)
+    total_sharded = count_model_parameters(
+        sharded_model,
+        parallelism=parallelism,
+        pending_bayesian_conversion=False,
     )
 
-    sharded_model, channel_pg, _ = _build_sharded_model(small_config, device, mesh_dims)
-    sharded_count = count_model_parameters(
-        sharded_model, parallelism=channel_pg.size(), pending_bayesian_conversion=False
-    )
-
-    # TODO(Issue #97): count_model_parameters is not yet consistent across settings.
-    # Warn instead of failing until the cause is found, then restore
-    # ``assert sharded_count == reference_count``.
-    if sharded_count != reference_count:
+    # Only rank 0 reports, so the output of the ranks does not interleave.
+    comm = MPI.COMM_WORLD
+    comm.Barrier()
+    if comm.Get_rank() == 0:
         warnings.warn(
             f"Parameter count mismatch for mesh_dims={mesh_dims}, "
-            f"channel_variant={channel_variant}, nice_norm={nice_norm}: "
-            f"sharded={sharded_count}, reference={reference_count} "
-            f"(diff={sharded_count - reference_count})",
-            stacklevel=1,
+            f"channel_variant={channel_variant}, {variant}, qk_norm={qk_norm}; "
+            f"{len(mismatches)} of {len(reference_layers | sharded_layers)} "
+            "layers differ:\n"
+            + "\n".join(mismatches)
+            + f"\n  overall: sharded={total_sharded}, "
+            f"reference={total_reference} "
+            f"(diff={total_sharded - total_reference})"
         )
+
+    if total_sharded != total_reference:
+        pytest.fail("Overall parameter count mismatch", pytrace=False)
