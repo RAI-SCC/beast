@@ -46,8 +46,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
 
     Attributes
     ----------
-    sync_group_size : int
-        Size of `sync_group`, or 1 if it is None.
     feature_weights : Tensor or None
         `feature_weights`, reshaped to ``(1, 1, variables, lat, lon)`` so that
         they broadcast over the samples and the batch. Per-variable weights
@@ -276,8 +274,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         ValueError
             If fewer than 2 samples are available in total across the UP group.
         """
-        up_num = up_process_group.size()
-        total_samples = samples.shape[0] * up_num
+        up_size = up_process_group.size()
+        total_samples = samples.shape[0] * up_size
         if total_samples < 2:
             raise ValueError(
                 f"MeanStdPriorMatchingAggregation needs at least 2 samples in total to estimate the variance, got {total_samples}."
