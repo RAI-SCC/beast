@@ -12,6 +12,9 @@ import torch_blue.vi as vi
 from torch import Tensor
 from torch_blue.vi.distributions import MeanFieldNormal
 
+VARIANCE_FLOOR = 1e-10
+"""Lower bound of the aggregated sample variance; the std is constant below it."""
+
 
 class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     """KL loss with Gaussian predictive, variational and prior distributions.
@@ -291,7 +294,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
 
         handle.wait()
         var = m2 / (total_samples - 1)
-        std = torch.sqrt(var.clamp_min(1e-10))
+        std = torch.sqrt(var.clamp_min(VARIANCE_FLOOR))
 
         if feature_weights is not None:
             replace_val = feature_weights == 0.0
@@ -396,6 +399,12 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         std = std.unsqueeze(dim=0)
         grad_mean = grad_mean.unsqueeze(dim=0)
         grad_std = grad_std.unsqueeze(dim=0)
+        # Where the forward clamped the variance, the std is constant, so no
+        # gradient reaches the samples through it.
+        std_floor = torch.sqrt(
+            torch.tensor(VARIANCE_FLOOR, dtype=std.dtype, device=std.device)
+        )
+        grad_std = torch.where(std > std_floor, grad_std, 0.0)
 
         grad_samples = (grad_mean / n_glob) + (grad_std / (n_glob - 1)) * (
             samples - mean

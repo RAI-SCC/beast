@@ -291,6 +291,49 @@ def test_backward(dummy_module: vi.VIModule, device: torch.device) -> None:
 
 
 @pytest.mark.dist(2)
+def test_backward_clamped_std(dummy_module: vi.VIModule, device: torch.device) -> None:
+    """No gradient reaches the samples through a std clamped at the variance floor."""
+    up_group = dist.group.WORLD
+    world_size = up_group.size() if up_group is not None else 1
+    rank = up_group.rank() if up_group is not None else 0
+
+    # Element 0: spread far below the floor, element 1: regular spread.
+    samples = torch.tensor(
+        [[1.0, 0.5], [1.0 + 1e-7, 1.5], [1.0, 0.75], [1.0 + 1e-7, 1.25]],
+        device=device,
+        dtype=torch.float64,
+    )
+    global_mean = samples.mean(dim=0)
+    global_std = samples.std(dim=0)
+    local_samples = samples[rank::world_size, ...].requires_grad_(True)
+
+    parameter_mean = cast(nn.Parameter, dummy_module._parameter_mean)
+    parameter_log_std = cast(nn.Parameter, dummy_module._parameter_log_std)
+
+    _, std, _, _, _ = MeanStdPriorMatchingAggregation.apply(
+        local_samples,
+        up_group,
+        torch.zeros_like(parameter_mean),
+        torch.zeros_like(parameter_log_std),
+        parameter_mean,
+        parameter_log_std,
+        None,
+    )
+    assert std[0] == math.sqrt(1e-10), "element 0 must be clamped"
+
+    std.sum().backward()
+    grad = cast(Tensor, local_samples.grad)
+    assert torch.all(grad[:, 0] == 0.0), f"Gradient through clamped std: {grad[:, 0]}"
+    # Scaled by the UP group size, so that DDP's average over SP sums it.
+    expected = (
+        world_size
+        * (local_samples[:, 1] - global_mean[1])
+        / (global_std[1] * (samples.shape[0] - 1))
+    )
+    assert torch.allclose(grad[:, 1], expected), f"{grad[:, 1]} vs {expected}"
+
+
+@pytest.mark.dist(2)
 @pytest.mark.parametrize("offset", [0.0, 1e2, 1e3])
 def test_aggregation_variance_is_cancellation_free(
     dummy_module: vi.VIModule, device: torch.device, offset: float
