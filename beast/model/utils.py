@@ -149,7 +149,7 @@ def count_model_parameters(
     This function counts whatever parameters ``model`` holds at the moment
     it is called; it has no way of telling whether a torch_blue conversion
     already took place. Calling it with ``pending_bayesian_conversion=True``
-    on a model converted by ``convert_jigsaw_vi`` will over count parameters.
+    on a model converted by ``convert_jigsaw_vi`` will overcount parameters.
     """
     if parallelism == 1:
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)
