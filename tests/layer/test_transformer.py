@@ -189,7 +189,9 @@ class TestDistributedNiceTransformer:
 class TestShardQkNorm:
     @pytest.mark.dist(4)
     @pytest.mark.parametrize("shard", [False, True])
-    def test_replica_groups_and_gradient(self, device: torch.device, shard: bool) -> None:
+    def test_replica_groups_and_gradient(
+        self, device: torch.device, shard: bool
+    ) -> None:
         """A shared q/k norm is replicated over JSpatial and JChannel, a sharded
         one over JSpatial only: each JChannel shard keeps its own values, and its
         gradient is summed over JSpatial alone."""
