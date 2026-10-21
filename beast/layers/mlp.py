@@ -4,7 +4,8 @@ from typing import Callable
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear  # type: ignore
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import DistributedLinear  # type: ignore[import-not-found]
 
 
 class MLP(torch.nn.Module):
@@ -126,7 +127,7 @@ class DistributedMLPNICE(torch.nn.Module):
     """MLP for the noise input of :class:`~beast.layers.nice_norm.DistributedNICENorm`.
 
     The first layer is sharded over the ``JChannel`` process group and the second
-    is a :class:`jigsaw.linear.DistributedXWT`. The parameters are replicated
+    is a :class:`jigsaw.modules.DistributedLinear`. The parameters are replicated
     over the ``JSpatial`` process group: they are broadcast at construction and
     their gradients are synchronized.
 
@@ -190,7 +191,7 @@ class DistributedMLPNICE(torch.nn.Module):
             in_dim, hidden_dim // channel_group.size(), bias, device=device
         )
 
-        self.linear2 = linear.DistributedXWT(
+        self.linear2 = DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,
@@ -198,17 +199,15 @@ class DistributedMLPNICE(torch.nn.Module):
             device=device,
             model_group=channel_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=False,
         )
 
         # The second layer should only be parallel across the channel group
         # thus, all spatial groups need to ensure they remain synchronized
         for p in self.parameters():
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            parallel.mark_replicated(p, self.spatial_group, extend=True)
+        parallel.broadcast_replicas(self)
 
         self.activation = torch.nn.GELU()
 
@@ -228,7 +227,7 @@ class DistributedMLPNICE(torch.nn.Module):
         # Sum the input gradient over the channel ranks in the backward pass
         if x.requires_grad:
             x.register_hook(make_grad_input_hook(self.channel_group))
-        x = self.linear1(x)
+        x = parallel.synced_call(self.linear1, x)
         x = self.activation(x)
         x = self.linear2(x)
         return x
@@ -259,7 +258,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         Device to place parameters on.
     model_group : dist.ProcessGroup
         Model-parallel process group of the linear layers, passed to
-        :class:`jigsaw.linear.DistributedXWT`.
+        :class:`jigsaw.modules.DistributedLinear`.
     spatial_group : dist.ProcessGroup
         The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
@@ -303,7 +302,7 @@ class DistributedSynchronizedMLP(torch.nn.Module):
         self.channel_group = channel_group
 
         # pass in global dimensions for linear layers.
-        self.linear1 = linear.DistributedXWT(
+        self.linear1 = DistributedLinear(
             in_dim,
             hidden_dim,
             bias=bias,
@@ -311,11 +310,11 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             device=device,
             model_group=model_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=bayesian,
         )
 
-        self.linear2 = linear.DistributedXWT(
+        self.linear2 = DistributedLinear(
             hidden_dim,
             out_dim,
             bias=bias,
@@ -323,15 +322,15 @@ class DistributedSynchronizedMLP(torch.nn.Module):
             device=device,
             model_group=model_group,
             row_group=spatial_group,
-            column_group=channel_group,
+            col_group=channel_group,
             bayesian=bayesian,
         )
 
+        # DistributedLinear marks only its bias over row_group (the spatial group);
+        # the weight is replicated over it too, and synced in the XWT forward.
         for p in self.parameters():
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
+            parallel.mark_replicated(p, self.spatial_group, extend=True)
+        parallel.broadcast_replicas(self)
 
         self.activation = torch.nn.GELU()
         self.drop = torch.nn.Dropout(p=dropout)

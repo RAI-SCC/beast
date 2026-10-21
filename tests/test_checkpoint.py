@@ -4,14 +4,14 @@ import pytest
 import torch
 import torch.distributed as dist
 from small_models import SMALL_BEAST_OVERRIDES, small_beast_config
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 from beast.checkpoint import (
+    is_checkpoint_writer,
     load_checkpoint,
     load_state_dict,
     save_checkpoint,
 )
-from beast.comm import create_process_mesh_dict, get_process_group
+from beast.comm import create_process_mesh_dict, get_process_group, wrap_ddp
 from beast.model import convert_jigsaw_vi, get_model
 from beast.utils import set_all_seeds
 
@@ -20,12 +20,11 @@ class TestCheckpoint:
     def test_save_checkpoint(
         self,
         shared_tmp_path: pathlib.Path,
-        device: torch.device,
     ) -> None:
         """Test to save and load a dummy model. If running distributed, assumes only ddp group, so a single checkpoint should be written."""
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
-        loss_value = torch.tensor([1.2], device=device)
+        loss_value = 1.2
 
         full_path = save_checkpoint(
             str(shared_tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
@@ -46,13 +45,12 @@ class TestCheckpoint:
     def test_dist_save_checkpoint(
         self,
         shared_tmp_path: pathlib.Path,
-        device: torch.device,
     ) -> None:
         """Test to save and load a dummy model. DTP parallelism, should produce two checkpoint files."""
         create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
         model = torch.nn.Linear(10, 10)
         optimizer = torch.optim.AdamW(model.parameters())
-        loss_value = torch.tensor([1.2], device=device)
+        loss_value = 1.2
 
         full_path = save_checkpoint(
             str(shared_tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value
@@ -67,6 +65,20 @@ class TestCheckpoint:
         assert isinstance(checkpoint["epoch"], int)
         assert isinstance(checkpoint["step"], int)
         assert checkpoint["loss"] == loss_value
+
+    @pytest.mark.dist(4)
+    @pytest.mark.parametrize(
+        "mesh_dims", [[1, 1, 2, 2], [1, 1, 4, 1], [2, 1, 2, 1], [1, 2, 2, 1]]
+    )
+    def test_one_writer_per_channel_shard(
+        self, device: torch.device, mesh_dims: list[int]
+    ) -> None:
+        """Exactly one rank per JChannel shard writes, also with JSpatial > 1."""
+        create_process_mesh_dict(mesh_dims=mesh_dims)
+        writers = torch.zeros(mesh_dims[-1], device=device)
+        writers[get_process_group("JChannel").rank()] = float(is_checkpoint_writer())
+        dist.all_reduce(writers)
+        assert writers.tolist() == [1.0] * mesh_dims[-1]
 
     @pytest.mark.gpu
     @pytest.mark.dist(4)
@@ -84,7 +96,6 @@ class TestCheckpoint:
         channel_group = get_process_group("JChannel")
         spatial_group = get_process_group("JSpatial")
         dtp_group = get_process_group("DTP")
-        ddp_group = get_process_group("DDP")
 
         config = small_beast_config()
         model = get_model(
@@ -99,14 +110,14 @@ class TestCheckpoint:
         ).to(device)
         if bayesian:
             convert_jigsaw_vi(model, channel_group, spatial_group)
-            model.return_log_probs = False
+            # torch types Module attributes as Tensor | Module only.
+            model.return_log_probs = False  # type: ignore[assignment]
 
         dist.barrier()
-        model = DDP(
+        model = wrap_ddp(
             model,
-            device_ids=[device],
-            output_device=device,
-            process_group=ddp_group,
+            device_id=device.index,
+            ddp_group=get_process_group("DDP"),
         )
 
         input_beastling = torch.rand(
@@ -124,7 +135,7 @@ class TestCheckpoint:
                 output_native = model(input_beastling)
 
         optimizer = torch.optim.AdamW(model.parameters())
-        loss_value = torch.tensor([1.2], device=device)
+        loss_value = 1.2
 
         full_path = save_checkpoint(
             str(shared_tmp_path), model, optimizer, epoch=0, step=1, loss=loss_value

@@ -33,6 +33,12 @@ repos:
       # Check docstrings against numpydoc; configured in pyproject.toml.
       - id: numpydoc-validation
         files: ^beast/
+  - repo: https://github.com/citation-file-format/cffconvert
+    # No stable release for the pre-commit hook here, so commit pinned
+    rev: 054bda51dbe278b3e86f27c890e3f3ac877d616c
+    hooks:
+      # Validate CITATION.cff against the Citation File Format schema.
+      - id: validate-cff
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

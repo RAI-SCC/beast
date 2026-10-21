@@ -2,9 +2,10 @@
 
 ## The loss does not improve
 
-Check the log of rank 0 for `not found. Running dummy dataset`. If `data_path`
-does not exist, {func}`~beast.data.dataloader.get_dataloader` uses random data
-instead, and only rank 0 warns about it.
+Check that the data loader was created with
+{func}`~beast.data.dataloader.get_dataloader`.
+{func}`~beast.data.dataloader.get_dummy_dataloader` returns random data, which
+the model cannot learn.
 
 ## The job hangs at startup
 

@@ -71,6 +71,7 @@ class TestProcessorMesh:
         assert isinstance(process_mesh_dict, dict)
         expected_keys = {"DP", "SP", "JSpatial", "JChannel", "DTP", "DDP"}
         assert set(process_mesh_dict.keys()) == expected_keys
+        assert process_mesh_dict["DDP"].size() == mesh_dims[0] * mesh_dims[1]
 
         get_process_group("DP")
         get_process_group("SP")

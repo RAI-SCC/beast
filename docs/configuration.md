@@ -13,7 +13,7 @@ raises a `KeyError` when the loader is built, and unknown keys are ignored.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `data_path` | `str` | Path to the zarr store, see [Data format](#data-format). If the path does not exist, a dataset of random numbers is used instead and rank 0 issues a warning. |
+| `data_path` | `str` | Path to the zarr store, see [Data format](#data-format). If the path does not exist, {func}`~beast.data.dataloader.get_dataloader` raises a `FileNotFoundError`. Not read by {func}`~beast.data.dataloader.get_dummy_dataloader`. |
 | `constant_masks_path` | `str` | Directory with the constant mask files. |
 | `constant_masks` | `list[str]` | File names of the constant masks, appended to every input. |
 | `normalization_dir` | `str` | Directory with `norm_mean.npy` and `norm_std.npy`. |
@@ -26,7 +26,7 @@ raises a `KeyError` when the loader is built, and unknown keys are ignored.
 | `valid_subset` | `int` | The same for the validation samples. |
 | `num_workers` | `int` | Worker processes of the data loader. Must be at least 1. |
 | `prefetch_factor` | `int` | Batches loaded in advance by each worker. |
-| `n_variables`, `xlat`, `xlon` | `int` | Shape of the random data. Only read if `data_path` does not exist. |
+| `n_variables`, `xlat`, `xlon` | `int` | Shape of the random data of {func}`~beast.data.dataloader.get_dummy_dataloader`. Default to the ERA5 sizes 84, 721 and 1440. `dt` defaults to 6 there. |
 
 Any other `mode` than `"train"` and `"validation"` uses the whole time range of the
 data.

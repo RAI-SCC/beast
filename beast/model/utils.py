@@ -2,18 +2,84 @@
 
 import types
 
-import jigsaw.hooks as hooks  # type: ignore[import-not-found]
 import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
-from jigsaw import normalization  # type: ignore[import-not-found]
-from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
+from jigsaw import parallel  # type: ignore[import-not-found]
+from jigsaw.modules import DistributedLayerNorm  # type: ignore[import-not-found]
+from torch._C._functorch import get_unwrapped
 
 from beast.layers.nice_norm import DistributedNICENorm, NiceNorm
 
-if JIGSAW_TE_AVAILABLE:
-    import transformer_engine.pytorch as te
+
+def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | None:
+    """Draw a sample like ``VIModule.sample_variable``, through ``parallel.sync_grad``.
+
+    Only the sample sees the synced variational parameters, so only the data
+    fitting gradient is summed over their replica groups. The prior matching
+    term reads the raw parameters (``get_variational_parameters``, from the
+    loss) and keeps its full, replicated gradient, which DDP then averages.
+
+    Parameters
+    ----------
+    self : vi.VIModule
+        The module the sample is drawn for.
+    variable : str
+        Name of the variable to sample.
+
+    Returns
+    -------
+    torch.Tensor or None
+        The sample, or ``None`` if the variable has no variational distribution.
+    """
+    if self.variational_distribution[variable] is None:
+        return None
+
+    variational_parameters = parallel.sync_grad(
+        *self.get_variational_parameters(variable)
+    )
+    sample: torch.Tensor = self.variational_distribution[variable].sample(
+        tuple(variational_parameters)
+    )
+
+    if self.return_log_probs:
+        log_probs = self.get_log_probs(sample, variable)
+        try:
+            log_probs = get_unwrapped(log_probs)
+        except RuntimeError:
+            pass
+        self._log_probs[variable].append(log_probs)
+    return sample
+
+
+def _fast_forward_synced(self: vi.VIModule, input_: torch.Tensor) -> torch.Tensor:
+    """Run a torch_blue fast path (e.g. ``VILinear``'s) through ``parallel.sync_grad``.
+
+    The fast path reads the variational parameters directly instead of calling
+    ``sample_variable``, so it gets the synced parameters swapped in for the
+    call. Inside that call they carry no mark, so the re-entered fast path finds
+    nothing left to sync. Must not be used on the outermost module, whose
+    forward samples.
+
+    Parameters
+    ----------
+    self : vi.VIModule
+        The module to run.
+    input_ : torch.Tensor
+        Input to the module.
+
+    Returns
+    -------
+    torch.Tensor
+        Output of the module's fast path.
+    """
+    synced = parallel.synced_parameters(self)
+    if not synced:
+        out: torch.Tensor = type(self)._fast_forward(self, input_)  # type: ignore[attr-defined]
+        return out
+    out = torch.func.functional_call(self, synced, (input_,))
+    return out
 
 
 @torch.no_grad()
@@ -31,14 +97,20 @@ def convert_jigsaw_vi(
     """Make a module with jigsaw layers Bayesian, in place.
 
     Linear and convolution layers become torch_blue variational layers.
-    Normalization layers and Transformer Engine attention keep deterministic
-    weights. The variational parameters are replicated over `spatial_pg`:
+    Normalization layers keep deterministic weights. The variational parameters 
+    are replicated over ``spatial_pg``:
     they are broadcast from its first rank and their gradients are synchronized.
     The fan-in of the channel-sharded layers (`AVIDistributedXWT` and
     `AVIConvTranspose2d`) is scaled by the size of `channel_pg`, so that
     they are initialized like the full layer.
 
     The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
+
+    Every parameter is then marked replicated (``jigsaw.parallel``) over the
+    spatial group. Weight samples are drawn through ``parallel.sync_grad``, so
+    that partial gradient is summed over the replica groups in the backward
+    pass. Wrap the result in DDP over ``DP`` x ``SP`` (:func:`beast.comm.wrap_ddp`);
+    the UP loss scales its data fit so that DDP's average sums it over ``SP``.
 
     Parameters
     ----------
@@ -61,13 +133,20 @@ def convert_jigsaw_vi(
     return_log_probs : bool, default: True
         Whether the converted module returns log probabilities.
     """
-    vi.utils.convert.ban_convert(normalization.DistributedLayerNorm)
+    vi.utils.convert.ban_convert(DistributedLayerNorm)
     vi.utils.convert.ban_convert(NiceNorm)
     vi.utils.convert.ban_convert(DistributedNICENorm, ban_mode="submodule")
     vi.utils.convert.ban_convert(NiceNorm, ban_mode="submodule")
-    if JIGSAW_TE_AVAILABLE:
-        vi.utils.convert.ban_convert(te.DotProductAttention)
-        vi.utils.convert.ban_convert(te.DotProductAttention, ban_mode="submodule")
+
+    # The conversion replaces each parameter with fresh variational parameters,
+    # which do not contain the replica marks.
+    marks = {
+        m: {
+            name: parallel.replica_groups(p)
+            for name, p in m.named_parameters(recurse=False)
+        }
+        for m in module.modules()
+    }
 
     vi.convert_to_vimodule(
         module,
@@ -102,7 +181,7 @@ def convert_jigsaw_vi(
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
-    fan_in_rescale_list = ["AVIDistributedXWT", "AVIConvTranspose2d"]
+    fan_in_rescale_list = ["AVIDistributedLinear", "AVIConvTranspose2d"]
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
@@ -112,18 +191,45 @@ def convert_jigsaw_vi(
             m._calculate_fan_in = types.MethodType(new_cf_channel, m)
             m.reset_variational_parameters()
 
-        if isinstance(m, vi.VIModule):
-            for p in m.parameters(recurse=False):
-                p.register_post_accumulate_grad_hook(
-                    hooks.make_grad_sync_hook(spatial_pg)
-                )
-                dist.broadcast(p.data, group_src=0, group=spatial_pg)
+        if isinstance(m, vi.VIModule) and m.random_variables is not None:
+            for var in m.random_variables:
+                if m.variational_distribution[var] is None:
+                    continue
+                for p in m.get_variational_parameters(var):
+                    parallel.mark_replicated(p, marks.get(m, {}).get(var, ()))
+            m.sample_variable = types.MethodType(_sample_variable_synced, m)  # type: ignore[method-assign]
+            if hasattr(type(m), "_fast_forward"):
+                m._fast_forward = types.MethodType(_fast_forward_synced, m)  # type: ignore[assignment]
+
+    if spatial_pg is not None and spatial_pg.size() > 1:
+        spatial_ranks = dist.get_process_group_ranks(spatial_pg)
+        unmarked = [
+            name
+            for name, p in module.named_parameters()
+            if all(
+                dist.get_process_group_ranks(g) != spatial_ranks
+                for g in parallel.replica_groups(p)
+            )
+        ]
+        if unmarked:
+            raise RuntimeError(
+                f"{len(unmarked)} parameter(s) are not marked replicated over the "
+                f"spatial group, e.g. {unmarked[:5]}. Mark them with "
+                "jigsaw.parallel.mark_replicated where they are created and route "
+                "their module through jigsaw.parallel.synced_parameters."
+            )
+
+    # Conversion reinitialized the variational parameters on every rank.
+    parallel.broadcast_replicas(module)
 
 
 def count_model_parameters(
-    model: torch.nn.Module, parallelism: int, bayesian: bool
+    model: torch.nn.Module, parallelism: int, pending_bayesian_conversion: bool
 ) -> int:
-    """Count model parameters, scaled by parallelism and doubled if Bayesian.
+    """Count a model's parameters, scaled by parallelism.
+
+    Must be called before ``convert_jigsaw_vi`` converts the model to a
+    bayesian one, while it still holds its deterministic weights.
 
     Parameters
     ----------
@@ -132,15 +238,21 @@ def count_model_parameters(
         `get_parameter_count` contribute.
     parallelism : int
         The degree of parallelism.
-    bayesian : bool
-        Whether to double the count, for a mean and a spread per weight. A
-        single-process model converted with torch_blue already holds both as
-        separate parameters, so its count is doubled once more.
+    pending_bayesian_conversion : bool
+        Whether ``model`` is about to be converted to a Bayesian model with
+        ``convert_jigsaw_vi``.
 
     Returns
     -------
     int
         Total parameter count.
+
+    Notes
+    -----
+    This function counts whatever parameters ``model`` holds at the moment
+    it is called; it has no way of telling whether a torch_blue conversion
+    already took place. Calling it with ``pending_bayesian_conversion=True``
+    on a model converted by ``convert_jigsaw_vi`` will overcount parameters.
     """
     if parallelism == 1:
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -155,7 +267,7 @@ def count_model_parameters(
 
         total = param_sum * parallelism
 
-    if bayesian:
-        total = total * 2  # Count every parameter twice, if bayesian
+    if pending_bayesian_conversion:
+        total = total * 2  # Anticipate the mean + spread split, pre-conversion
 
     return total

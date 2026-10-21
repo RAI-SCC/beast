@@ -5,8 +5,14 @@ from typing import Any, Sequence
 
 import torch
 import torch.distributed as dist
-from jigsaw import hooks, linear, roll  # type: ignore
-from jigsaw.modules.convolution import DistributedConv2D, DistributedConv2DTranspose
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import (  # type: ignore[import-not-found]
+    DistributedConv2d,
+    DistributedConvTranspose2d,
+    DistributedLinear,
+    DistributedRoll,
+    Roll,
+)
 
 from beast.layers import transformer
 
@@ -321,7 +327,7 @@ class Beast(torch.nn.Module):
             "dtp_group must not be None for distributed model"
         )
 
-        self.patch_embedding: torch.nn.Module = DistributedConv2D(
+        self.patch_embedding: torch.nn.Module = DistributedConv2d(
             self.in_channels,
             self.embed_dim,  # global values
             self.kernel_size,
@@ -337,7 +343,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.downsample: torch.nn.Module = DistributedConv2D(
+        self.downsample: torch.nn.Module = DistributedConv2d(
             self.embed_dim,
             self.embed_dim * 2,  # global values
             2,
@@ -353,7 +359,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.upsample: torch.nn.Module = DistributedConv2DTranspose(
+        self.upsample: torch.nn.Module = DistributedConvTranspose2d(
             self.embed_dim * 2,
             self.embed_dim,  # global values
             2,
@@ -370,7 +376,7 @@ class Beast(torch.nn.Module):
         )
 
         # each process would have weights: [embed //2 , embed]
-        self.upsample_mix: torch.nn.Module = linear.DistributedXWT(
+        self.upsample_mix: torch.nn.Module = DistributedLinear(
             in_dim=self.embed_dim,
             out_dim=self.embed_dim,
             bias=True,
@@ -378,11 +384,11 @@ class Beast(torch.nn.Module):
             device=self.device,
             model_group=self.channel_group,
             row_group=self.spatial_group,
-            column_group=self.channel_group,
+            col_group=self.channel_group,
             bayesian=self.bayesian,
         )
 
-        self.patch_recovery: torch.nn.Module = DistributedConv2DTranspose(
+        self.patch_recovery: torch.nn.Module = DistributedConvTranspose2d(
             self.embed_dim * 2,
             self.out_channels,  # global values
             self.kernel_size,
@@ -529,7 +535,7 @@ class Beast(torch.nn.Module):
                 ]
             )
 
-        self.roll_out: torch.nn.Module = roll.DistributedRoll(
+        self.roll_out: torch.nn.Module = DistributedRoll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -538,7 +544,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_out: torch.nn.Module = roll.DistributedRoll(
+        self.unroll_out: torch.nn.Module = DistributedRoll(
             shifts=(
                 -(self.window_size_outer[0] // 2),
                 -(self.window_size_outer[1] // 2),
@@ -549,7 +555,7 @@ class Beast(torch.nn.Module):
             device=self.device,
             dtype=self.dtype,
         )
-        self.roll_in: torch.nn.Module = roll.DistributedRoll(
+        self.roll_in: torch.nn.Module = DistributedRoll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
             distributed_dims=[-2],
@@ -558,7 +564,7 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
-        self.unroll_in: torch.nn.Module = roll.DistributedRoll(
+        self.unroll_in: torch.nn.Module = DistributedRoll(
             shifts=(
                 -(self.window_size_inner[0] // 2),
                 -(self.window_size_inner[1] // 2),
@@ -570,11 +576,11 @@ class Beast(torch.nn.Module):
             dtype=self.dtype,
         )
 
+        # The weight is replicated over the spatial group too; DistributedLinear
+        # marks only its bias, over row_group, and syncs both in its forward.
         for p in self.upsample_mix.parameters():
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(self.spatial_group)
-            )
-            dist.broadcast(p.data, group_src=0, group=self.spatial_group)
+            parallel.mark_replicated(p, self.spatial_group, extend=True)
+        parallel.broadcast_replicas(self.upsample_mix)
 
     def _build_sequential_model(self) -> None:
         """Build the single-process layers."""
@@ -694,19 +700,19 @@ class Beast(torch.nn.Module):
             ]
         )
 
-        self.roll_out = roll.Roll(
+        self.roll_out = Roll(
             shifts=(self.window_size_outer[0] // 2, self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-        self.unroll_out = roll.Roll(
+        self.unroll_out = Roll(
             shifts=(-self.window_size_outer[0] // 2, -self.window_size_outer[1] // 2),
             dims=(-3, -2),
         )
-        self.roll_in = roll.Roll(
+        self.roll_in = Roll(
             shifts=(self.window_size_inner[0] // 2, self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )
-        self.unroll_in = roll.Roll(
+        self.unroll_in = Roll(
             shifts=(-self.window_size_inner[0] // 2, -self.window_size_inner[1] // 2),
             dims=(-3, -2),
         )

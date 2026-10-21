@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 import xarray as xr
-from torch import Tensor
 from torch.utils.data import Dataset
 
 from beast.comm import execute_in_waves
@@ -140,7 +139,7 @@ class ERA5Distributed(Dataset):
 
         self.datapath = data_path
         self.years = time_range
-        self.mask_path = constant_masks_path
+        self.mask_path: str = constant_masks_path
         self.rollout = rollout
         mask_list = constant_masks
 
@@ -208,6 +207,24 @@ class ERA5Distributed(Dataset):
         else:
             load_data()
 
+        self._setup_domain_decomposition()
+
+        self.transform = transform
+        if target_transform is None:
+            self.target_transform = transform
+        else:
+            self.target_transform = target_transform
+
+        try:
+            _ = self.__getitem__(0)
+        except Exception as err:
+            raise RuntimeError(
+                "Dataset was instantiated, but data items cannot be loaded. Data "
+                "seems to be empty, or does not contain `fields`."
+            ) from err
+
+    def _setup_domain_decomposition(self) -> None:
+        """Compute the rank local shards of variables, masks and longitude, and the padding of odd ranks."""
         if self.world_size > 1:
             row, col = self.local_rank % 2, self.local_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
@@ -278,20 +295,6 @@ class ERA5Distributed(Dataset):
             self.input_pad_oddrank = 0
             self.output_pad_oddrank = 0
 
-        self.transform = transform
-        if target_transform is None:
-            self.target_transform = transform
-        else:
-            self.target_transform = target_transform
-
-        try:
-            _ = self.__getitem__(0)
-        except Exception as err:
-            raise RuntimeError(
-                "Dataset was instantiated, but data items cannot be loaded. Data "
-                "seems to be empty, or does not contain `fields`."
-            ) from err
-
     def __len__(self) -> int:
         """Return the number of samples that have a complete input and target.
 
@@ -302,9 +305,8 @@ class ERA5Distributed(Dataset):
         """
         return int(
             self.n_data_items
-            - (self.in_timesteps + self.out_timesteps - 1)
+            - (self.in_timesteps + self.rollout * self.out_timesteps - 1)
             * (self.dt // SUBSAMPLING_FACTOR)
-            * self.rollout
         )
 
     def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
@@ -385,7 +387,7 @@ class ERA5Distributed(Dataset):
             Shape ``(channel shard * n_out_timesteps * rollout, xlat, longitude shard)``.
         """
         input_list = self._get_sample_list(idx, steps=self.in_timesteps)
-        input_list.append(self.get_constant_masks().to(self.dtype))
+        input_list.append(self._get_constant_masks().to(self.dtype))
         input = torch.cat(input_list, dim=0)
         input = self._padsample(input, self.input_pad_oddrank)
 
@@ -406,8 +408,8 @@ class ERA5Distributed(Dataset):
 
         return input, target
 
-    def get_constant_masks(self) -> torch.Tensor:
-        """Return the constant masks of this rank.
+    def _get_constant_masks(self) -> torch.Tensor:
+        """Return the rank local shard of the constant masks.
 
         Returns
         -------
@@ -447,12 +449,12 @@ class ERA5Distributed(Dataset):
         if channel_rank == 0:
             for i in range(self.out_timesteps):
                 feature_weights[i * (self.in_var[1] - self.in_var[0]) + sst_idx] = (
-                    1 - self.get_land_sea_mask(folder_path=self.mask_path)
+                    1 - self._get_land_sea_mask(folder_path=self.mask_path)
                 )
 
         return feature_weights
 
-    def get_land_sea_mask(
+    def _get_land_sea_mask(
         self, folder_path: str, sst_mask_name: str = "sst_mask.npy"
     ) -> torch.Tensor:
         """Return the land-sea mask of this rank, 1 over land.
@@ -520,13 +522,46 @@ class ERA5Distributed(Dataset):
         """
         input_samples = sample_list[-self.in_timesteps :]
         batch_dim = input_samples[0].shape[0]
-        cmasks = self.get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
+        cmasks = self._get_constant_masks().unsqueeze(0).repeat(batch_dim, 1, 1, 1)
         input_samples.append(cmasks.to(self.dtype))
         input = torch.cat(input_samples, dim=-3)
         return self._padsample(input, self.input_pad_oddrank)
 
+    def list_from_output(
+        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
+    ) -> list[torch.Tensor]:
+        """Split the model output into timesteps and mask fixed values.
 
-class ERA5Dummy(Dataset):
+        Parameters
+        ----------
+        output : torch.Tensor
+            Model output of shape ``(batch, channel shard * out_timesteps, xlat, longitude shard)``.
+        feature_weights : torch.Tensor
+            Loss weights, see :meth:`get_feature_weights`. Output where they
+            are 0 is replaced by ``fill``.
+        fill : float
+            Value for the masked output.
+
+        Returns
+        -------
+        list[torch.Tensor]
+            One tensor per output timestep, moved to the CPU so that long
+            rollouts do not fill up GPU memory.
+        """
+        # Output shape: LSN, LBS, C, lat, lon
+
+        target_list = []
+        n_vars = self.in_var[1] - self.in_var[0]
+        output = torch.where(feature_weights == 0, fill, output)
+        for i in range(self.out_timesteps):
+            target_list.append(
+                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
+            )
+
+        return target_list
+
+
+class ERA5Dummy(ERA5Distributed):
     """Dataset of random or constant ``(input, target)`` pairs of a given shape.
 
     Inputs and targets stack one or more timesteps along the channel dimension.
@@ -557,7 +592,10 @@ class ERA5Dummy(Dataset):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to `transform`.
+        Transformation applied to the target. Defaults to ``transform``.
+    rollout : int, default: 1
+        Number of rollout steps. The target holds ``n_out_timesteps * rollout``
+        timesteps.
 
     Attributes
     ----------
@@ -573,7 +611,7 @@ class ERA5Dummy(Dataset):
         Time range, `time_range`. If None, the year 2000 is used.
     n_data_items : int
         Number of hourly timesteps in the time range.
-    num_vars, xlat, xlon : int
+    n_variables, xlat, xlon : int
         Global channel and grid sizes, with the grid rounded down to an even
         number.
     in_var : List[int]
@@ -595,10 +633,12 @@ class ERA5Dummy(Dataset):
         dtype: torch.dtype = torch.float32,
         transform: Callable | None = None,
         target_transform: Callable | None = None,
+        rollout: int = 1,
     ):
         self.dt = dt
         self.in_timesteps = n_in_timesteps
         self.out_timesteps = n_out_timesteps
+        self.rollout = rollout
 
         self.dtype = dtype
         self.world_size = pg_size
@@ -615,7 +655,7 @@ class ERA5Dummy(Dataset):
             min_date = datetime.strptime("2000-01-01", "%Y-%m-%d")
         print(f"Dummy Dataset max_date {max_date}, min_date {min_date} ")
 
-        self.num_vars, self.xlat, self.xlon = global_shape
+        self.n_variables, self.xlat, self.xlon = global_shape
         self.n_data_items = int((max_date - min_date).days * 24)
         print(f"Dummy Dataset n_data_items {self.n_data_items} ")
 
@@ -624,19 +664,13 @@ class ERA5Dummy(Dataset):
         if self.xlon % 2 == 1:
             self.xlon -= 1
 
-        self.in_out_xlat = [0, self.xlat]
-        if self.world_size > 1:
-            row, col = self.local_rank % 2, self.local_rank // 2
-            # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
-            self.in_var = [row * self.num_vars // 2, (row + 1) * self.num_vars // 2]
-            self.in_out_xlon = [
-                col * self.xlon // (self.world_size // 2),
-                (col + 1) * self.xlon // (self.world_size // 2),
-            ]
+        # The dummy dataset has no constant masks, so the variable imbalance is fully padded on odd ranks
+        self.mask_path = ""
+        self.constant_masks = np.zeros((0, self.xlat, self.xlon))
+        self.n_masks = 0
 
-        else:
-            self.in_var = [0, self.num_vars]
-            self.in_out_xlon = [0, self.xlon]
+        self.in_out_xlat = [0, self.xlat]
+        self._setup_domain_decomposition()
 
         self.transform = transform
         if target_transform is None:
@@ -644,59 +678,40 @@ class ERA5Dummy(Dataset):
         else:
             self.target_transform = target_transform
 
-    def __len__(self) -> int:
-        """Return the number of samples that have a complete input and target.
-
-        Returns
-        -------
-        int
-            The number of samples.
-        """
-        return int(
-            self.n_data_items - (self.in_timesteps + self.out_timesteps - 1) * self.dt
-        )
-
-    def __getitem__(self, idx: int) -> Tuple[Tensor, Tensor]:
-        """Return one generated ``(input, target)`` pair.
+    def _get_sample_list(self, idx: int, steps: int) -> list[torch.Tensor]:
+        """Generate the samples of ``steps`` consecutive timesteps.
 
         Parameters
         ----------
         idx : int
-            Index of the item. Items are generated, so every index returns
-            equivalent data.
+            Index of the first timestep. Samples are generated, so every index
+            returns equivalent data.
+        steps : int
+            Number of timesteps.
 
         Returns
         -------
-        input : Tensor
-            Shape ``(channel shard * n_in_timesteps, xlat, longitude shard)``.
-        target : Tensor
-            Shape ``(channel shard * n_out_timesteps, xlat, longitude shard)``.
+        list[torch.Tensor]
+            One tensor per timestep, of shape
+            ``(channel shard, xlat, longitude shard)``, filled with
+            ``fill_value`` or, if it is ``None`` or 0, with uniform random
+            numbers.
         """
-        shape_in = (
-            (self.in_var[1] - self.in_var[0]) * self.in_timesteps,
+        shape = (
+            self.in_var[1] - self.in_var[0],
             self.in_out_xlat[1] - self.in_out_xlat[0],
             self.in_out_xlon[1] - self.in_out_xlon[0],
         )
-        shape_out = (
-            (self.in_var[1] - self.in_var[0]) * self.out_timesteps,
-            self.in_out_xlat[1] - self.in_out_xlat[0],
-            self.in_out_xlon[1] - self.in_out_xlon[0],
-        )
+        sample_list = []
+        for _ in range(steps):
+            if self.fill_value:
+                sample = torch.full(shape, self.fill_value, dtype=self.dtype)
+            else:
+                sample = torch.rand(shape, dtype=self.dtype)
 
-        if self.fill_value is not None:
-            input = torch.full(shape_in, self.fill_value, dtype=self.dtype)
-            target = torch.full(shape_out, self.fill_value, dtype=self.dtype)
-        else:
-            input = torch.rand(shape_in, dtype=self.dtype)
-            target = torch.rand(shape_out, dtype=self.dtype)
+            sample_list.append(sample)
 
-        if self.transform is not None:
-            input = self.transform(input)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return input, target
+        return sample_list
 
 
 @dc.dataclass
@@ -829,7 +844,7 @@ class EWBEra5(ERA5Distributed):
         """
         return len(self.event_lead_list)
 
-    def input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
+    def _input_dates(self, start_date: datetime, lead_time: int) -> list[datetime]:
         """Return the input timestamps of one forecast, oldest first.
 
         The forecast is initialized at ``start_date - lead_time``. That is the
@@ -877,7 +892,7 @@ class EWBEra5(ERA5Distributed):
         event, lead_time = self.event_lead_list[idx]
 
         samples = []
-        for date in self.input_dates(event.start_date, lead_time):
+        for date in self._input_dates(event.start_date, lead_time):
             sample = (
                 self.zarr_data.sel(time=date)
                 .isel(
@@ -900,36 +915,3 @@ class EWBEra5(ERA5Distributed):
             samples.append(torch.tensor(sample, dtype=self.dtype).unsqueeze(0))
 
         return event, lead_time, samples
-
-    def list_from_output(
-        self, output: torch.Tensor, feature_weights: torch.Tensor, fill: float
-    ) -> list[torch.Tensor]:
-        """Split the model output into timesteps and mask fixed values.
-
-        Parameters
-        ----------
-        output : torch.Tensor
-            Model output of shape ``(batch, channel shard * out_timesteps, xlat, longitude shard)``.
-        feature_weights : torch.Tensor
-            Loss weights, see :meth:`ERA5Distributed.get_feature_weights`.
-            Output where they are 0 is replaced by `fill`.
-        fill : float
-            Value for the masked output.
-
-        Returns
-        -------
-        list[torch.Tensor]
-            One tensor per output timestep, moved to the CPU so that long
-            rollouts do not fill up GPU memory.
-        """
-        # Output shape: LSN, LBS, C, lat, lon
-
-        target_list = []
-        n_vars = self.in_var[1] - self.in_var[0]
-        output = torch.where(feature_weights == 0, fill, output)
-        for i in range(self.out_timesteps):
-            target_list.append(
-                output[:, n_vars * i : n_vars * (i + 1), :, :].contiguous().cpu()
-            )
-
-        return target_list
