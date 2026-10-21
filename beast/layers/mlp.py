@@ -158,7 +158,7 @@ class DistributedMLPNICE(torch.nn.Module):
     ----------
     linear1 : torch.nn.Linear
         First layer, from `in_dim` to this rank's slice of `hidden_dim`.
-    linear2 : jigsaw.linear.DistributedXWT
+    linear2 : jigsaw.modules.DistributedLinear
         Second layer, from `hidden_dim` to `out_dim`.
     activation : torch.nn.GELU
         Activation after `linear1`.
@@ -265,9 +265,9 @@ class DistributedSynchronizedMLP(torch.nn.Module):
 
     Attributes
     ----------
-    linear1 : jigsaw.linear.DistributedXWT
+    linear1 : jigsaw.modules.DistributedLinear
         First layer, from `in_dim` to `hidden_dim`.
-    linear2 : jigsaw.linear.DistributedXWT
+    linear2 : jigsaw.modules.DistributedLinear
         Second layer, from `hidden_dim` to `out_dim`.
     activation : torch.nn.GELU
         Activation after `linear1`.

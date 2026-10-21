@@ -97,10 +97,10 @@ def convert_jigsaw_vi(
     """Make a module with jigsaw layers Bayesian, in place.
 
     Linear and convolution layers become torch_blue variational layers.
-    Normalization layers keep deterministic weights. The variational parameters 
-    are replicated over ``spatial_pg``:
-    they are broadcast from its first rank and their gradients are synchronized.
-    The fan-in of the channel-sharded layers (`AVIDistributedXWT` and
+    Normalization layers keep deterministic weights. The variational parameters
+    are replicated over `spatial_pg`: they are broadcast from its first rank and
+    their gradients are synchronized.
+    The fan-in of the channel-sharded layers (`AVIDistributedLinear` and
     `AVIConvTranspose2d`) is scaled by the size of `channel_pg`, so that
     they are initialized like the full layer.
 

@@ -89,7 +89,7 @@ class TransformerBlock(torch.nn.Module):
 
     Attributes
     ----------
-    attention_block : jigsaw.attention.Attention
+    attention_block : jigsaw.modules.Attention
         Attention, including the query, key, value and output projections.
     layer_norm1 : torch.nn.LayerNorm
         Layer norm applied to the input of `attention_block`.
@@ -153,7 +153,7 @@ class TransformerBlock(torch.nn.Module):
 
 
 class NiceTransformer(torch.nn.Module):
-    """Transformer block with windowed attention and NICE normalization.
+    """Pre-norm transformer block with windowed attention and NICE normalization.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ class NiceTransformer(torch.nn.Module):
 
     Attributes
     ----------
-    attention_block : jigsaw.attention.Attention
+    attention_block : jigsaw.modules.Attention
         Attention, including the query, key, value and output projections.
     layer_norm1 : beast.layers.nice_norm.NiceNorm
         NICE normalization applied to the input of `attention_block`.
@@ -248,10 +248,11 @@ class NiceTransformer(torch.nn.Module):
 
 
 class DistributedTransformer(torch.nn.Module):
-    """Windowed transformer block sharded across processes.
+    """Distributed pre-norm transformer block with windowed attention.
 
-    The grid is split over the ``JSpatial`` process group and the channels over
-    the ``JChannel`` process group.
+    The block is sharded over the ``DTP`` process group: the grid is split over
+    the ``JSpatial`` process group and the channels over the ``JChannel``
+    process group.
 
     Parameters
     ----------
@@ -286,7 +287,7 @@ class DistributedTransformer(torch.nn.Module):
 
     Attributes
     ----------
-    attention_block : jigsaw.attention.DistributedAttention
+    attention_block : jigsaw.modules.DistributedAttention
         Attention, including the query, key, value and output projections.
     layer_norm1 : torch.nn.LayerNorm
         Layer norm over this rank's channel shard, applied to the input of
@@ -377,10 +378,11 @@ class DistributedTransformer(torch.nn.Module):
 
 
 class DistributedNICETransformer(torch.nn.Module):
-    """Windowed transformer block with NICE normalization, sharded across processes.
+    """Distributed pre-norm transformer block with windowed attention and NICE normalization.
 
-    The grid is split over the ``JSpatial`` process group and the channels over
-    the ``JChannel`` process group. Every rank receives the same noise.
+    The block is sharded over the ``DTP`` process group: the grid is split over
+    the ``JSpatial`` process group and the channels over the ``JChannel``
+    process group. Every rank receives the same noise.
 
     Parameters
     ----------
@@ -417,7 +419,7 @@ class DistributedNICETransformer(torch.nn.Module):
 
     Attributes
     ----------
-    attention_block : jigsaw.attention.DistributedAttention
+    attention_block : jigsaw.modules.DistributedAttention
         Attention, including the query, key, value and output projections. Uses
         Transformer Engine if `USE_TE_DPA` is set, otherwise torch SDPA.
     layer_norm1 : beast.layers.nice_norm.DistributedNICENorm
