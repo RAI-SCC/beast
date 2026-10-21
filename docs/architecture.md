@@ -52,10 +52,10 @@ and adds the KL divergence between the weight distributions and their prior.
 
 ## Parallelism
 
-BEAST splits the work over four dimensions at once. The paper groups them into
-three levels of parallelism, shown in the figure from left to right. In the
-code, each level corresponds to dimensions of the process mesh that
-{func}`~beast.comm.create_process_mesh_dict` builds, described in the
+BEAST splits both the work and the memory over four dimensions at once. The
+paper groups them into three levels of parallelism, shown in the figure from
+left to right. In the code, each level corresponds to dimensions of the process
+mesh that {func}`~beast.comm.create_process_mesh_dict` builds, described in the
 [Quickstart](quickstart.md#1-build-the-process-mesh):
 
 | Paper | Mesh groups | What the ranks of a group do |
@@ -90,8 +90,8 @@ Within a `DTP` group, every rank holds part of the same sample:
   Transformer Engine if `BEAST_USE_TE_DPA` is set. Another distributed linear
   layer maps the result back to the local channels.
 - **Parameters.** Parameters are sharded over the `JChannel` group and
-  replicated over the `JSpatial` group, where their gradients are summed.
-  {func}`~beast.comm.wrap_ddp` then averages the gradients over the `DDP` group.
+  replicated over the `JSpatial` group. DDP averages their gradients over the
+  `DDP` group.
 
 ## Package layout
 
