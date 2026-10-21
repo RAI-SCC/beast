@@ -51,11 +51,11 @@ def crps(
         mae_part, op=dist.ReduceOp.AVG, group=up_group, async_op=True
     )
 
-    local_rank = up_group.rank()
-    world_size = up_group.size()
+    up_rank = up_group.rank()
+    up_size = up_group.size()
 
     samples_per_worker = prediction.shape[sample_dim]
-    total_samples = samples_per_worker * world_size
+    total_samples = samples_per_worker * up_size
     denominator = 2 * total_samples * (total_samples - 1)
 
     # local spread
@@ -71,16 +71,16 @@ def crps(
     send_buffer = prediction.clone()
     recv_buffer = torch.zeros_like(prediction)
 
-    next_rank = (local_rank + 1) % world_size
-    prev_rank = (local_rank - 1 + world_size) % world_size
+    next_rank = (up_rank + 1) % up_size
+    prev_rank = (up_rank - 1 + up_size) % up_size
 
-    for _ in range(1, world_size):
+    for _ in range(1, up_size):
         # swap buffers
         ops = [
             dist.P2POp(dist.isend, send_buffer, group_peer=next_rank, group=up_group),
             dist.P2POp(dist.irecv, recv_buffer, group_peer=prev_rank, group=up_group),
         ]
-        if local_rank % 2 == 1:
+        if up_rank % 2 == 1:
             ops.reverse()  # avoid deadlock by reversing order for odd ranks
 
         reqs = dist.batch_isend_irecv(ops)
