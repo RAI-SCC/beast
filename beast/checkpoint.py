@@ -12,6 +12,28 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from beast.comm import get_process_group
 
 
+def is_checkpoint_writer() -> bool:
+    """Return whether this rank writes its JChannel shard's checkpoint file.
+
+    Every rank in ``DDP`` (``DP x SP``) x ``JSpatial`` holds the same shard, so
+    exactly one of them, rank 0 in both groups, writes it. Without a process
+    mesh, global rank 0 writes.
+
+    Returns
+    -------
+    bool
+        True on the writing rank.
+    """
+    if not dist.is_initialized():
+        return True
+    try:
+        ddp_group = get_process_group("DDP")
+        spatial_group = get_process_group("JSpatial")
+    except ValueError:
+        return dist.get_rank() == 0
+    return ddp_group.rank() == 0 and spatial_group.rank() == 0
+
+
 def save_checkpoint(
     checkpoint_path: str,
     model: torch.nn.Module,
@@ -48,18 +70,11 @@ def save_checkpoint(
     """
     try:
         channel_group: dist.ProcessGroup | None = get_process_group("JChannel")
-        ddp_group: dist.ProcessGroup | None = get_process_group("DDP")
 
     except ValueError:
         channel_group = None
-        ddp_group = None
 
-    if channel_group is None:
-        channel_group_rank = -1
-        ddp_rank = dist.get_rank(group=None)
-    else:
-        channel_group_rank = channel_group.rank()
-        ddp_rank = ddp_group.rank() if ddp_group else 0
+    channel_group_rank = -1 if channel_group is None else channel_group.rank()
 
     # Ensure loss is a plain float to avoid tensor attributes on save
     loss_value = float(loss) if isinstance(loss, (int, float, torch.Tensor)) else loss
@@ -78,7 +93,7 @@ def save_checkpoint(
     channel_str = f"-jc{channel_group.rank()}" if channel_group else ""
     model_name = f"cp-epoch{epoch}" + step_str + channel_str
 
-    if ddp_rank == 0:
+    if is_checkpoint_writer():
         torch.save(
             cp,
             f"{checkpoint_path}/{model_name}.pt",

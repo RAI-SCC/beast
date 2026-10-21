@@ -6,20 +6,25 @@ import warnings
 
 import torch
 import torch.distributed as dist
-from jigsaw import attention, hooks  # type: ignore
-from jigsaw.modules.attention.attention import JIGSAW_TE_AVAILABLE
+from jigsaw import parallel  # type: ignore
+from jigsaw.modules import (  # type: ignore[import-not-found]
+    Attention,
+    DistributedAttention,
+)
+from jigsaw.modules.attention import (  # type: ignore[import-not-found]
+    JIGSAW_TE_AVAILABLE,
+)
 
 from beast.layers import mlp, nice_norm
 
-USE_TE_DPA = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
-if USE_TE_DPA and not JIGSAW_TE_AVAILABLE:
-    if os.getenv("RANK", "0") == "0":
-        warnings.warn(
-            "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
-            "Falling back to torch SDPA.",
-            UserWarning,
-        )
-    USE_TE_DPA = False
+_TE_DPA_REQUESTED = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
+if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE and os.getenv("RANK", "0") == "0":
+    warnings.warn(
+        "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
+        "Falling back to torch SDPA.",
+        UserWarning,
+    )
+USE_TE_DPA = _TE_DPA_REQUESTED and JIGSAW_TE_AVAILABLE
 
 
 class TransformerBlock(torch.nn.Module):
@@ -62,7 +67,7 @@ class TransformerBlock(torch.nn.Module):
         self.device = device
 
         # QKV projection, scaled dot-product attention and output projection
-        self.attention_block = attention.Attention(
+        self.attention_block = Attention(
             self.in_dim,
             self.embed_dim,
             self.out_dim,
@@ -140,7 +145,7 @@ class NiceTransformer(torch.nn.Module):
         self.device = device
 
         # QKV projection, scaled dot-product attention and output projection
-        self.attention_block = attention.Attention(
+        self.attention_block = Attention(
             self.in_dim,
             self.embed_dim,
             self.out_dim,
@@ -235,17 +240,17 @@ class DistributedTransformer(torch.nn.Module):
     ):
         super().__init__()
 
-        self.attention_block = attention.DistributedAttention(
+        self.attention_block = DistributedAttention(
             in_dim,
             embed_dim,
             out_dim,
             heads,
-            dropout,
-            local_rank,
-            device,
-            spatial_group,
-            channel_group,
-            bayesian,
+            local_rank=local_rank,
+            device=device,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
+            dropout_p=dropout,
+            bayesian=bayesian,
             qk_norm=qk_norm,
             ring=False,
             dtype=dtype,
@@ -275,9 +280,7 @@ class DistributedTransformer(torch.nn.Module):
         for p in itertools.chain(
             self.layer_norm1.parameters(), self.layer_norm2.parameters()
         ):
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(spatial_group)
-            )
+            parallel.mark_replicated(p, spatial_group, extend=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply attention and the MLP, each with a residual connection.
@@ -292,8 +295,8 @@ class DistributedTransformer(torch.nn.Module):
         torch.Tensor
             Local output shard.
         """
-        x = self.attention_block(self.layer_norm1(x)) + x
-        x = self.mlp(self.layer_norm2(x)) + x
+        x = self.attention_block(parallel.synced_call(self.layer_norm1, x)) + x
+        x = self.mlp(parallel.synced_call(self.layer_norm2, x)) + x
         return x
 
 
@@ -354,17 +357,17 @@ class DistributedNICETransformer(torch.nn.Module):
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
-        self.attention_block = attention.DistributedAttention(
+        self.attention_block = DistributedAttention(
             in_dim,
             embed_dim,
             out_dim,
             heads,
-            dropout,
-            local_rank,
-            device,
-            spatial_group,
-            channel_group,
-            bayesian,
+            local_rank=local_rank,
+            device=device,
+            spatial_group=spatial_group,
+            channel_group=channel_group,
+            dropout_p=dropout,
+            bayesian=bayesian,
             qk_norm=qk_norm,
             attn_backend="te" if USE_TE_DPA else "sdpa",
             dtype=dtype,
@@ -401,13 +404,6 @@ class DistributedNICETransformer(torch.nn.Module):
             channel_group=channel_group,
             bayesian=bayesian,
         ).to(device)
-
-        for p in itertools.chain(
-            self.layer_norm1.parameters(), self.layer_norm2.parameters()
-        ):
-            p.register_post_accumulate_grad_hook(
-                hooks.make_grad_sync_hook(spatial_group)
-            )
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """Apply attention and the MLP, each with a residual connection.

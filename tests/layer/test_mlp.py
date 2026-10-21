@@ -3,7 +3,7 @@
 import pytest
 import torch
 import torch.distributed as dist
-from jigsaw import utils_aggregate
+from jigsaw import gather
 
 from beast.comm import create_process_mesh_dict
 from beast.layers import mlp
@@ -35,7 +35,7 @@ class TestDistributedMLPNice:
 
         assert isinstance(model, mlp.DistributedMLPNICE)
         # collect weights
-        weights_gathered = utils_aggregate.gather_results_as_list(
+        weights_gathered = gather.gather_results_as_list(
             model.linear1.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -48,7 +48,7 @@ class TestDistributedMLPNice:
         assert not torch.allclose(weights_gathered[2], weights_gathered[3])
 
         # Second linear layer: weights should be same across pairs of processes
-        weights_gathered = utils_aggregate.gather_results_as_list(
+        weights_gathered = gather.gather_results_as_list(
             model.linear2.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -93,7 +93,7 @@ class TestDistributedMLPNice:
             pred.backward(torch.randn_like(pred))
 
         # assert
-        x_grad = utils_aggregate.gather_results_as_list(
+        x_grad = gather.gather_results_as_list(
             x.grad,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -105,7 +105,7 @@ class TestDistributedMLPNice:
         assert torch.allclose(x_grad[0], x_grad[1])
         assert torch.allclose(x_grad[2], x_grad[3])
 
-        w = utils_aggregate.gather_results_as_list(
+        w = gather.gather_results_as_list(
             model.linear1.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -115,7 +115,7 @@ class TestDistributedMLPNice:
         assert torch.allclose(w[0], w[2])
         assert torch.allclose(w[1], w[3])
 
-        w = utils_aggregate.gather_results_as_list(
+        w = gather.gather_results_as_list(
             model.linear2.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -153,7 +153,7 @@ class TestDistributedMLPSync:
 
         assert isinstance(model, mlp.DistributedSynchronizedMLP)
         # collect weights
-        weights_gathered = utils_aggregate.gather_results_as_list(
+        weights_gathered = gather.gather_results_as_list(
             model.linear1.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -166,7 +166,7 @@ class TestDistributedMLPSync:
         assert not torch.allclose(weights_gathered[2], weights_gathered[3])
 
         # Second linear layer: weights should be same across pairs of processes
-        weights_gathered = utils_aggregate.gather_results_as_list(
+        weights_gathered = gather.gather_results_as_list(
             model.linear2.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -212,7 +212,7 @@ class TestDistributedMLPSync:
             pred.backward(torch.randn_like(pred))
 
         # assert
-        x_grad = utils_aggregate.gather_results_as_list(
+        x_grad = gather.gather_results_as_list(
             x.grad,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -224,7 +224,7 @@ class TestDistributedMLPSync:
         assert not torch.allclose(x_grad[0], x_grad[1])
         assert not torch.allclose(x_grad[2], x_grad[3])
 
-        w = utils_aggregate.gather_results_as_list(
+        w = gather.gather_results_as_list(
             model.linear1.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",
@@ -234,7 +234,7 @@ class TestDistributedMLPSync:
         assert torch.allclose(w[0], w[2])
         assert torch.allclose(w[1], w[3])
 
-        w = utils_aggregate.gather_results_as_list(
+        w = gather.gather_results_as_list(
             model.linear2.weight.data,
             process_mesh=process_mesh_dict,
             pm_key_row="JSpatial",

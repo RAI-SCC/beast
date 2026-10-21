@@ -29,10 +29,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
     up_group : dist.ProcessGroup, optional
         Process group the ensemble samples are spread over, usually the ``SP``
         process group. Defaults to all ranks.
-    sync_group : dist.ProcessGroup, optional
-        Process group the gradients of the variational parameters are summed
-        over, usually the ``JSpatial`` process group. The prior matching
-        gradient is divided by its size, so that the sum counts it once.
     feature_weights : Tensor, optional
         Weights applied to the model output and target, per variable or per
         grid point.
@@ -51,7 +47,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         model: vi.VIModule,
         dataset_size: int,
         up_group: Optional[dist.ProcessGroup] = None,
-        sync_group: Optional[dist.ProcessGroup] = None,
         feature_weights: Optional[Tensor] = None,
         heat: float = 1.0,
         track: bool = False,
@@ -67,7 +62,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
         )
 
         self.up_group = up_group if up_group is not None else dist.group.WORLD
-        self.sync_group_size = sync_group.size() if sync_group else 1
 
         if feature_weights is None:
             self.feature_weights = None
@@ -168,7 +162,6 @@ class UPAllGaussLoss(vi.AnalyticalKullbackLeiblerLoss):
             self.up_group,
             *self._get_flat_params(),
             self.feature_weights,
-            self.sync_group_size,
         )
 
         data_fit = self.data_fitting(mean, std, weighted_target, dataset_size)
@@ -226,7 +219,6 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         variational_means: Tensor,
         variational_log_stds: Tensor,
         feature_weights: Optional[Tensor] = None,
-        weight_synchronization_factor: Optional[int] = 1,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """Compute the sample mean and standard deviation and the prior matching loss.
 
@@ -247,10 +239,6 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Log standard deviations of the variational distributions.
         feature_weights : Tensor, optional
             Weights applied to the samples before aggregation.
-        weight_synchronization_factor : int, default: 1
-            Size of the process group the parameter gradients are summed over,
-            usually the ``JSpatial`` process group. The prior matching gradient
-            is divided by it.
 
         Returns
         -------
@@ -346,11 +334,9 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             variational_means,
             variational_log_stds,
             feature_weights,
-            weight_synchronization_factor,
         ) = inputs
         mean, std, prior_matching, variance_ratio, mse_part_half = outputs
 
-        ctx.weight_synchronization_factor = weight_synchronization_factor
         ctx.mark_non_differentiable(variance_ratio, mse_part_half)
         ctx.up_process_group = up_process_group
         ctx.save_for_backward(samples, mean, std, variance_ratio, mse_part_half)
@@ -363,7 +349,7 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
         grad_pm: Tensor,
         grad_vr: None,
         grad_mse_half: None,
-    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None, None]:
+    ) -> tuple[Tensor, None, None, None, Tensor, Tensor, None]:
         """Compute the gradients with respect to the samples and variational parameters.
 
         Parameters
@@ -399,11 +385,8 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             Gradient with respect to the variational_log_stds.
         None
             No gradient for the feature_weights.
-        None
-            No gradient for the weight_synchronization_factor.
         """
         up_process_group = ctx.up_process_group
-        weight_synchronization_factor = ctx.weight_synchronization_factor
         samples, mean, std, variance_ratio, mse_part_half = ctx.saved_tensors
 
         n_loc = samples.shape[0]
@@ -418,18 +401,17 @@ class MeanStdPriorMatchingAggregation(torch.autograd.Function):
             samples - mean
         ) / std
 
-        grad_pm = (grad_pm / weight_synchronization_factor).expand_as(variance_ratio)
+        grad_pm = grad_pm.expand_as(variance_ratio)
         grad_var_means = grad_pm * mse_part_half
         grad_var_log_stds = grad_pm * (variance_ratio - 1)
 
         return (
-            (grad_samples * up_process_group.size()),
+            grad_samples * up_process_group.size(),
             None,
             None,
             None,
             grad_var_means,
             grad_var_log_stds,
-            None,
             None,
         )
 
