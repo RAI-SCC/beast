@@ -203,8 +203,8 @@ class DistributedTransformer(torch.nn.Module):
     device : torch.device
         Device to place parameters on.
     model_group : dist.ProcessGroup
-        Model-parallel process group of the MLP, passed to
-        :class:`~beast.layers.mlp.DistributedSynchronizedMLP`.
+        Not used by this block. Its MLP layers use
+        ``channel_group`` as their model-parallel group.
     spatial_group : dist.ProcessGroup
         The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
@@ -266,7 +266,7 @@ class DistributedTransformer(torch.nn.Module):
             dropout=dropout,
             local_rank=local_rank,
             device=device,
-            model_group=model_group,
+            model_group=channel_group,
             spatial_group=spatial_group,
             channel_group=channel_group,
             bayesian=bayesian,
