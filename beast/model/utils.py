@@ -223,9 +223,12 @@ def convert_jigsaw_vi(
 
 
 def count_model_parameters(
-    model: torch.nn.Module, parallelism: int, bayesian: bool
+    model: torch.nn.Module, parallelism: int, pending_bayesian_conversion: bool
 ) -> int:
-    """Count model parameters, scaled by parallelism and doubled if Bayesian.
+    """Count a model's parameters, scaled by parallelism.
+
+    Must be called before ``convert_jigsaw_vi`` converts the model to a
+    bayesian one, while it still holds its deterministic weights.
 
     Parameters
     ----------
@@ -234,15 +237,21 @@ def count_model_parameters(
         ``get_parameter_count()`` contribute.
     parallelism : int
         The degree of parallelism.
-    bayesian : bool
-        Whether to double the count, for a mean and a spread per weight. A
-        single-process model converted with torch_blue already holds both as
-        separate parameters, so its count is doubled once more.
+    pending_bayesian_conversion : bool
+        Whether ``model`` is about to be converted to a Bayesian model with
+        ``convert_jigsaw_vi``.
 
     Returns
     -------
     int
         Total parameter count.
+
+    Notes
+    -----
+    This function counts whatever parameters ``model`` holds at the moment
+    it is called; it has no way of telling whether a torch_blue conversion
+    already took place. Calling it with ``pending_bayesian_conversion=True``
+    on a model converted by ``convert_jigsaw_vi`` will overcount parameters.
     """
     if parallelism == 1:
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -257,7 +266,7 @@ def count_model_parameters(
 
         total = param_sum * parallelism
 
-    if bayesian:
-        total = total * 2  # Count every parameter twice, if bayesian
+    if pending_bayesian_conversion:
+        total = total * 2  # Anticipate the mean + spread split, pre-conversion
 
     return total
