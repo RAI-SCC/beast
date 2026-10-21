@@ -28,7 +28,7 @@ class Beast(torch.nn.Module):
 
     The model is sharded over the ``JSpatial`` and ``JChannel`` process groups
     if `dtp_group` has more than one rank. Its inputs and outputs are then the
-    local shards.
+    local shards, and its layers distributed jigsaw layers.
 
     Parameters
     ----------
@@ -37,13 +37,13 @@ class Beast(torch.nn.Module):
     width : int
         Global width of the input, in grid points.
     in_channels : int
-        Number of input channels.
+        Global number of input channels.
     out_channels : int
-        Number of output channels.
+        Global number of output channels.
     embed_dim : int
-        Embedding dimension. Doubled after the downsampling.
+        Global embedding dimension. Doubled after the downsampling.
     heads : Sequence[int]
-        Number of attention heads in each of the three sets of blocks.
+        Global number of attention heads in each of the three sets of blocks.
     kernel_size : int
         Kernel size of the patch embedding and recovery.
     stride : int
@@ -112,17 +112,17 @@ class Beast(torch.nn.Module):
         Size of `up_group`, or 1 if it is None.
     local_rank : int
         Rank of this process in `dtp_group`, or 0 if it is None.
-    patch_embedding : torch.nn.Module
+    patch_embedding : torch.nn.Conv2d or jigsaw.modules.DistributedConv2d
         Convolution from `in_channels` to `embed_dim` channels.
-    downsample : torch.nn.Module
+    downsample : torch.nn.Conv2d or jigsaw.modules.DistributedConv2d
         Convolution with stride 2 from `embed_dim` to ``2 * embed_dim``
         channels, before the second set of blocks.
-    upsample : torch.nn.Module
+    upsample : torch.nn.ConvTranspose2d or jigsaw.modules.DistributedConvTranspose2d
         Transposed convolution with stride 2 from ``2 * embed_dim`` to
         `embed_dim` channels, after the second set of blocks.
-    upsample_mix : torch.nn.Module
+    upsample_mix : torch.nn.Linear or jigsaw.modules.DistributedLinear
         Linear layer over the channels, applied after `upsample`.
-    patch_recovery : torch.nn.Module
+    patch_recovery : torch.nn.ConvTranspose2d or jigsaw.modules.DistributedConvTranspose2d
         Transposed convolution from the output of the third set of blocks,
         concatenated with the patch embedding, to `out_channels` channels.
     transformer_1 : torch.nn.ModuleList
@@ -131,15 +131,15 @@ class Beast(torch.nn.Module):
         Transformer blocks of the second set, after `downsample`.
     transformer_2 : torch.nn.ModuleList
         Transformer blocks of the third set, after `upsample`.
-    roll_out : torch.nn.Module
+    roll_out : jigsaw.modules.Roll or jigsaw.modules.DistributedRoll
         Shifts the field by half of `window_size_outer`, for the shifted-window
         blocks of the first and third sets.
-    unroll_out : torch.nn.Module
+    unroll_out : jigsaw.modules.Roll or jigsaw.modules.DistributedRoll
         Reverts the shift of `roll_out`.
-    roll_in : torch.nn.Module
+    roll_in : jigsaw.modules.Roll or jigsaw.modules.DistributedRoll
         Shifts the field by half of `window_size_inner`, for the shifted-window
         blocks of the second set.
-    unroll_in : torch.nn.Module
+    unroll_in : jigsaw.modules.Roll or jigsaw.modules.DistributedRoll
         Reverts the shift of `roll_in`.
     params : torch.nn.ModuleDict
         The layers, grouped for separate learning rates: ``"low_lr"`` holds the
