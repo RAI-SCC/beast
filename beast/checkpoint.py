@@ -139,8 +139,8 @@ def parse_checkpoint_path(fname: str) -> dict[str, Any] | None:
     -------
     dict[str, Any] or None
         The keys ``epoch``, ``step``, ``jchannel_rank`` and ``fname``, with
-        ``math.inf`` for a missing step or channel rank. None, with a warning,
-        if ``fname`` does not match the pattern.
+        `math.inf` for a missing step or channel rank. None, with a warning,
+        if `fname` does not match the pattern.
     """
     m = re.match(r"cp-epoch(\d+)(?:-step(\d+))?(?:-jc(\d+))?\.pt$", fname)
     if not m:
@@ -170,7 +170,7 @@ def load_state_dict(
 ) -> Tuple[torch.nn.Module, torch.optim.Optimizer | None, int]:
     """Load model and optimizer state, adapting to DDP-wrapped models.
 
-    A ``module.`` key prefix is added or stripped as needed to match ``model``.
+    A ``module.`` key prefix is added or stripped as needed to match `model`.
     If loading fails, the error is printed on rank 0 and the returned epoch is 0.
 
     Parameters

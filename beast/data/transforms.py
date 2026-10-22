@@ -20,19 +20,19 @@ def _reshape_for_downsampling(
     factor : int
         Downsampling factor.
     negative_dims : bool, default: False
-        Whether ``dims`` holds negative indices.
+        Whether `dims` holds negative indices.
 
     Returns
     -------
     x_reshaped : Tensor
         The reshaped tensor.
     target_dims : Tuple[int, ...]
-        The new dimensions of size ``factor``, to be reduced over.
+        The new dimensions of size `factor`, to be reduced over.
 
     Raises
     ------
     RuntimeError
-        If a dimension in ``dims`` is not divisible by ``factor``.
+        If a dimension in `dims` is not divisible by `factor`.
     """
     x_shape = x.shape
 
@@ -65,7 +65,7 @@ def _reshape_for_downsampling(
 
 
 class Downsample(nn.Module):
-    """Downsample by averaging over blocks of ``factor`` along each dimension.
+    """Downsample by averaging over blocks of `factor` along each dimension.
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ class Downsample(nn.Module):
     dims : Tuple[int, ...]
         Dimensions to downsample over, sorted in descending order.
     negative_dims : bool
-        Whether ``dims`` holds negative indices.
+        Whether `dims` holds negative indices.
     """
 
     def __init__(self, factor: int, dims: Tuple[int, ...] = (-1,)):
@@ -108,7 +108,7 @@ class Downsample(nn.Module):
         self.dims = tuple(sorted_dims)
 
     def forward(self, x: Tensor) -> Tensor:
-        """Average ``x`` over blocks of ``factor ** len(dims)`` elements.
+        """Average `x` over blocks of ``factor ** len(dims)`` elements.
 
         Parameters
         ----------
@@ -128,7 +128,7 @@ class Downsample(nn.Module):
 
 
 class DownsampleMeanStd(Downsample):  # numpydoc ignore=PR02
-    """Downsample to the mean and standard deviation of blocks of ``factor``.
+    """Downsample to the mean and standard deviation of blocks of `factor`.
 
     Parameters
     ----------
@@ -142,11 +142,11 @@ class DownsampleMeanStd(Downsample):  # numpydoc ignore=PR02
     dims : Tuple[int, ...]
         Dimensions to downsample over, sorted in descending order.
     negative_dims : bool
-        Whether ``dims`` holds negative indices.
+        Whether `dims` holds negative indices.
     """
 
     def forward(self, x: Tensor) -> Tensor:
-        """Compute the mean and standard deviation over blocks of ``x``.
+        """Compute the mean and standard deviation over blocks of `x`.
 
         Parameters
         ----------

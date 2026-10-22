@@ -20,7 +20,7 @@ def pred_target_bias_plot(
     prediction : Tensor
         2-D prediction to plot.
     target : Tensor
-        2-D target, of the shape of ``prediction``.
+        2-D target, of the shape of `prediction`.
     label : str
         Appended to the title of each panel.
 

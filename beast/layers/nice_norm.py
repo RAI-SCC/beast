@@ -21,6 +21,16 @@ class NiceNorm(torch.nn.Module):
         Device to place parameters on.
     dtype : torch.dtype, optional
         Data type of the parameters.
+
+    Attributes
+    ----------
+    norm : torch.nn.LayerNorm
+        Layer norm over the last dimension, without learnable scale and shift.
+    shape : int
+        Size of the normalized dimension, `normalized_dim`.
+    shift_scale_mlp : beast.layers.mlp.MLP
+        Computes the scale and the shift, concatenated in that order, from the
+        noise.
     """
 
     def __init__(
@@ -47,7 +57,7 @@ class NiceNorm(torch.nn.Module):
         self.shift_scale_mlp = mlp.MLP(self.noise_dim, self.shape, self.shape * 2)
 
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
-        """Normalize ``x`` and apply the noise-conditioned scale and shift.
+        """Normalize `x` and apply the noise-conditioned scale and shift.
 
         Parameters
         ----------
@@ -59,7 +69,7 @@ class NiceNorm(torch.nn.Module):
         Returns
         -------
         torch.Tensor
-            Tensor of the same shape as ``x``.
+            Tensor of the same shape as `x`.
         """
         x = self.norm(x)
 
@@ -93,6 +103,17 @@ class DistributedNICENorm(torch.nn.Module):
         The ``JSpatial`` process group, over which the parameters are replicated.
     channel_group : dist.ProcessGroup
         The ``JChannel`` process group, over which the channels are sharded.
+
+    Attributes
+    ----------
+    global_dim : int
+        Global number of channels, `dim`.
+    ln : torch.nn.LayerNorm
+        Layer norm over this rank's channel shard, without learnable scale and
+        shift.
+    scale_shift : beast.layers.mlp.DistributedMLPNICE
+        Computes the scale and the shift, concatenated in that order, from the
+        noise.
     """
 
     def __init__(
@@ -136,7 +157,7 @@ class DistributedNICENorm(torch.nn.Module):
     def _calc_shift_scale(
         self, x: torch.Tensor, scale_shift: torch.Tensor
     ) -> torch.Tensor:
-        """Normalize ``x`` and apply the scale and shift.
+        """Normalize `x` and apply the scale and shift.
 
         Parameters
         ----------
@@ -149,7 +170,7 @@ class DistributedNICENorm(torch.nn.Module):
         Returns
         -------
         torch.Tensor
-            Tensor of the same shape as ``x``.
+            Tensor of the same shape as `x`.
         """
         x = self.ln(x)
         scale_shift = scale_shift.unsqueeze(1)
@@ -171,7 +192,7 @@ class DistributedNICENorm(torch.nn.Module):
         Returns
         -------
         torch.Tensor
-            Tensor of the same shape as ``x``.
+            Tensor of the same shape as `x`.
         """
         scale_shift = self.scale_shift(noise)
         x = self._calc_shift_scale(x, scale_shift)
