@@ -1,9 +1,11 @@
 """Tests for beast.layers.nice_window_transformer module"""
 
+from typing import Any
+
 import pytest
 import torch
 import torch.distributed as dist
-from jigsaw import parallel  # type: ignore
+from jigsaw import debug, parallel  # type: ignore
 
 from beast.comm import create_process_mesh_dict
 from beast.layers import transformer
@@ -236,3 +238,51 @@ class TestShardQkNorm:
         dist.all_gather(grads, grad.contiguous(), group=spatial)
         for g in grads:
             torch.testing.assert_close(g, grad, rtol=0, atol=0)
+
+
+class TestSerialMatchesDistributed:
+    """A serial block holds the same parameters as its distributed counterpart."""
+
+    @pytest.mark.dist(4)
+    @pytest.mark.parametrize("nice", [False, True])
+    @pytest.mark.parametrize("qk_norm", [False, True])
+    def test_same_attention_parameters_and_count(
+        self, device: torch.device, nice: bool, qk_norm: bool
+    ) -> None:
+        """Compares the attention's parameter names (the q/k norms and the
+        ``head_concat`` bias) and the global parameter count of the block."""
+        process_mesh_dict = create_process_mesh_dict(mesh_dims=[1, 1, 2, 2])
+        dims: dict[str, Any] = dict(
+            in_dim=64, embed_dim=64, out_dim=64, heads=4, dropout=0.0
+        )
+        noise: dict[str, Any] = dict(noise_dim=16) if nice else {}
+        serial_cls = (
+            transformer.NiceTransformer if nice else transformer.TransformerBlock
+        )
+        dist_cls = (
+            transformer.DistributedNICETransformer
+            if nice
+            else transformer.DistributedTransformer
+        )
+        serial = serial_cls(**dims, **noise, device=device, qk_norm=qk_norm)
+        distributed = dist_cls(
+            **dims,
+            **noise,
+            local_rank=process_mesh_dict["DTP"].rank(),
+            device=device,
+            model_group=process_mesh_dict["DTP"],
+            spatial_group=process_mesh_dict["JSpatial"],
+            channel_group=process_mesh_dict["JChannel"],
+            qk_norm=qk_norm,
+            dtype=torch.float32,
+        )
+
+        def names(module: torch.nn.Module) -> list[str]:
+            return sorted(name for name, _ in module.named_parameters())
+
+        assert names(serial.attention_block) == names(distributed.attention_block)
+        serial_count = sum(p.numel() for p in serial.parameters())
+        distributed_count = debug.count_parameters(
+            distributed, process_mesh_dict, model_key="DTP"
+        )
+        assert distributed_count == serial_count

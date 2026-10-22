@@ -107,7 +107,9 @@ def _build_sharded_model(
 
 
 @pytest.mark.parametrize("mesh_dims", MESH_DIMS)
-@pytest.mark.parametrize("channel_variant", ["even", "odd"])
+# "odd" is rejected at build time: jigsaw asserts that the channels divide
+# the channel group (jigsaw 7d26665).
+@pytest.mark.parametrize("channel_variant", ["even"])
 @pytest.mark.parametrize("nice_norm", NICE_NORM)
 def test_count_model_parameters_before_conversion(
     device: torch.device, mesh_dims: list[int], channel_variant: str, nice_norm: bool
