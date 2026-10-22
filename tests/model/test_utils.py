@@ -80,8 +80,8 @@ def _build_sharded_model(
     small_config: dict[str, Any],
     device: torch.device,
     mesh_dims: list[int],
-) -> tuple[Beast, dist.ProcessGroup]:
-    """Build a ``Beast`` on a process mesh; also return its ``JChannel`` group."""
+) -> tuple[Beast, dict[str, dist.ProcessGroup]]:
+    """Build a ``Beast`` on a process mesh; also return the mesh."""
     process_mesh_dict = create_process_mesh_dict(
         mesh_dims=mesh_dims, device_type=device.type
     )
@@ -96,7 +96,7 @@ def _build_sharded_model(
         device=device,
     ).to(device)
 
-    return sharded_model, channel_pg
+    return sharded_model, process_mesh_dict
 
 
 def _layer_modules(model: Beast) -> dict[str, torch.nn.Module | None]:
@@ -119,15 +119,13 @@ def _reference_layer_count(layer: torch.nn.Module) -> int:
     return sum(p.numel() for p in layer.parameters() if p.requires_grad)
 
 
-def _sharded_layer_count(layer: torch.nn.Module, parallelism: int) -> int:
-    """``count_model_parameters`` of a single sharded layer.
-
-    ``count_model_parameters`` skips the module it is given when
-    ``parallelism > 1``, so the layer is wrapped to be counted itself.
-    """
+def _sharded_layer_count(
+    layer: torch.nn.Module, process_mesh_dict: dict[str, dist.ProcessGroup]
+) -> int:
+    """``count_model_parameters`` of a single sharded layer."""
     return count_model_parameters(
-        torch.nn.ModuleList([layer]),
-        parallelism=parallelism,
+        layer,
+        process_mesh_dict=process_mesh_dict,
         pending_bayesian_conversion=False,
     )
 
@@ -135,7 +133,7 @@ def _sharded_layer_count(layer: torch.nn.Module, parallelism: int) -> int:
 def _layer_mismatches(
     reference_layers: dict[str, torch.nn.Module | None],
     sharded_layers: dict[str, torch.nn.Module | None],
-    parallelism: int,
+    process_mesh_dict: dict[str, dist.ProcessGroup],
 ) -> list[str]:
     """Describe every layer whose sharded count differs from the reference.
 
@@ -151,7 +149,7 @@ def _layer_mismatches(
             continue
 
         reference_count = _reference_layer_count(reference_layer)
-        sharded_count = _sharded_layer_count(sharded_layer, parallelism)
+        sharded_count = _sharded_layer_count(sharded_layer, process_mesh_dict)
         if sharded_count != reference_count:
             mismatches.append(
                 f"  {name} ({type(sharded_layer).__name__}): "
@@ -184,17 +182,18 @@ def test_count_model_parameters_per_layer(
     )
 
     reference_model = Beast(**small_config, dropout=1e-1, device=device)
-    sharded_model, channel_pg = _build_sharded_model(small_config, device, mesh_dims)
-    parallelism = channel_pg.size()
+    sharded_model, process_mesh_dict = _build_sharded_model(
+        small_config, device, mesh_dims
+    )
 
     reference_layers = _layer_modules(reference_model)
     sharded_layers = _layer_modules(sharded_model)
-    mismatches = _layer_mismatches(reference_layers, sharded_layers, parallelism)
+    mismatches = _layer_mismatches(reference_layers, sharded_layers, process_mesh_dict)
 
     total_reference = _reference_layer_count(reference_model)
     total_sharded = count_model_parameters(
         sharded_model,
-        parallelism=parallelism,
+        process_mesh_dict=process_mesh_dict,
         pending_bayesian_conversion=False,
     )
 

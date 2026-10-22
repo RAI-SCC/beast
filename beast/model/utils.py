@@ -6,7 +6,7 @@ import torch
 import torch.distributed as dist
 import torch_blue.vi as vi
 import torch_blue.vi.distributions as vidist
-from jigsaw import parallel  # type: ignore[import-not-found]
+from jigsaw import debug, parallel  # type: ignore[import-not-found]
 from jigsaw.modules import DistributedLayerNorm  # type: ignore[import-not-found]
 from torch._C._functorch import get_unwrapped
 
@@ -223,20 +223,28 @@ def convert_jigsaw_vi(
 
 
 def count_model_parameters(
-    model: torch.nn.Module, parallelism: int, pending_bayesian_conversion: bool
+    model: torch.nn.Module,
+    process_mesh_dict: dict[str, dist.ProcessGroup] | None,
+    pending_bayesian_conversion: bool,
 ) -> int:
-    """Count a model's parameters, scaled by parallelism.
+    """Count the trainable parameters of the whole model.
 
     Must be called before ``convert_jigsaw_vi`` converts the model to a
     bayesian one, while it still holds its deterministic weights.
 
+    With ``process_mesh_dict``, collective over its ``DTP`` group: call it on
+    every rank. Each rank's shards are summed over ``DTP``, and a parameter
+    marked with ``jigsaw.parallel.mark_replicated`` is counted once per replica
+    group, so every replicated parameter must be marked. Data-parallel copies
+    are not counted.
+
     Parameters
     ----------
     model : torch.nn.Module
-        Model to count. With ``parallelism > 1`` only submodules that provide
-        ``get_parameter_count()`` contribute.
-    parallelism : int
-        The degree of parallelism.
+        Model to count.
+    process_mesh_dict : dict[str, dist.ProcessGroup] | None
+        Process mesh of a sharded model, as returned by
+        ``create_process_mesh_dict``; None for an unsharded model.
     pending_bayesian_conversion : bool
         Whether ``model`` is about to be converted to a Bayesian model with
         ``convert_jigsaw_vi``.
@@ -253,18 +261,7 @@ def count_model_parameters(
     already took place. Calling it with ``pending_bayesian_conversion=True``
     on a model converted by ``convert_jigsaw_vi`` will overcount parameters.
     """
-    if parallelism == 1:
-        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    else:
-        param_sum = 0
-        for module in model.modules():
-            # Skip the top-level model itself if it has the method
-            if module is model:
-                continue
-            if hasattr(module, "get_parameter_count"):
-                param_sum += module.get_parameter_count()  # type: ignore
-
-        total = param_sum * parallelism
+    total: int = debug.count_parameters(model, process_mesh_dict, model_key="DTP")
 
     if pending_bayesian_conversion:
         total = total * 2  # Anticipate the mean + spread split, pre-conversion
