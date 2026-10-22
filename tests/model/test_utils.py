@@ -42,6 +42,12 @@ NICE_NORM = [
 ]
 
 
+QK_NORM = [
+    pytest.param(False, id="no-qk-norm"),
+    pytest.param(True, id="qk-norm"),
+]
+
+
 def _build_sharded_model(
     small_config: dict,
     device: torch.device,
@@ -66,13 +72,16 @@ def _build_sharded_model(
 
 @pytest.mark.parametrize("mesh_dims", MESH_DIMS)
 @pytest.mark.parametrize("nice_norm", NICE_NORM)
+@pytest.mark.parametrize("qk_norm", QK_NORM)
 def test_count_model_parameters_before_conversion(
-    device: torch.device, mesh_dims: list[int], nice_norm: bool
+    device: torch.device, mesh_dims: list[int], nice_norm: bool, qk_norm: bool
 ) -> None:
     """A sharded model's deterministic parameter count must match an
     equivalent, unsharded reference model's count.
     """
-    small_config = small_beast_config(bayesian=False, nice_norm=nice_norm)
+    small_config = small_beast_config(
+        bayesian=False, nice_norm=nice_norm, qk_norm=qk_norm
+    )
 
     reference_model = Beast(**small_config, dropout=1e-1, device=device)
     reference_count = sum(
