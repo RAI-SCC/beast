@@ -181,7 +181,7 @@ def convert_jigsaw_vi(
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
-    fan_in_rescale_list = ["AVIDistributedLinear", "AVIConvTranspose2d"]
+    fan_in_rescale_list = ["AVIDistributedLinear", "AVIDistributedConvTranspose2d"]
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__
