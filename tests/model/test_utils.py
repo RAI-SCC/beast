@@ -160,6 +160,8 @@ def _layer_mismatches(
 
 
 @pytest.mark.parametrize("mesh_dims", MESH_DIMS)
+# "odd" is rejected at build time: jigsaw asserts that the channels divide
+# the channel group.
 @pytest.mark.parametrize("channel_variant", ["even"])
 @pytest.mark.parametrize("variant", MODEL_VARIANTS)
 @pytest.mark.parametrize("qk_norm", QK_NORM)
@@ -174,8 +176,8 @@ def test_count_model_parameters_per_layer(
     counterpart.
 
     All layers are compared before reporting, so a single run lists every
-    mismatching layer. Rank 0 warns with the per-layer mismatches, and the test
-    then fails if the overall counts differ.
+    mismatching layer. On a mismatch, rank 0 warns with the per-layer
+    mismatches and the overall counts, and the test fails.
     """
     small_config = small_beast_config(
         **variant, qk_norm=qk_norm, **CHANNEL_OVERRIDES[channel_variant]
@@ -200,7 +202,8 @@ def test_count_model_parameters_per_layer(
     # Only rank 0 reports, so the output of the ranks does not interleave.
     comm = MPI.COMM_WORLD
     comm.Barrier()
-    if comm.Get_rank() == 0:
+    mismatched = bool(mismatches) or total_sharded != total_reference
+    if mismatched and comm.Get_rank() == 0:
         warnings.warn(
             f"Parameter count mismatch for mesh_dims={mesh_dims}, "
             f"channel_variant={channel_variant}, {variant}, qk_norm={qk_norm}; "
@@ -212,5 +215,5 @@ def test_count_model_parameters_per_layer(
             f"(diff={total_sharded - total_reference})"
         )
 
-    if total_sharded != total_reference:
-        pytest.fail("Overall parameter count mismatch", pytrace=False)
+    if mismatched:
+        pytest.fail("Parameter count mismatch", pytrace=False)
