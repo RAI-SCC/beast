@@ -40,7 +40,7 @@ def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | 
         *self.get_variational_parameters(variable)
     )
     sample: torch.Tensor = self.variational_distribution[variable].sample(
-        tuple(variational_parameters)
+        *variational_parameters
     )
 
     if self.return_log_probs:
