@@ -7,18 +7,38 @@ timesteps later. The model and its parallelization are described in the paper
 
 ## What makes it different
 
-**It is probabilistic.** BEAST can be made Bayesian: its weights become
-distributions, and every forward pass draws a new sample of them. Running the
-same input several times gives an ensemble of forecasts, and the spread of the
-ensemble shows how certain the forecast is. The training loss,
-{class}`~beast.losses.up_loss.UPAllGaussLoss`, rewards a well-calibrated
-ensemble, not only an accurate mean.
+**It is probabilistic.** A forecast from BEAST is an ensemble, and the spread of
+the ensemble shows how certain the forecast is. BEAST captures two kinds of
+uncertainty:
+
+- **Epistemic uncertainty** is the uncertainty of the model itself, which comes
+  from limited training data. A Bayesian BEAST learns a distribution for each of
+  its weights instead of a single value, and every forward pass draws a new
+  sample of the weights.
+- **Aleatoric uncertainty** comes from the chaotic nature of the atmosphere.
+  With NICE normalization, every forward pass also draws a random noise vector,
+  from which the scale and shift of the layer norms are computed.
+
+Running the same input several times therefore gives different forecasts. The
+training loss, {class}`~beast.losses.up_loss.UPAllGaussLoss`, rewards an
+ensemble that is well calibrated, not only an accurate ensemble mean.
+
+```{figure} images/beast_idea.png
+:alt: One input state goes into a network with a sampled weight set and a noise sample, which produces an ensemble of forecasts.
+
+Each ensemble member is a forecast of the network with its own weight sample
+{math}`\theta_m`, drawn from the learned weight distribution
+{math}`q(\theta \mid D)`, and its own noise sample {math}`\epsilon_m`. The weight
+samples capture the epistemic uncertainty and the noise samples the aleatoric
+uncertainty.
+```
 
 **It is built to scale.** One forward pass can be split over many GPUs along four
 axes at once: different data items, different ensemble members, tiles of the
-grid and slices of the channels. Splitting the grid and the channels is done by
-the [jigsaw](https://github.com/RAI-SCC/jigsaw) library, and the Bayesian layers
-come from [torch-blue](https://github.com/RAI-SCC/torch_blue).
+grid and slices of the channels, as described in
+[Architecture](architecture.md#parallelism). Splitting the grid and the channels
+is done by the [jigsaw](https://github.com/RAI-SCC/jigsaw) library, and the
+Bayesian layers come from [torch-blue](https://github.com/RAI-SCC/torch_blue).
 
 ## What you get
 

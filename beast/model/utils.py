@@ -97,10 +97,11 @@ def convert_jigsaw_vi(
     """Make a module with jigsaw layers Bayesian, in place.
 
     Linear and convolution layers become torch_blue variational layers.
-    Normalization layers keep deterministic weights. The variational parameters are replicated over ``spatial_pg``:
-    they are broadcast from its first rank and their gradients are synchronized.
-    The fan-in of the channel-sharded layers (``AVIDistributedXWT`` and
-    ``AVIConvTranspose2d``) is scaled by the size of ``channel_pg``, so that
+    Normalization layers keep deterministic weights. The variational parameters
+    are replicated over `spatial_pg`: they are broadcast from its first rank and
+    their gradients are synchronized.
+    The fan-in of the channel-sharded layers (`AVIDistributedLinear` and
+    `AVIConvTranspose2d`) is scaled by the size of `channel_pg`, so that
     they are initialized like the full layer.
 
     The remaining options are passed to :func:`torch_blue.vi.convert_to_vimodule`.
@@ -175,12 +176,12 @@ def convert_jigsaw_vi(
         Returns
         -------
         int
-            The fan-in of the local shard times the size of ``channel_pg``.
+            The fan-in of the local shard times the size of `channel_pg`.
         """
         previous: int = self._old_calculate_fan_in(variable_shapes=variable_shapes)  # type: ignore
         return previous * num_jchannel
 
-    fan_in_rescale_list = ["AVIDistributedLinear", "AVIConvTranspose2d"]
+    fan_in_rescale_list = ["AVIDistributedLinear", "AVIDistributedConvTranspose2d"]
 
     for mname, m in module.named_modules():
         class_name = m.__class__.__name__

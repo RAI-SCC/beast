@@ -10,8 +10,8 @@ from torch.utils.data.distributed import DistributedSampler
 class ResumableDistributedSampler(DistributedSampler):
     """Distributed sampler that can resume part-way through an epoch.
 
-    The index order of an epoch depends only on ``seed`` and the epoch, so a
-    resumed run skips the first ``resume_idx`` indices of this rank's shard and
+    The index order of an epoch depends only on `seed` and the epoch, so a
+    resumed run skips the first `resume_idx` indices of this rank's shard and
     continues where it stopped.
 
     Parameters
@@ -22,7 +22,7 @@ class ResumableDistributedSampler(DistributedSampler):
         Number of ranks to split the data over, usually the size of the ``DP``
         process group. Defaults to the world size.
     rank : int, optional
-        Rank of this process among the ``num_replicas`` ranks. Defaults to the
+        Rank of this process among the `num_replicas` ranks. Defaults to the
         global rank.
     shuffle : bool, default: True
         Whether to shuffle the indices every epoch.
@@ -57,15 +57,12 @@ class ResumableDistributedSampler(DistributedSampler):
     def __iter__(self) -> Iterator[int]:
         """Iterate over this rank's indices for the current epoch.
 
-        ``resume_idx`` is reset to 0 when the last index is returned, so that
-        only this pass resumes.
-
-        Yields
-        ------
-        int
-            The ``num_samples`` indices of this rank's shard for a full epoch,
-            without the first ``resume_idx``. Unless ``drop_last`` is set, the
-            shard is filled up to ``num_samples`` by repeating its indices.
+        Returns
+        -------
+        Iterator[int]
+            The indices of this rank's shard after skipping the first
+            `resume_idx`. Unless `drop_last` is set, they are repeated
+            until there are as many as in a full epoch.
         """
         if self.shuffle:
             g = torch.Generator()
@@ -89,7 +86,7 @@ class ResumableDistributedSampler(DistributedSampler):
         yield from indices[-1:]
 
     def __len__(self) -> int:
-        """Return the number of indices that a pass over the sampler yields.
+        """Return the number of indices left after skipping `resume_idx`.
 
         Returns
         -------

@@ -30,7 +30,7 @@ def _resolve_variables(
     """Resolve the variable and level lists from arguments or the configuration.
 
     Explicit arguments take precedence. Missing ``all_*`` lists are read from the
-    ``data`` section of ``config`` and missing ``eval_*`` lists from its
+    ``data`` section of `config` and missing ``eval_*`` lists from its
     ``evaluation`` section, defaulting to the corresponding ``all_*`` list.
 
     Parameters
@@ -59,7 +59,7 @@ def _resolve_variables(
     Raises
     ------
     KeyError
-        If an ``all_*`` list is neither given nor found in ``config``.
+        If an ``all_*`` list is neither given nor found in `config`.
     """
     data_config: dict | None = config.get(DATA_KEY) if config is not None else None
     eval_config: dict | None = (
@@ -137,11 +137,11 @@ def select_variables(
     eval_pressure_levels: list | None = None,
     dim: int = -3,
 ) -> torch.Tensor | Sequence[torch.Tensor]:
-    """Select the evaluation variables from the channels of ``t``.
+    """Select the evaluation variables from the channels of `t`.
 
     Channels are ordered surface variables first, then pressure-level variables
     by level. With a sharded channel dimension, only the variables held by
-    ``channel_rank`` are selected.
+    `channel_rank` are selected.
 
     Parameters
     ----------
@@ -178,7 +178,7 @@ def select_variables(
     Raises
     ------
     KeyError
-        If an ``all_*`` list is neither given nor found in ``config``.
+        If an ``all_*`` list is neither given nor found in `config`.
     """
     (
         all_surface_variables,
@@ -285,7 +285,7 @@ def make_variable_names(
     Raises
     ------
     KeyError
-        If an ``all_*`` list is neither given nor found in ``config``.
+        If an ``all_*`` list is neither given nor found in `config`.
     """
     (
         all_surface_variables,

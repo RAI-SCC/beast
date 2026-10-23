@@ -95,3 +95,8 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
         },
     },
 }
+"""Named BEAST configurations.
+
+Each name maps to the model ``class`` and the constructor arguments in
+``config``. Pass the name to :func:`~beast.model.get_model` to build the model.
+"""

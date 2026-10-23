@@ -13,7 +13,8 @@ def get_model(model_id: str, **kwargs: Any) -> torch.nn.Module:
     Parameters
     ----------
     model_id : str
-        Key in ``CONFIGS``, e.g. a named configuration from ``beast_config``.
+        Key in `~beast.model.model_configs.CONFIGS`, e.g. a named configuration
+        from `~beast.model.beast_config`.
     **kwargs
         Overrides for the registered configuration's constructor arguments.
 
@@ -21,12 +22,12 @@ def get_model(model_id: str, **kwargs: Any) -> torch.nn.Module:
     -------
     torch.nn.Module
         The model, built from the registered configuration updated with
-        ``kwargs``.
+        `kwargs`.
 
     Raises
     ------
     ValueError
-        If ``model_id`` is not in ``CONFIGS``.
+        If `model_id` is not in `~beast.model.model_configs.CONFIGS`.
     """
     if model_id not in CONFIGS:
         raise ValueError(f"Model ID '{model_id}' not found in CONFIGS.")

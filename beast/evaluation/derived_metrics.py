@@ -22,7 +22,7 @@ def rmse(metric_dict: Dict[str, Tensor]) -> Tensor:
     Raises
     ------
     KeyError
-        If ``"mse"`` is missing from ``metric_dict``.
+        If ``"mse"`` is missing from `metric_dict`.
     """
     try:
         rmse = torch.sqrt(metric_dict["mse"])
@@ -49,7 +49,7 @@ def spread_skill_ratio(metric_dict: Dict[str, Tensor]) -> Tensor:
     Raises
     ------
     KeyError
-        If ``"mse"`` or ``"variance"`` is missing from ``metric_dict``.
+        If ``"mse"`` or ``"variance"`` is missing from `metric_dict`.
     """
     try:
         ssr = torch.sqrt(metric_dict["variance"]) / torch.sqrt(metric_dict["mse"])

@@ -18,13 +18,20 @@ from jigsaw.modules.attention import (  # type: ignore[import-not-found]
 from beast.layers import mlp, nice_norm
 
 _TE_DPA_REQUESTED = os.getenv("BEAST_USE_TE_DPA", "False") in ["True", "1"]
-if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE and os.getenv("RANK", "0") == "0":
-    warnings.warn(
-        "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
-        "Falling back to torch SDPA.",
-        UserWarning,
-    )
+if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE:
+    if os.getenv("RANK", "0") == "0":
+        warnings.warn(
+            "BEAST_USE_TE_DPA is set but Transformer Engine is not available. "
+            "Falling back to torch SDPA.",
+            UserWarning,
+        )
+
 USE_TE_DPA = _TE_DPA_REQUESTED and JIGSAW_TE_AVAILABLE
+"""Whether the distributed attention uses Transformer Engine instead of torch SDPA.
+
+Set with the environment variable ``BEAST_USE_TE_DPA`` (``1`` or ``True``); off
+by default. Stays off, with a warning, if Transformer Engine is not installed.
+"""
 
 
 def _shard_qk_norm(
@@ -79,6 +86,17 @@ class TransformerBlock(torch.nn.Module):
         Device to place parameters on.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
+
+    Attributes
+    ----------
+    attention_block : jigsaw.modules.Attention
+        Attention, including the query, key, value and output projections.
+    layer_norm1 : torch.nn.LayerNorm
+        Layer norm applied to the input of `attention_block`.
+    layer_norm2 : torch.nn.LayerNorm
+        Layer norm applied to the input of `.mlp`.
+    mlp : beast.layers.mlp.MLP
+        MLP after the attention.
     """
 
     def __init__(
@@ -135,7 +153,7 @@ class TransformerBlock(torch.nn.Module):
 
 
 class NiceTransformer(torch.nn.Module):
-    """Transformer block with windowed attention and NICE normalization.
+    """Pre-norm transformer block with windowed attention and NICE normalization.
 
     Parameters
     ----------
@@ -155,6 +173,17 @@ class NiceTransformer(torch.nn.Module):
         Device to place parameters on.
     qk_norm : bool, default: False
         Whether to normalize queries and keys in the attention.
+
+    Attributes
+    ----------
+    attention_block : jigsaw.modules.Attention
+        Attention, including the query, key, value and output projections.
+    layer_norm1 : beast.layers.nice_norm.NiceNorm
+        NICE normalization applied to the input of `attention_block`.
+    layer_norm2 : beast.layers.nice_norm.NiceNorm
+        NICE normalization applied to the input of `MLP`.
+    MLP : beast.layers.mlp.MLP
+        MLP after the attention.
     """
 
     def __init__(
@@ -219,10 +248,11 @@ class NiceTransformer(torch.nn.Module):
 
 
 class DistributedTransformer(torch.nn.Module):
-    """Windowed transformer block sharded across processes.
+    """Distributed pre-norm transformer block with windowed attention.
 
-    The grid is split over the ``JSpatial`` process group and the channels over
-    the ``JChannel`` process group.
+    The block is sharded over the ``DTP`` process group: the grid is split over
+    the ``JSpatial`` process group and the channels over the ``JChannel``
+    process group.
 
     Parameters
     ----------
@@ -254,6 +284,19 @@ class DistributedTransformer(torch.nn.Module):
         shared by all heads, see :func:`_shard_qk_norm`.
     dtype : torch.dtype, default: torch.float32
         Data type passed to the attention.
+
+    Attributes
+    ----------
+    attention_block : jigsaw.modules.DistributedAttention
+        Attention, including the query, key, value and output projections.
+    layer_norm1 : torch.nn.LayerNorm
+        Layer norm over this rank's channel shard, applied to the input of
+        `attention_block`.
+    layer_norm2 : torch.nn.LayerNorm
+        Layer norm over this rank's channel shard, applied to the input of
+        `.mlp`.
+    mlp : beast.layers.mlp.DistributedSynchronizedMLP
+        MLP after the attention.
     """
 
     def __init__(
@@ -335,10 +378,11 @@ class DistributedTransformer(torch.nn.Module):
 
 
 class DistributedNICETransformer(torch.nn.Module):
-    """Windowed transformer block with NICE normalization, sharded across processes.
+    """Distributed pre-norm transformer block with windowed attention and NICE normalization.
 
-    The grid is split over the ``JSpatial`` process group and the channels over
-    the ``JChannel`` process group. Every rank receives the same noise.
+    The block is sharded over the ``DTP`` process group: the grid is split over
+    the ``JSpatial`` process group and the channels over the ``JChannel``
+    process group. Every rank receives the same noise.
 
     Parameters
     ----------
@@ -360,7 +404,7 @@ class DistributedNICETransformer(torch.nn.Module):
         Device to place parameters on.
     model_group : dist.ProcessGroup
         Not used by this block. Its normalization and MLP layers use
-        ``channel_group`` as their model-parallel group.
+        `channel_group` as their model-parallel group.
     spatial_group : dist.ProcessGroup
         The ``JSpatial`` process group.
     channel_group : dist.ProcessGroup
@@ -372,6 +416,18 @@ class DistributedNICETransformer(torch.nn.Module):
         shared by all heads, see :func:`_shard_qk_norm`.
     dtype : torch.dtype, default: torch.float32
         Data type passed to the attention.
+
+    Attributes
+    ----------
+    attention_block : jigsaw.modules.DistributedAttention
+        Attention, including the query, key, value and output projections. Uses
+        Transformer Engine if `USE_TE_DPA` is set, otherwise torch SDPA.
+    layer_norm1 : beast.layers.nice_norm.DistributedNICENorm
+        NICE normalization applied to the input of `attention_block`.
+    layer_norm2 : beast.layers.nice_norm.DistributedNICENorm
+        NICE normalization applied to the input of `.mlp`.
+    mlp : beast.layers.mlp.DistributedSynchronizedMLP
+        MLP after the attention.
     """
 
     def __init__(

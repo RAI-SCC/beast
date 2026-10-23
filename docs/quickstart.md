@@ -17,8 +17,7 @@ Every process belongs to a four-dimensional mesh. Its dimensions, in order, are:
 
 The product of the four sizes must equal the number of processes. The mesh also
 provides two combined groups: `DTP` (`JSpatial` x `JChannel`, the ranks that share
-one data item) and `DDP` (`DP` x `SP` x `JSpatial`, the ranks gradients are
-averaged over).
+one data item) and `DDP` (`DP` x `SP`, the ranks gradients are averaged over).
 
 ```python
 import os

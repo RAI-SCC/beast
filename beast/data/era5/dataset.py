@@ -14,6 +14,13 @@ from torch.utils.data import Dataset
 from beast.comm import execute_in_waves
 
 SUBSAMPLING_FACTOR = int(os.getenv("BEAST_DS_HOURLY_SUBSAMPLING", 1))
+"""Hours between the timesteps that the dataset uses.
+
+Set with the environment variable ``BEAST_DS_HOURLY_SUBSAMPLING``; 1 by default.
+When a time range is set, only timesteps whose hour is a multiple of this value
+are kept. The time step `dt` advances the time index by
+``dt // SUBSAMPLING_FACTOR``, so the data must have hourly timesteps.
+"""
 
 
 class ERA5Distributed(Dataset):
@@ -59,19 +66,33 @@ class ERA5Distributed(Dataset):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to ``transform``.
+        Transformation applied to the target. Defaults to `transform`.
     rollout : int, default: 1
         Number of rollout steps. The target holds ``n_out_timesteps * rollout``
         timesteps.
 
     Attributes
     ----------
+    in_timesteps : int
+        Number of input timesteps, `n_in_timesteps`.
+    out_timesteps : int
+        Number of output timesteps, `n_out_timesteps`.
+    dtp_size : int
+        Size of the ``DTP`` process group, `pg_size`.
+    dtp_rank : int
+        Rank in the ``DTP`` process group, `pg_rank`.
+    datapath : str
+        Path to the zarr directory, `data_path`.
+    years : Tuple[str, str] or None
+        Time range of the samples, `time_range`.
+    mask_path : str
+        Directory containing the constant mask files, `constant_masks_path`.
     zarr_data : xarray.Dataset
-        The opened data, restricted to ``time_range``.
+        The opened data, restricted to `time_range`.
     norm_values : dict[str, np.ndarray]
         Normalization ``"mean"`` and ``"std"`` per variable.
     n_data_items : int
-        Number of timesteps in ``zarr_data``.
+        Number of timesteps in `zarr_data`.
     xlat, xlon : int
         Global grid size, rounded down to an even number.
     n_variables : int
@@ -113,8 +134,8 @@ class ERA5Distributed(Dataset):
         self.out_timesteps = n_out_timesteps
 
         self.dtype = dtype
-        self.world_size = pg_size
-        self.local_rank = pg_rank
+        self.dtp_size = pg_size
+        self.dtp_rank = pg_rank
 
         self.datapath = data_path
         self.years = time_range
@@ -125,7 +146,7 @@ class ERA5Distributed(Dataset):
         self.norm_values: dict[str, np.ndarray] = {}
 
         def load_data() -> None:
-            """Open the zarr data, restrict it to ``time_range`` and load masks and normalization."""
+            """Open the zarr data, restrict it to `time_range` and load masks and normalization."""
             try:
                 self.zarr_data = xr.open_dataset(self.datapath, engine="zarr")
             except Exception:
@@ -204,8 +225,8 @@ class ERA5Distributed(Dataset):
 
     def _setup_domain_decomposition(self) -> None:
         """Compute the rank local shards of variables, masks and longitude, and the padding of odd ranks."""
-        if self.world_size > 1:
-            row, col = self.local_rank % 2, self.local_rank // 2
+        if self.dtp_size > 1:
+            row, col = self.dtp_rank % 2, self.dtp_rank // 2
             # rank 0: [0,0], rank 1 = [1,0], rank 2 = [0,1], rank 3 = [1,1]
             if row == 0:
                 self.in_var = (
@@ -262,8 +283,8 @@ class ERA5Distributed(Dataset):
 
             # split into 2 "longitude" pieces for 4-way parallel and 4 for 8-way
             self.in_out_xlon = (
-                col * self.xlon // (self.world_size // 2),
-                (col + 1) * self.xlon // (self.world_size // 2),
+                col * self.xlon // (self.dtp_size // 2),
+                (col + 1) * self.xlon // (self.dtp_size // 2),
             )
 
         else:
@@ -296,7 +317,7 @@ class ERA5Distributed(Dataset):
         idx : int
             Index of the first timestep.
         steps : int
-            Number of timesteps to load, ``dt`` hours apart.
+            Number of timesteps to load, `dt` hours apart.
 
         Returns
         -------
@@ -341,11 +362,11 @@ class ERA5Distributed(Dataset):
         -------
         torch.Tensor
             The padded sample on odd ranks of a distributed dataset, otherwise
-            ``sample`` unchanged.
+            `sample` unchanged.
         """
-        if self.world_size > 1:
+        if self.dtp_size > 1:
             # Odd ranks hold the second half of the channels
-            if (inbalance != 0) and (self.local_rank % 2 == 1):
+            if (inbalance != 0) and (self.dtp_rank % 2 == 1):
                 # Pads the channel dimension (third from last) at the end
                 sample = torch.nn.functional.pad(sample, (0, 0, 0, 0, 0, inbalance))
         return sample
@@ -485,7 +506,7 @@ class ERA5Distributed(Dataset):
     def input_from_list(self, sample_list: list[torch.Tensor]) -> torch.Tensor:
         """Build a model input from a list of timesteps.
 
-        The last ``in_timesteps`` entries are concatenated along the channel
+        The last `in_timesteps` entries are concatenated along the channel
         dimension, followed by the constant masks, and padded as in
         :meth:`__getitem__`.
 
@@ -578,15 +599,37 @@ class ERA5Dummy(ERA5Distributed):
 
     Attributes
     ----------
-    n_data_items : int
-        Number of hourly timesteps in the time range.
+    in_timesteps : int
+        Number of input timesteps, `n_in_timesteps`.
+    out_timesteps : int
+        Number of output timesteps, `n_out_timesteps`.
+    dtp_size : int
+        Size of the ``DTP`` process group, `pg_size`.
+    dtp_rank : int
+        Rank in the ``DTP`` process group, `pg_rank`.
+    years : Tuple[str, str] or None
+        Time range, `time_range`. If None, the year 2000 is used.
     n_variables, xlat, xlon : int
         Global channel and grid sizes, with the grid rounded down to an even
         number.
-    in_var : List[int]
-        Range of channels generated by this rank.
-    in_out_xlat, in_out_xlon : List[int]
-        Ranges of latitudes and longitudes generated by this rank.
+    n_data_items : int
+        Number of hourly timesteps in the time range.
+    mask_path : str
+        Empty, since the dummy dataset has no constant masks.
+    constant_masks : np.ndarray
+        Empty array of shape ``(0, xlat, xlon)``.
+    n_masks : int
+        Number of constant masks, always 0.
+    in_out_xlat : List[int]
+        Range of latitudes generated by this rank, always the whole grid.
+    in_var : Tuple[int, int]
+        Range of variables generated by this rank.
+    in_masks : Tuple[int, int]
+        Range of constant masks used by this rank, always empty.
+    in_out_xlon : Tuple[int, int]
+        Range of longitudes generated by this rank.
+    input_pad_oddrank, output_pad_oddrank : int
+        Channels of zero padding appended to inputs and targets on odd ranks.
     """
 
     def __init__(
@@ -610,8 +653,8 @@ class ERA5Dummy(ERA5Distributed):
         self.rollout = rollout
 
         self.dtype = dtype
-        self.world_size = pg_size
-        self.local_rank = pg_rank
+        self.dtp_size = pg_size
+        self.dtp_rank = pg_rank
         self.years = time_range
 
         self.fill_value = fill_value
@@ -754,7 +797,7 @@ class EWBEra5(ERA5Distributed):
     transform : Callable, optional
         Transformation applied to the input.
     target_transform : Callable, optional
-        Transformation applied to the target. Defaults to ``transform``.
+        Transformation applied to the target. Defaults to `transform`.
 
     Attributes
     ----------
@@ -817,7 +860,7 @@ class EWBEra5(ERA5Distributed):
         """Return the input timestamps of one forecast, oldest first.
 
         The forecast is initialized at ``start_date - lead_time``. That is the
-        last input, preceded by ``in_timesteps - 1`` earlier inputs spaced ``dt``
+        last input, preceded by ``in_timesteps - 1`` earlier inputs spaced `dt`
         hours apart.
 
         Parameters
@@ -831,7 +874,7 @@ class EWBEra5(ERA5Distributed):
         Returns
         -------
         list[datetime]
-            The ``in_timesteps`` input timestamps, in ascending order.
+            The `in_timesteps` input timestamps, in ascending order.
         """
         first_date = start_date - timedelta(
             hours=(lead_time + self.dt * (self.in_timesteps - 1))

@@ -22,12 +22,12 @@ def gather_along_dimension(
     x : Tensor
         Local tensor to gather.
     group : ProcessGroup, optional
-        Process group to gather over. If None or of size 1, ``x`` is returned
+        Process group to gather over. If None or of size 1, `x` is returned
         unchanged.
     dim : int, default: -1
         Dimension to concatenate along.
     variable_size : bool, default: False
-        Whether the size of ``x`` along ``dim`` may differ between ranks. Sizes
+        Whether the size of `x` along `dim` may differ between ranks. Sizes
         are then exchanged and the tensors padded to the maximum before
         gathering, at extra communication cost.
 
