@@ -47,7 +47,7 @@ BEAST_CONFIGURATIONS: dict[str, dict[str, Any]] = {
             "qk_norm": True,
             "bayesian": True,
             "nice_norm": True,
-            "shard_qk_norm": True
+            "shard_qk_norm": True,
         },
     },
     "BEAST-LUMI-1.1B-64K": {

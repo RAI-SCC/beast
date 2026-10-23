@@ -657,6 +657,7 @@ class Beast(torch.nn.Module):
         block_kwargs: dict[str, Any] = (
             {"noise_dim": self.noise_dim} if self.nice_norm else {}
         )
+        block_kwargs["qk_norm"] = self.qk_norm
 
         self.transformer_1 = torch.nn.ModuleList(
             [
