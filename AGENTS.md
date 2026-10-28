@@ -27,9 +27,7 @@ but no training loop. Two properties shape most of the code:
 ## Setup and commands
 
 ```console
-git submodule update --init --recursive
 python -m venv .venv && source .venv/bin/activate
-pip install -e libs/jigsaw/
 pip install -e ".[dev]"
 pre-commit install
 ```

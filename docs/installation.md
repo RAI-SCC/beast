@@ -8,16 +8,15 @@ PyTorch with NCCL; everything else also runs on the CPU.
 Clone the repository together with the jigsaw library it depends on:
 
 ```console
-git clone --recurse-submodules https://github.com/RAI-SCC/beast.git
+git clone https://github.com/RAI-SCC/beast.git
 cd beast
 ```
 
-Create a virtual environment and install jigsaw and BEAST into it:
+Create a virtual environment and install BEAST into it:
 
 ```console
 python -m venv .venv
 source .venv/bin/activate
-pip install -e libs/jigsaw/
 pip install .
 ```
 
