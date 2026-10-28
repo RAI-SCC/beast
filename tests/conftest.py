@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Callable, Generator
 from typing import Any
 
-import mpi4py.MPI as MPI
+from mpi4py import MPI
 import pytest
 import torch
 import torch.distributed as dist
