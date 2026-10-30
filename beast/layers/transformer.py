@@ -329,6 +329,7 @@ class DistributedTransformer(torch.nn.Module):
             dropout_p=dropout,
             qk_norm=qk_norm,
             ring=False,
+            attn_backend="te" if USE_TE_DPA else "sdpa",
             dtype=dtype,
         ).to(device)
         if qk_norm and shard_qk_norm:

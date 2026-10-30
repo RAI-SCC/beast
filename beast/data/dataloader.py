@@ -25,6 +25,8 @@ Set with the environment variable ``BEAST_DL_DSYNC_INIT`` (``1`` or ``True``); o
 by default. Recommended beyond 512 nodes.
 """
 
+SEED = 66
+
 
 class BeastDataLoaderIter(_MultiProcessingDataLoaderIter):  # numpydoc ignore=PR02
     """Multiprocessing data loader iterator that also times each batch fetch.
@@ -176,9 +178,11 @@ def get_dataloader(
         shuffle=True,
         rank=dp_rank,
         num_replicas=dp_size,
-        seed=42,
+        seed=SEED,
         resume_idx=0,  # set from checkpoint on resume
     )
+
+    print(f"SEED: {SEED}")
 
     dataloader = BeastDataLoader(
         dataset,
@@ -312,9 +316,11 @@ def get_dummy_dataloader(
         shuffle=True,
         rank=dp_rank,
         num_replicas=dp_size,
-        seed=42,
+        seed=SEED,
         resume_idx=0,  # set from checkpoint on resume
     )
+
+    print(f"SEED: {SEED}")
 
     dataloader = BeastDataLoader(
         dataset,
