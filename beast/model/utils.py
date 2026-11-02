@@ -1,6 +1,7 @@
 """Utility functions for beast models."""
 
 import types
+from typing import cast
 
 import torch
 import torch.distributed as dist
@@ -36,8 +37,9 @@ def _sample_variable_synced(self: vi.VIModule, variable: str) -> torch.Tensor | 
     if self.variational_distribution[variable] is None:
         return None
 
-    variational_parameters = parallel.sync_grad(
-        *self.get_variational_parameters(variable)
+    variational_parameters = cast(
+        tuple[torch.Tensor, ...],
+        parallel.sync_grad(*self.get_variational_parameters(variable)),
     )
     sample: torch.Tensor = self.variational_distribution[variable].sample(
         tuple(variational_parameters)
@@ -196,7 +198,9 @@ def convert_jigsaw_vi(
                 if m.variational_distribution[var] is None:
                     continue
                 for p in m.get_variational_parameters(var):
-                    parallel.mark_replicated(p, marks.get(m, {}).get(var, ()))
+                    parallel.mark_replicated(
+                        cast(torch.nn.Parameter, p), marks.get(m, {}).get(var, ())
+                    )
             m.sample_variable = types.MethodType(_sample_variable_synced, m)  # type: ignore[method-assign]
             if hasattr(type(m), "_fast_forward"):
                 m._fast_forward = types.MethodType(_fast_forward_synced, m)  # type: ignore[assignment]

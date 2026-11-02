@@ -4,11 +4,11 @@ import warnings
 from collections.abc import Callable, Generator
 from typing import Any
 
-from mpi4py import MPI
 import pytest
 import torch
 import torch.distributed as dist
 from hypothesis import strategies as st
+from mpi4py import MPI
 
 from beast.comm import shutdown_comm
 
