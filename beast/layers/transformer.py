@@ -27,7 +27,7 @@ if _TE_DPA_REQUESTED and not JIGSAW_TE_AVAILABLE:
         )
 
 USE_TE_DPA = _TE_DPA_REQUESTED and JIGSAW_TE_AVAILABLE
-"""Whether the distributed attention uses Transformer Engine instead of torch SDPA.
+"""Whether the transformer blocks' attention uses Transformer Engine instead of torch SDPA.
 
 Set with the environment variable ``BEAST_USE_TE_DPA`` (``1`` or ``True``); off
 by default. Stays off, with a warning, if Transformer Engine is not installed.
@@ -90,7 +90,8 @@ class TransformerBlock(torch.nn.Module):
     Attributes
     ----------
     attention_block : jigsaw.modules.Attention
-        Attention, including the query, key, value and output projections.
+        Attention, including the query, key, value and output projections. Uses
+        Transformer Engine if `USE_TE_DPA` is set, otherwise torch SDPA.
     layer_norm1 : torch.nn.LayerNorm
         Layer norm applied to the input of `attention_block`.
     layer_norm2 : torch.nn.LayerNorm
@@ -126,6 +127,7 @@ class TransformerBlock(torch.nn.Module):
             self.device,
             dropout_p=dropout,
             qk_norm=qk_norm,
+            attn_backend="te" if USE_TE_DPA else "sdpa",
         )
 
         self.layer_norm1 = torch.nn.LayerNorm(self.out_dim, device=device)
@@ -177,7 +179,8 @@ class NiceTransformer(torch.nn.Module):
     Attributes
     ----------
     attention_block : jigsaw.modules.Attention
-        Attention, including the query, key, value and output projections.
+        Attention, including the query, key, value and output projections. Uses
+        Transformer Engine if `USE_TE_DPA` is set, otherwise torch SDPA.
     layer_norm1 : beast.layers.nice_norm.NiceNorm
         NICE normalization applied to the input of `attention_block`.
     layer_norm2 : beast.layers.nice_norm.NiceNorm
@@ -215,6 +218,7 @@ class NiceTransformer(torch.nn.Module):
             self.device,
             dropout_p=dropout,
             qk_norm=self.qk_norm,
+            attn_backend="te" if USE_TE_DPA else "sdpa",
         )
 
         self.layer_norm1 = nice_norm.NiceNorm(
@@ -288,7 +292,8 @@ class DistributedTransformer(torch.nn.Module):
     Attributes
     ----------
     attention_block : jigsaw.modules.DistributedAttention
-        Attention, including the query, key, value and output projections.
+        Attention, including the query, key, value and output projections. Uses
+        Transformer Engine if `USE_TE_DPA` is set, otherwise torch SDPA.
     layer_norm1 : torch.nn.LayerNorm
         Layer norm over this rank's channel shard, applied to the input of
         `attention_block`.
@@ -329,6 +334,7 @@ class DistributedTransformer(torch.nn.Module):
             dropout_p=dropout,
             qk_norm=qk_norm,
             ring=False,
+            attn_backend="te" if USE_TE_DPA else "sdpa",
             dtype=dtype,
         ).to(device)
         if qk_norm and shard_qk_norm:
