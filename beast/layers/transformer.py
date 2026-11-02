@@ -124,7 +124,7 @@ class TransformerBlock(torch.nn.Module):
             self.embed_dim,
             self.out_dim,
             self.heads,
-            self.device,
+            self.device,  # type: ignore[arg-type]
             dropout_p=dropout,
             qk_norm=qk_norm,
             attn_backend="te" if USE_TE_DPA else "sdpa",
@@ -215,7 +215,7 @@ class NiceTransformer(torch.nn.Module):
             self.embed_dim,
             self.out_dim,
             self.heads,
-            self.device,
+            self.device,  # type: ignore[arg-type]
             dropout_p=dropout,
             qk_norm=self.qk_norm,
             attn_backend="te" if USE_TE_DPA else "sdpa",
