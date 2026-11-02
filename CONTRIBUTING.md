@@ -12,7 +12,7 @@ issue first and describe what you have in mind.
 2. **Clone it** together with the jigsaw library:
 
    ```console
-   git clone --recurse-submodules https://github.com/<your-account>/beast.git
+   git clone https://github.com/<your-account>/beast.git
    cd beast
    ```
 

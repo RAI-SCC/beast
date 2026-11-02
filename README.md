@@ -25,9 +25,8 @@ distributed training, the configuration and the architecture.
 ## Installation
 
 ```console
-git clone --recurse-submodules https://github.com/RAI-SCC/beast.git
+git clone https://github.com/RAI-SCC/beast.git
 cd beast
-pip install -e libs/jigsaw/
 pip install .
 ```
 
